@@ -4,6 +4,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 export default defineConfig({
+  base: '/dogepad/',
   server: {
     host: '127.0.0.1',
     fs: {
