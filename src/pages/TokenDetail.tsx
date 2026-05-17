@@ -1,0 +1,825 @@
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { ArrowLeft, Users, ExternalLink, Globe, Twitter, MessageCircle, UsersRound, SearchX, Loader2, AlertCircle } from 'lucide-react'
+import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
+import { formatEther, parseEther, formatUnits, parseAbiItem, zeroAddress } from 'viem'
+import { useQuery } from '@tanstack/react-query'
+import { BONDING_CURVE_ABI, LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getBscScanUrl, getNativeSymbol } from '@/config/contracts'
+import { useTargetChainId } from '@/hooks/useNetwork'
+import { useTradeStore } from '@/stores/tradeStore'
+import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
+import { useT } from '@/i18n/useT'
+
+const ERC20_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'spender', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'spender', type: 'address' },
+    ],
+    name: 'allowance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
+const DEX_THRESHOLD_BNB = 30
+
+export default function TokenDetail() {
+  const { address } = useParams()
+  const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
+  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
+  const t = useT()
+  const { address: userAddress, isConnected } = useAccount()
+  const chainId = useTargetChainId()
+  const nativeSymbol = getNativeSymbol(chainId)
+
+  const tokenAddress = (address || '') as `0x${string}`
+  const bondingCurveAddress = getContractAddress(chainId, 'bondingCurve')
+  const daoAddress = getContractAddress(chainId, 'launchDAO')
+  const isValidAddress = tokenAddress.startsWith('0x') && tokenAddress.length === 42
+  const contractReady = isValidAddress && !isZeroAddress(bondingCurveAddress)
+
+  const { writeContractAsync, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+
+  const { data: tokenInfo, isLoading: isTokenInfoLoading, refetch: refetchTokenInfo } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getTokenInfo',
+    args: [tokenAddress],
+    chainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: candidateCountData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getCandidateCount',
+    chainId,
+    query: { enabled: !isZeroAddress(daoAddress) },
+  })
+
+  const candidateCount = candidateCountData ? Number(candidateCountData as bigint) : 0
+
+  const candidateQueries = useMemo(() => {
+    if (!candidateCount || isZeroAddress(daoAddress)) return []
+    return Array.from({ length: candidateCount }, (_, i) => ({
+      address: daoAddress,
+      abi: LAUNCH_DAO_ABI,
+      functionName: 'candidates' as const,
+      args: [BigInt(i)],
+      chainId,
+    }))
+  }, [candidateCount, daoAddress, chainId])
+
+  const { data: candidatesData } = useReadContracts({
+    contracts: candidateQueries,
+    query: { enabled: candidateQueries.length > 0 },
+  })
+
+  const tokenData = useMemo(() => {
+    if (!tokenInfo) return null
+    const [tokenAddr, name, symbol, totalSupply, reserveBnb, tokenBalance, listed, creator] = tokenInfo
+    if (isZeroAddress(tokenAddr)) return null
+    return { tokenAddr, name, symbol, totalSupply, reserveBnb, tokenBalance, listed, creator }
+  }, [tokenInfo])
+
+  const meta = useMemo(() => {
+    if (!tokenData || !candidatesData) return {}
+    for (const result of candidatesData) {
+      if (result.status !== 'success' || !result.result) continue
+      const raw = result.result as any
+      const launchedToken = raw.launchedToken ?? raw[12]
+      const metadataURI = raw.metadataURI ?? raw[3]
+      if (launchedToken && String(launchedToken).toLowerCase() === tokenAddress.toLowerCase()) {
+        if (metadataURI) return parseMetadata(String(metadataURI))
+      }
+    }
+    return {}
+  }, [tokenData, candidatesData, tokenAddress])
+
+  const { data: isListedData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'isListed',
+    args: [tokenAddress],
+    chainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: buyPriceData, refetch: refetchBuyPrice } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getBuyPrice',
+    args: [tokenAddress],
+    chainId,
+    query: { enabled: contractReady },
+  })
+
+  const sellTokenAmount = useMemo(() => {
+    if (!sellAmount || Number(sellAmount) <= 0) return BigInt(0)
+    try {
+      return parseEther(sellAmount)
+    } catch {
+      return BigInt(0)
+    }
+  }, [sellAmount])
+
+  const { data: sellPriceData, refetch: refetchSellPrice } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getSellPrice',
+    args: [tokenAddress, sellTokenAmount],
+    chainId,
+    query: { enabled: contractReady && sellTokenAmount > BigInt(0) },
+  })
+
+  const { data: userTokenBalance, refetch: refetchBalance } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: userAddress ? [userAddress] : undefined,
+    chainId,
+    query: { enabled: isValidAddress && !!userAddress },
+  })
+
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: userAddress ? [userAddress, bondingCurveAddress] : undefined,
+    chainId,
+    query: { enabled: isValidAddress && !!userAddress && activeTab === 'sell' },
+  })
+
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchTokenInfo()
+      refetchBuyPrice()
+      refetchSellPrice()
+      refetchBalance()
+      refetchAllowance()
+    }
+  }, [isConfirmed, refetchTokenInfo, refetchBuyPrice, refetchSellPrice, refetchBalance, refetchAllowance])
+
+  const estimatedTokens = useMemo(() => {
+    if (!buyAmount || !buyPriceData || buyPriceData === BigInt(0)) return BigInt(0)
+    try {
+      const bnbWei = parseEther(buyAmount)
+      return (bnbWei * buyPriceData) / parseEther('1')
+    } catch {
+      return BigInt(0)
+    }
+  }, [buyAmount, buyPriceData])
+
+  const estimatedBnb = useMemo(() => {
+    if (!sellPriceData) return BigInt(0)
+    return sellPriceData
+  }, [sellPriceData])
+
+  const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveBnb)) : 0
+  const progress = Math.min((reserveBnb / DEX_THRESHOLD_BNB) * 100, 100)
+
+  const pricePerToken = useMemo(() => {
+    if (!buyPriceData || buyPriceData === BigInt(0)) return 0
+    try {
+      const tokensPerBnb = Number(formatEther(buyPriceData))
+      if (tokensPerBnb === 0) return 0
+      return 1 / tokensPerBnb
+    } catch {
+      return 0
+    }
+  }, [buyPriceData])
+
+  const marketCap = useMemo(() => {
+    if (!tokenData || pricePerToken === 0) return 0
+    const supply = Number(formatEther(tokenData.totalSupply))
+    return supply * pricePerToken
+  }, [tokenData, pricePerToken])
+
+  const needsApproval = useMemo(() => {
+    if (!sellAmount || !allowanceData) return true
+    try {
+      const tokenWei = parseEther(sellAmount)
+      return allowanceData < tokenWei
+    } catch {
+      return true
+    }
+  }, [sellAmount, allowanceData])
+
+  const isListed = isListedData ?? tokenData?.listed ?? false
+
+  const publicClient = usePublicClient({ chainId })
+
+  const { data: trades } = useQuery({
+    queryKey: ['trades', tokenAddress, chainId],
+    queryFn: async () => {
+      if (!publicClient || !tokenAddress) return []
+      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 bnbAmount, uint256 tokenAmount)')
+      const sellEvent = parseAbiItem('event TokenSold(address indexed token, address indexed seller, uint256 tokenAmount, uint256 bnbAmount)')
+      const [buyLogs, sellLogs] = await Promise.all([
+        publicClient.getLogs({ event: buyEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
+        publicClient.getLogs({ event: sellEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
+      ])
+      const all = [
+        ...buyLogs.map((log) => ({ type: 'buy' as const, address: log.args.buyer!, bnbAmount: log.args.bnbAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
+        ...sellLogs.map((log) => ({ type: 'sell' as const, address: log.args.seller!, bnbAmount: log.args.bnbAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
+      ]
+      return all.sort((a, b) => Number(b.blockNumber - a.blockNumber)).slice(0, 50)
+    },
+    enabled: !!publicClient && !!tokenAddress,
+    staleTime: 30_000,
+  })
+
+  const { data: holders } = useQuery({
+    queryKey: ['holders', tokenAddress, chainId],
+    queryFn: async () => {
+      if (!publicClient || !tokenAddress) return []
+      const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
+      const logs = await publicClient.getLogs({ event: transferEvent, address: tokenAddress, fromBlock: 'earliest', toBlock: 'latest' })
+      const balances: Record<string, bigint> = {}
+      for (const log of logs) {
+        const from = log.args.from!
+        const to = log.args.to!
+        const value = log.args.value!
+        if (from !== '0x0000000000000000000000000000000000000000') {
+          balances[from] = (balances[from] || BigInt(0)) - value
+        }
+        if (to !== '0x0000000000000000000000000000000000000000') {
+          balances[to] = (balances[to] || BigInt(0)) + value
+        }
+      }
+      return Object.entries(balances)
+        .filter(([, bal]) => bal > BigInt(0))
+        .map(([addr, bal]) => ({ address: addr, balance: bal }))
+        .sort((a, b) => (b.balance > a.balance ? 1 : b.balance < a.balance ? -1 : 0))
+        .slice(0, 20)
+    },
+    enabled: !!publicClient && !!tokenAddress,
+    staleTime: 30_000,
+  })
+
+  const { data: subBnb } = useQuery({
+    queryKey: ['subBnb', tokenAddress, chainId, daoAddress],
+    queryFn: async () => {
+      if (!publicClient || !tokenAddress || isZeroAddress(daoAddress)) return BigInt(0)
+      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 bnbAmount, uint256 tokenAmount)')
+      const logs = await publicClient.getLogs({ event: buyEvent, args: { token: tokenAddress, buyer: daoAddress }, fromBlock: 'earliest', toBlock: 'latest' })
+      return logs.reduce((sum, log) => sum + (log.args.bnbAmount ?? BigInt(0)), BigInt(0))
+    },
+    enabled: !!publicClient && !!tokenAddress && !isZeroAddress(daoAddress),
+    staleTime: 30_000,
+  })
+
+  const holderCount = holders?.length ?? 0
+  const totalHolderBalance = useMemo(() => {
+    if (!holders || holders.length === 0) return BigInt(0)
+    return holders.reduce((sum, h) => sum + h.balance, BigInt(0))
+  }, [holders])
+
+  const handleBuy = useCallback(() => {
+    if (!buyAmount || !tokenAddress || estimatedTokens === BigInt(0)) return
+    try {
+      const bnbWei = parseEther(buyAmount)
+      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
+      const minTokensOut = (estimatedTokens * slippageBps) / BigInt(10000)
+      writeContractAsync({
+        address: bondingCurveAddress,
+        abi: BONDING_CURVE_ABI,
+        functionName: 'buy',
+        args: [tokenAddress, minTokensOut, zeroAddress],
+        value: bnbWei,
+        chainId,
+        gas: 5_000_000n,
+      } as any).catch(() => {})
+    } catch (e) {
+      console.error('Buy failed', e)
+    }
+  }, [buyAmount, tokenAddress, estimatedTokens, slippage, writeContractAsync, bondingCurveAddress, chainId])
+
+  const handleApprove = useCallback(() => {
+    if (!sellAmount || !tokenAddress) return
+    try {
+      const tokenWei = parseEther(sellAmount)
+      writeContractAsync({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [bondingCurveAddress, tokenWei],
+        chainId,
+        gas: 1_000_000n,
+      } as any).catch(() => {})
+    } catch (e) {
+      console.error('Approve failed', e)
+    }
+  }, [sellAmount, tokenAddress, bondingCurveAddress, writeContractAsync, chainId])
+
+  const handleSell = useCallback(() => {
+    if (!sellAmount || !tokenAddress || estimatedBnb === BigInt(0)) return
+    try {
+      const tokenWei = parseEther(sellAmount)
+      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
+      const minBnbOut = (estimatedBnb * slippageBps) / BigInt(10000)
+      writeContractAsync({
+        address: bondingCurveAddress,
+        abi: BONDING_CURVE_ABI,
+        functionName: 'sell',
+        args: [tokenAddress, tokenWei, minBnbOut],
+        chainId,
+        gas: 5_000_000n,
+      } as any).catch(() => {})
+    } catch (e) {
+      console.error('Sell failed', e)
+    }
+  }, [sellAmount, tokenAddress, estimatedBnb, slippage, writeContractAsync, bondingCurveAddress, chainId])
+
+  if (isTokenInfoLoading) {
+    return (
+      <div className="animate-fade-in">
+        <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-green mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm">{t('common.back')}</span>
+        </Link>
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="w-8 h-8 text-neon-green animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!tokenData) {
+    return (
+      <div className="animate-fade-in">
+        <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-green mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm">{t('common.back')}</span>
+        </Link>
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <div className="w-20 h-20 rounded-2xl bg-dark-700 flex items-center justify-center mb-6">
+            <SearchX className="w-10 h-10 text-gray-500" />
+          </div>
+          <h2 className="font-display font-bold text-2xl mb-2">Token Not Found</h2>
+          <p className="text-gray-400 mb-6">This token does not exist or has not been created yet.</p>
+          <Link to="/create" className="btn-primary">Create Token</Link>
+        </div>
+      </div>
+    )
+  }
+
+  const formatBnb = (val: number) => formatUsdc(val)
+  const formatTokenAmount = (val: bigint) => {
+    const num = Number(formatEther(val))
+    if (num === 0) return '0'
+    if (num >= 1) return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    if (num >= 0.001) return num.toFixed(4)
+    return num.toExponential(2)
+  }
+
+  return (
+    <div className="animate-fade-in">
+      <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-green mb-6 transition-colors">
+        <ArrowLeft className="w-4 h-4" />
+        <span className="text-sm">{t('common.back')}</span>
+      </Link>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="card-dark">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden">
+                {meta.image ? (
+                  <img src={sanitizeHref(meta.image)} alt={tokenData.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-display font-bold text-xl text-neon-green">
+                    {tokenData.name.charAt(0)}
+                  </span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-display font-bold text-2xl">{tokenData.name}</h1>
+                  <span className="text-gray-400">{tokenData.symbol}</span>
+                  {isListed && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-neon-green/10 text-neon-green border border-neon-green/30 rounded-full">
+                      DEX
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-400 font-mono">{tokenAddress.slice(0, 10)}...{tokenAddress.slice(-8)}</p>
+              </div>
+            </div>
+
+            <div className="flex items-end gap-4 mb-6">
+              <span className="font-display font-bold text-4xl neon-text">{formatBnb(pricePerToken)}</span>
+              <span className="text-gray-400 text-lg mb-1">{nativeSymbol}</span>
+            </div>
+
+            <div className="bg-dark-700/50 rounded-lg p-6 text-center">
+              <p className="text-gray-400 text-sm">Price chart requires event indexing — coming soon</p>
+            </div>
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.dexProgress')}</h3>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-400 text-sm">{t('tokenDetail.reserve')}</span>
+              <span className="font-display font-semibold">{formatUsdc(reserveBnb)} / 20000 {nativeSymbol}</span>
+            </div>
+            <div className="w-full h-4 bg-dark-700 rounded-full overflow-hidden flex">
+              {(() => {
+                const subBnbVal = subBnb ? Number(formatEther(subBnb)) : 0
+                const curveBnbVal = Math.max(0, reserveBnb - subBnbVal)
+                const subPct = Math.min((subBnbVal / DEX_THRESHOLD_BNB) * 100, 100)
+                const curvePct = Math.min((curveBnbVal / DEX_THRESHOLD_BNB) * 100, 100 - subPct)
+                return (
+                  <>
+                    <div className="h-full bg-doge-gold transition-all duration-500" style={{ width: `${subPct}%` }} title={`${t('tokenDetail.subBnb')}: ${formatUsdc(subBnbVal)} ${nativeSymbol}`} />
+                    <div className="h-full bg-doge-cyan transition-all duration-500" style={{ width: `${curvePct}%` }} title={`${t('tokenDetail.curveBnb')}: ${formatUsdc(curveBnbVal)} ${nativeSymbol}`} />
+                  </>
+                )
+              })()}
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-xs">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-gold inline-block" />{t('tokenDetail.subBnb')}</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-cyan inline-block" />{t('tokenDetail.curveBnb')}</span>
+            </div>
+            <p className="text-sm text-gray-400 mt-2">
+              {progress >= 100
+                ? t('tokenDetail.alreadyListed')
+                : `${formatUsdc(DEX_THRESHOLD_BNB - reserveBnb)} ${nativeSymbol} ${t('tokenDetail.remaining')}`}
+            </p>
+
+            {progress >= 100 && (
+              <div className="mt-4 pt-4 border-t border-dark-500/30">
+                <h4 className="font-display font-semibold text-sm mb-3">{t('tokenDetail.distribution')}</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-green inline-block" />{t('tokenDetail.distLp')}</span>
+                    <span className="font-semibold text-neon-green">82% {nativeSymbol} + 82% {t('tokenDetail.tokens')}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-cyan inline-block" />{t('tokenDetail.distLongPool')}</span>
+                    <span className="font-semibold text-doge-cyan">8% {nativeSymbol}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-red inline-block" />{t('tokenDetail.distBurn')}</span>
+                    <span className="font-semibold text-neon-red">5% {nativeSymbol}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-gold inline-block" />{t('tokenDetail.distPlatform')}</span>
+                    <span className="font-semibold text-doge-gold">5% {nativeSymbol}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-violet inline-block" />{t('tokenDetail.distShortPool')}</span>
+                    <span className="font-semibold text-doge-violet">8% {t('tokenDetail.tokens')}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.recentTrades')}</h3>
+            {!trades || trades.length === 0 ? (
+              <div className="bg-dark-700/50 rounded-lg p-6 text-center">
+                <p className="text-gray-400 text-sm">{trades ? t('tokenDetail.noTrades') : t('tokenDetail.loadingTrades')}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 text-xs border-b border-dark-500/30">
+                      <th className="text-left py-2 px-2">{t('tokenDetail.tradeType')}</th>
+                      <th className="text-left py-2 px-2">{t('tokenDetail.tradeAddress')}</th>
+                      <th className="text-right py-2 px-2">{nativeSymbol}</th>
+                      <th className="text-right py-2 px-2">{tokenData?.symbol}</th>
+                      <th className="text-right py-2 px-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trades.map((trade, i) => (
+                      <tr key={i} className="border-b border-dark-500/10 hover:bg-dark-700/30">
+                        <td className="py-2 px-2">
+                          <span className={cn('text-xs font-semibold px-2 py-0.5 rounded', trade.type === 'buy' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-red/10 text-neon-red')}>
+                            {trade.type === 'buy' ? t('tokenDetail.buy') : t('tokenDetail.sell')}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 font-mono text-xs">
+                          <a href={getBscScanUrl(chainId, 'address', trade.address)} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-doge-gold transition-colors">
+                            {trade.address.slice(0, 6)}...{trade.address.slice(-4)}
+                          </a>
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono text-xs">{formatUsdc(Number(formatEther(trade.bnbAmount)))}</td>
+                        <td className="py-2 px-2 text-right font-mono text-xs">{Number(formatEther(trade.tokenAmount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                        <td className="py-2 px-2 text-right">
+                          <a href={getBscScanUrl(chainId, 'tx', trade.txHash)} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-doge-gold transition-colors">
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.holders')}</h3>
+            {!holders || holders.length === 0 ? (
+              <div className="bg-dark-700/50 rounded-lg p-6 text-center">
+                <p className="text-gray-400 text-sm">{holders ? t('tokenDetail.noHolders') : t('tokenDetail.loadingHolders')}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 text-xs border-b border-dark-500/30">
+                      <th className="text-left py-2 px-2">#</th>
+                      <th className="text-left py-2 px-2">{t('tokenDetail.holderAddress')}</th>
+                      <th className="text-right py-2 px-2">{t('tokenDetail.holderBalance')}</th>
+                      <th className="text-right py-2 px-2">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {holders.map((holder, i) => {
+                      const pct = totalHolderBalance > BigInt(0) ? Number(holder.balance * BigInt(10000) / totalHolderBalance) / 100 : 0
+                      return (
+                        <tr key={i} className="border-b border-dark-500/10 hover:bg-dark-700/30">
+                          <td className="py-2 px-2 text-gray-500">{i + 1}</td>
+                          <td className="py-2 px-2 font-mono text-xs">
+                            <a href={getBscScanUrl(chainId, 'address', holder.address)} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-doge-gold transition-colors">
+                              {holder.address.slice(0, 6)}...{holder.address.slice(-4)}
+                            </a>
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-xs">{Number(formatEther(holder.balance)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td className="py-2 px-2 text-right text-doge-gold text-xs font-semibold">{pct.toFixed(2)}%</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="card-dark">
+            <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
+                  activeTab === 'buy' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('buy')}
+              >
+                {t('tokenDetail.buy')}
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
+                  activeTab === 'sell' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('sell')}
+              >
+                {t('tokenDetail.sell')}
+              </button>
+            </div>
+
+            {isListed ? (
+              <div className="text-center py-6">
+                <p className="text-neon-green font-display font-semibold mb-2">✅ Listed on Uniswap</p>
+                <p className="text-gray-400 text-sm">This token is now trading on DEX. Use Uniswap to trade.</p>
+                <a
+                  href={getBscScanUrl(chainId, 'token', tokenAddress)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-neon-green text-sm hover:underline mt-3"
+                >
+                  <ExternalLink className="w-3 h-3" /> {t('tokenDetail.viewOnExplorer')}
+                </a>
+              </div>
+            ) : activeTab === 'buy' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
+                  <input
+                    type="number"
+                    className="input-dark w-full"
+                    placeholder="0.0"
+                    value={buyAmount}
+                    onChange={(e) => setBuyAmount(e.target.value)}
+                  />
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
+                  <p className="font-display font-bold text-lg">{formatTokenAmount(estimatedTokens)} {tokenData.symbol}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
+                  <div className="flex gap-2">
+                    {[0.5, 1, 3].map((s) => (
+                      <button
+                        key={s}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                          slippage === s
+                            ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
+                            : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
+                        )}
+                        onClick={() => setSlippage(s)}
+                      >
+                        {s}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {!isConnected ? (
+                  <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
+                    Connect Wallet
+                  </button>
+                ) : (
+                  <button
+                    className="btn-primary w-full text-center"
+                    onClick={handleBuy}
+                    disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
+                  >
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.buy')} ${tokenData.symbol}`}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenData.symbol})</label>
+                    {userTokenBalance !== undefined && (
+                      <button
+                        className="text-xs text-neon-green hover:underline"
+                        onClick={() => setSellAmount(formatEther(userTokenBalance))}
+                      >
+                        Max: {formatTokenAmount(userTokenBalance)}
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    className="input-dark w-full"
+                    placeholder="0.0"
+                    value={sellAmount}
+                    onChange={(e) => setSellAmount(e.target.value)}
+                  />
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
+                  <p className="font-display font-bold text-lg">{estimatedBnb > BigInt(0) ? formatUsdc(Number(formatEther(estimatedBnb))) : '0'} {nativeSymbol}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
+                  <div className="flex gap-2">
+                    {[0.5, 1, 3].map((s) => (
+                      <button
+                        key={s}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                          slippage === s
+                            ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
+                            : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
+                        )}
+                        onClick={() => setSlippage(s)}
+                      >
+                        {s}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {!isConnected ? (
+                  <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
+                    Connect Wallet
+                  </button>
+                ) : needsApproval ? (
+                  <button
+                    className="btn-primary w-full text-center"
+                    onClick={handleApprove}
+                    disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
+                  >
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `Approve ${tokenData.symbol}`}
+                  </button>
+                ) : (
+                  <button
+                    className="btn-danger w-full text-center"
+                    onClick={handleSell}
+                    disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
+                  >
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.sell')} ${tokenData.symbol}`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {writeError && (
+              <div className="mt-3 flex items-start gap-2 text-neon-red text-xs bg-neon-red/10 rounded-lg p-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{writeError.message?.includes('User rejected') ? 'Transaction rejected' : writeError.message?.slice(0, 100) || 'Transaction failed'}</span>
+              </div>
+            )}
+            {isConfirmed && (
+              <div className="mt-3 flex items-start gap-2 text-neon-green text-xs bg-neon-green/10 rounded-lg p-2">
+                <span>Transaction confirmed!</span>
+                {txHash && (
+                  <a
+                    href={getBscScanUrl(chainId, 'tx', txHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:no-underline"
+                  >
+                    View
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-semibold mb-3">{t('tokenDetail.tokenInfo')}</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">{t('tokenDetail.marketCap')}</span>
+                <span className="font-medium">{marketCap > 0 ? `${formatUsdc(marketCap)} ${nativeSymbol}` : '--'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{t('tokenDetail.24hVolume')}</span>
+                <span className="font-medium">--</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{t('tokenDetail.holders')}</span>
+                <span className="font-medium flex items-center gap-1"><Users className="w-3 h-3" />{holderCount || '--'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{t('tokenDetail.totalSupply')}</span>
+                <span className="font-medium">{Number(formatEther(tokenData.totalSupply)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{t('tokenDetail.creator')}</span>
+                <span className="font-mono text-xs">{tokenData.creator.slice(0, 6)}...{tokenData.creator.slice(-4)}</span>
+              </div>
+              <a
+                href={getBscScanUrl(chainId, 'address', tokenAddress)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-neon-green text-xs hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" /> {t('tokenDetail.viewBscScan')}
+              </a>
+              {(meta.website || meta.twitter || meta.telegram || meta.discord) && (
+                <div className="pt-2 border-t border-dark-500/30">
+                  <div className="flex items-center gap-3">
+                    {meta.website && (
+                      <a href={sanitizeHref(meta.website)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-gold transition-colors" title={t('tokenDetail.website')}>
+                        <Globe className="w-4 h-4" />
+                      </a>
+                    )}
+                    {meta.twitter && (
+                      <a href={sanitizeHref(/^(https?:\/\/|twitter\.com|x\.com)/i.test(meta.twitter) ? meta.twitter : `https://twitter.com/${meta.twitter}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title={t('tokenDetail.twitter')}>
+                        <Twitter className="w-4 h-4" />
+                      </a>
+                    )}
+                    {meta.telegram && (
+                      <a href={sanitizeHref(/^(https?:\/\/|t\.me)/i.test(meta.telegram) ? meta.telegram : `https://t.me/${meta.telegram}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title={t('tokenDetail.telegram')}>
+                        <MessageCircle className="w-4 h-4" />
+                      </a>
+                    )}
+                    {meta.discord && (
+                      <a href={sanitizeHref(/^(https?:\/\/|discord\.gg|discord\.com)/i.test(meta.discord) ? meta.discord : `https://discord.gg/${meta.discord}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-violet transition-colors" title={t('tokenDetail.discord')}>
+                        <UsersRound className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

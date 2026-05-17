@@ -1,0 +1,1608 @@
+import { useState, useMemo } from 'react'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { formatEther, parseEther } from 'viem'
+import { Vote, Clock, Flame, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkles, Inbox, Recycle, RefreshCw, ShieldAlert, Loader2, WifiOff, Globe, Twitter, MessageCircle, UsersRound, Rocket, Wallet, ArrowDownToLine, HandCoins, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
+import type { TokenMeta } from '@/lib/utils'
+import { useT } from '@/i18n/useT'
+import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { useTargetChainId } from '@/hooks/useNetwork'
+import { fixWalletNetwork } from '@/config/wagmi'
+
+const ERC20_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'spender', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'spender', type: 'address' },
+    ],
+    name: 'allowance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'name',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
+interface Candidate {
+  id: number
+  name: string
+  symbol: string
+  proposer: string
+  totalWeight: bigint
+  totalSubBnb: bigint
+  totalSubDoge: bigint
+  totalRightsVotes: bigint
+  submitTime: bigint
+  expireTime: bigint
+  gracePeriodEnd: bigint
+  durationTier: number
+  status: number
+  metadataURI: string
+  wasLaunched: boolean
+  launchedToken: string
+  queueTime: bigint
+}
+
+const DURATION_TIERS = [
+  { value: 0, label: '1 Day', duration: '1d', fee: '3', feeBnb: 3 },
+  { value: 1, label: '7 Days', duration: '7d', fee: '5', feeBnb: 5 },
+  { value: 2, label: '30 Days', duration: '30d', fee: '10', feeBnb: 10 },
+]
+
+const STATUS_MAP: Record<number, string> = {
+  0: 'Active',
+  1: 'Queued',
+  2: 'Expired',
+  3: 'Grace',
+  4: 'Recyclable',
+  5: 'Launched',
+}
+
+const STAKE_DURATIONS = [
+  { value: 0, label: '活期', multiplier: '1x' },
+  { value: 1, label: '30天', multiplier: '1.5x' },
+  { value: 2, label: '90天', multiplier: '2x' },
+  { value: 3, label: '180天', multiplier: '3x' },
+]
+
+interface StakePosition {
+  id: number
+  token: `0x${string}`
+  amount: bigint
+  startTime: bigint
+  duration: bigint
+  maturityTime: bigint
+  withdrawn: boolean
+}
+
+function CandidateDetailCard({
+  candidateId,
+  isSelected,
+  onSelect,
+  rank,
+  variant,
+  daoAddress,
+  abi,
+  doWrite,
+}: {
+  candidateId: number
+  isSelected: boolean
+  onSelect: () => void
+  rank: number
+  variant: 'active' | 'grace' | 'recycle' | 'queued'
+  daoAddress: `0x${string}`
+  abi: typeof LAUNCH_DAO_ABI
+  doWrite: (params: { functionName: string; args: readonly unknown[]; value?: bigint; gas?: bigint }) => Promise<`0x${string}`>
+}) {
+  const targetChainId = useTargetChainId()
+  const nativeSymbol = getNativeSymbol(targetChainId)
+
+  const { data, isLoading } = useReadContract({
+    address: daoAddress,
+    abi,
+    functionName: 'candidates',
+    args: [BigInt(candidateId)],
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(daoAddress), refetchInterval: 30000 },
+  })
+
+  const candidate = useMemo<Candidate | null>(() => {
+    if (!data) return null
+    const d = data as any
+    const proposer = d.proposer ?? d[0] ?? ''
+    const name = d.name ?? d[1] ?? ''
+    const symbol = d.symbol ?? d[2] ?? ''
+    const metadataURI = d.metadataURI ?? d[3] ?? ''
+    const totalWeight = d.totalWeight ?? d[4] ?? 0n
+    const totalSubBnb = d.totalSubBnb ?? d[5] ?? 0n
+    const totalSubDoge = d.totalSubDoge ?? d[6] ?? 0n
+    const totalRightsVotes = d.totalRightsVotes ?? d[7] ?? 0n
+    const submitTime = d.submitTime ?? d[8] ?? 0n
+    const durationTier = d.durationTier ?? d[9] ?? 0
+    const expireTime = d.expireTime ?? d[10] ?? 0n
+    const gracePeriodEnd = d.gracePeriodEnd ?? d[11] ?? 0n
+    const status = d.status ?? d[12] ?? 0
+    const wasLaunched = d.wasLaunched ?? d[13] ?? false
+    const launchedToken = d.launchedToken ?? d[14] ?? ''
+    const launchedTokenSupply = d.launchedTokenSupply ?? d[15] ?? 0n
+    const queueTime = d.queueTime ?? d[16] ?? 0n
+    return {
+      id: candidateId,
+      name,
+      symbol,
+      proposer,
+      metadataURI,
+      totalWeight,
+      totalSubBnb,
+      totalSubDoge,
+      totalRightsVotes,
+      submitTime,
+      expireTime,
+      gracePeriodEnd,
+      durationTier: Number(durationTier),
+      status: Number(status),
+      wasLaunched,
+      launchedToken,
+      queueTime,
+    }
+  }, [data, candidateId])
+
+  const meta = useMemo<TokenMeta>(() => parseMetadata(candidate?.metadataURI || ''), [candidate?.metadataURI])
+
+  const formatCountdown = (timestamp: number) => {
+    const diff = timestamp - Date.now() / 1000
+    if (diff <= 0) return 'Expired'
+    const d = Math.floor(diff / 86400)
+    const h = Math.floor((diff % 86400) / 3600)
+    const m = Math.floor((diff % 3600) / 60)
+    if (d > 0) return `${d}d ${h}h`
+    if (h > 0) return `${h}h ${m}m`
+    return `${m}m`
+  }
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-dark-500/30 bg-dark-700 p-4 flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-doge-gold animate-spin" />
+      </div>
+    )
+  }
+
+  if (!candidate) return null
+
+  const tier = DURATION_TIERS[candidate.durationTier] || DURATION_TIERS[0]
+
+  const borderColor = variant === 'active'
+    ? isSelected ? 'border-doge-gold/50 bg-doge-gold/5' : 'border-dark-500/30 bg-dark-700 hover:border-dark-500/60'
+    : variant === 'queued'
+    ? 'border-doge-cyan/30 bg-doge-cyan/5'
+    : variant === 'grace'
+    ? 'border-neon-yellow/30 bg-neon-yellow/5'
+    : 'border-neon-red/30 bg-neon-red/5'
+
+  const accentColor = variant === 'active' ? 'text-doge-gold' : variant === 'queued' ? 'text-doge-cyan' : variant === 'grace' ? 'text-neon-yellow' : 'text-neon-red'
+
+  return (
+    <div
+      className={cn(
+        'relative rounded-xl border p-4 transition-all duration-200',
+        variant === 'active' ? 'cursor-pointer' : '',
+        borderColor
+      )}
+      onClick={variant === 'active' ? onSelect : undefined}
+    >
+      {rank === 0 && variant === 'active' && (
+        <div className="absolute top-2 right-2">
+          <span className="badge-gold text-[10px]">Leading</span>
+        </div>
+      )}
+      {variant === 'queued' && (
+        <div className="absolute top-2 right-2">
+          <span className="px-2 py-0.5 text-[10px] font-medium bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 rounded-full">Queued</span>
+        </div>
+      )}
+
+      <div className="flex items-start gap-3">
+        <div className="shrink-0">
+          {meta.image ? (
+            <img
+              src={sanitizeHref(meta.image)}
+              alt={candidate.name}
+              className="w-12 h-12 rounded-full object-cover border-2 border-dark-500/50"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
+            />
+          ) : null}
+          <div className={cn('w-12 h-12 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold', accentColor, meta.image ? 'hidden' : '')}>
+            {candidate.name ? candidate.name.charAt(0).toUpperCase() : `#${candidateId}`}
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-display font-bold text-base">{candidate.name}</span>
+            {candidate.symbol && (
+              <span className="text-xs text-gray-400 bg-dark-600 px-1.5 py-0.5 rounded">{candidate.symbol}</span>
+            )}
+            {candidate.proposer && (
+              <span className="text-xs text-gray-500">
+                by {candidate.proposer.slice(0, 6)}...{candidate.proposer.slice(-4)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 mt-2">
+            <div>
+              <div className={cn('font-display font-bold text-sm', accentColor)}>
+                {formatUsdc(Number(formatEther(candidate.totalSubBnb)))} {nativeSymbol}
+              </div>
+              <div className="text-xs text-gray-500">Subscribed</div>
+            </div>
+            {candidate.totalSubDoge > 0n && (
+              <div>
+                <div className="font-display font-bold text-sm text-doge-cyan">
+                  {formatUsdc(Number(formatEther(candidate.totalSubDoge)))} DOGE
+                </div>
+                <div className="text-xs text-gray-500">DOGE Sub</div>
+              </div>
+            )}
+            <div>
+              <div className="font-display font-bold text-sm">{Number(candidate.totalWeight).toLocaleString()} 分</div>
+              <div className="text-xs text-gray-500">Weight</div>
+            </div>
+            {variant === 'active' && candidate.expireTime > 0n && (
+              <div>
+                <div className="text-xs text-gray-300">{formatCountdown(Number(candidate.expireTime))}</div>
+                <div className="text-xs text-gray-500">Expires</div>
+              </div>
+            )}
+            {variant === 'grace' && candidate.gracePeriodEnd > 0n && (
+              <div>
+                <div className="text-xs font-bold text-neon-yellow">{formatCountdown(Number(candidate.gracePeriodEnd))}</div>
+                <div className="text-xs text-gray-500">Grace ends</div>
+              </div>
+            )}
+          </div>
+
+          {(meta.website || meta.twitter || meta.telegram || meta.discord) && (
+            <div className="flex items-center gap-2 mt-2">
+              {meta.website && (
+                <a href={sanitizeHref(meta.website)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-gold transition-colors" title="Website" onClick={(e) => e.stopPropagation()}>
+                  <Globe className="w-3.5 h-3.5" />
+                </a>
+              )}
+              {meta.twitter && (
+                <a href={sanitizeHref(/^(https?:\/\/|twitter\.com|x\.com)/i.test(meta.twitter) ? meta.twitter : `https://twitter.com/${meta.twitter}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title="Twitter" onClick={(e) => e.stopPropagation()}>
+                  <Twitter className="w-3.5 h-3.5" />
+                </a>
+              )}
+              {meta.telegram && (
+                <a href={sanitizeHref(/^(https?:\/\/|t\.me)/i.test(meta.telegram) ? meta.telegram : `https://t.me/${meta.telegram}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title="Telegram" onClick={(e) => e.stopPropagation()}>
+                  <MessageCircle className="w-3.5 h-3.5" />
+                </a>
+              )}
+              {meta.discord && (
+                <a href={sanitizeHref(/^(https?:\/\/|discord\.gg|discord\.com)/i.test(meta.discord) ? meta.discord : `https://discord.gg/${meta.discord}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-violet transition-colors" title="Discord" onClick={(e) => e.stopPropagation()}>
+                  <UsersRound className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {variant === 'grace' && (
+        <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
+          <p className="text-xs text-neon-yellow mb-2">Creator renewal period — only the original proposer can renew</p>
+          <div className="flex gap-2">
+            {DURATION_TIERS.map((t) => (
+              <button
+                key={t.value}
+                className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-yellow hover:bg-dark-500 transition-colors border border-dark-500"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  try {
+                    await doWrite({
+                      functionName: 'renewCandidate',
+                      args: [BigInt(candidateId), BigInt(t.value)],
+                      value: parseEther(t.feeBnb.toFixed(2)),
+                    })
+                  } catch {}
+                }}
+              >
+                {t.label} · {t.fee} {nativeSymbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {variant === 'recycle' && (
+        <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
+          <p className="text-xs text-neon-red mb-2">Grace period expired — any player can claim and become the new creator</p>
+          <div className="flex gap-2">
+            {DURATION_TIERS.map((t) => (
+              <button
+                key={t.value}
+                className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-red hover:bg-dark-500 transition-colors border border-dark-500"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  try {
+                    await doWrite({
+                      functionName: 'claimRecycled',
+                      args: [BigInt(candidateId), BigInt(t.value)],
+                      value: parseEther(t.feeBnb.toFixed(2)),
+                    })
+                  } catch {}
+                }}
+              >
+                {t.label} · {t.fee} {nativeSymbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function DaoVote() {
+  const t = useT()
+  const { address } = useAccount()
+  const targetChainId = useTargetChainId()
+  const nativeSymbol = getNativeSymbol(targetChainId)
+  const daoAddress = getContractAddress(targetChainId, 'launchDAO')
+  const contractReady = !isZeroAddress(daoAddress)
+
+  const { writeContractAsync: _writeAsync, data: txHash, isPending: isWriting } = useWriteContract()
+  const writeContractAsync = _writeAsync as (params: any) => Promise<`0x${string}`>
+
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+
+  const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'voting' | 'queue' | 'grace' | 'recycle'>('voting')
+  const [stakeTokenTab, setStakeTokenTab] = useState<'bnb' | 'doge'>('bnb')
+  const [stakeDuration, setStakeDuration] = useState<number>(0)
+  const [stakeAmount, setStakeAmount] = useState('')
+  const [showUnstakePanel, setShowUnstakePanel] = useState(false)
+  const [txError, setTxError] = useState('')
+  const [isApproving, setIsApproving] = useState(false)
+
+  const [subBnbAmount, setSubBnbAmount] = useState('')
+  const [subDogeAmount, setSubDogeAmount] = useState('')
+  const [voteRightsAmount, setVoteRightsAmount] = useState('')
+
+  const { data: activeData, isLoading: loadingActive, error: errorActive, refetch: refetchActive } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getActiveCandidates',
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 15000 },
+  })
+
+  const { data: queuedData, isLoading: loadingQueued, refetch: refetchQueued } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getQueuedCandidates',
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 15000 },
+  })
+
+  const { data: graceData, isLoading: loadingGrace, refetch: refetchGrace } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getGracePeriodCandidates',
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 15000 },
+  })
+
+  const { data: recycleData, isLoading: loadingRecycle, refetch: refetchRecycle } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getRecyclableCandidates',
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 15000 },
+  })
+
+  const { data: epochRemaining } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getEpochTimeRemaining',
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 10000 },
+  })
+
+  const { data: totalStakedBnbData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'totalStakedBnb',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: totalStakedDogeData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'totalStakedDoge',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: totalStakedUsdtData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'totalStakedUsdt',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: pendingRightsData, refetch: refetchRights } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getPendingRights',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address, refetchInterval: 30000 },
+  })
+
+  const { data: userRightsData, refetch: refetchEffectiveRights } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getEffectiveRights',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address },
+  })
+
+  const { data: totalEffectiveRightsData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getUserTotalEffectiveRights',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address, refetchInterval: 30000 },
+  })
+
+  const { data: userRawRightsData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'userRawRights',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address },
+  })
+
+  const { data: dogeTokenData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'dogeToken',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: queueLengthData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getQueueLength',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: stakePositionsData, refetch: refetchPositions } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getStakePositions',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address, refetchInterval: 30000 },
+  })
+
+  const dogeTokenAddr = (dogeTokenData as `0x${string}` | undefined) ?? undefined
+  const dogeTokenReady = !!dogeTokenAddr && !isZeroAddress(dogeTokenAddr)
+
+  const { data: dogeTokenNameData } = useReadContract({
+    address: dogeTokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'name',
+    chainId: targetChainId,
+    query: { enabled: dogeTokenReady },
+  })
+
+  const { data: dogeBalanceData } = useReadContract({
+    address: dogeTokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    chainId: targetChainId,
+    query: { enabled: dogeTokenReady && !!address },
+  })
+
+  const { data: dogeAllowanceData, refetch: refetchDogeAllowance } = useReadContract({
+    address: dogeTokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: address && dogeTokenAddr ? [address, daoAddress] : undefined,
+    chainId: targetChainId,
+    query: { enabled: dogeTokenReady && !!address },
+  })
+
+  const parseIds = (data: unknown): number[] => {
+    if (!data) return []
+    const d = data as any
+    const ids = d.ids ?? d[0] ?? []
+    if (!ids || !ids.length) return []
+    return ids.map((id: bigint) => Number(id))
+  }
+
+  const activeIds = parseIds(activeData)
+  const queuedIds = parseIds(queuedData)
+  const graceIds = parseIds(graceData)
+  const recycleIds = parseIds(recycleData)
+
+  const epochTimeRemaining = Number(epochRemaining ?? 0)
+  const totalStakedBnb = totalStakedBnbData ? Number(formatEther(totalStakedBnbData as bigint)) : 0
+  const totalStakedDoge = totalStakedDogeData ? Number(formatEther(totalStakedDogeData as bigint)) : 0
+  const totalStakedUsdt = totalStakedUsdtData ? Number(formatEther(totalStakedUsdtData as bigint)) : 0
+  const queueLength = Number(queueLengthData ?? 0)
+
+  const dogeTokenName = (dogeTokenNameData as string) || 'DOGE'
+
+  const pendingRights = pendingRightsData ? Number(pendingRightsData as bigint) : 0
+  const effectiveRights = userRightsData ? Number(userRightsData as bigint) : 0
+  const totalEffectiveRights = totalEffectiveRightsData ? Number(totalEffectiveRightsData as bigint) : 0
+  const rawRights = userRawRightsData ? Number(userRawRightsData as bigint) : 0
+  const userDogeBalance = dogeBalanceData ? Number(formatEther(dogeBalanceData as bigint)) : 0
+  const userDogeAllowance = dogeAllowanceData ? Number(formatEther(dogeAllowanceData as bigint)) : 0
+
+  const stakePositions = useMemo<StakePosition[]>(() => {
+    if (!stakePositionsData) return []
+    const d = stakePositionsData as any
+    const tokens: `0x${string}`[] = d.tokens ?? d[0] ?? []
+    const amounts: bigint[] = d.amounts ?? d[1] ?? []
+    const startTimes: bigint[] = d.startTimes ?? d[2] ?? []
+    const durations: bigint[] = d.durations ?? d[3] ?? []
+    const maturityTimes: bigint[] = d.maturityTimes ?? d[4] ?? []
+    const withdrawns: boolean[] = d.withdrawns ?? d[5] ?? []
+    return tokens.map((token, i) => ({
+      id: i,
+      token,
+      amount: amounts[i] ?? 0n,
+      startTime: startTimes[i] ?? 0n,
+      duration: durations[i] ?? 0n,
+      maturityTime: maturityTimes[i] ?? 0n,
+      withdrawn: withdrawns[i] ?? false,
+    }))
+  }, [stakePositionsData])
+
+  const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
+
+  const getTokenLabel = (tokenAddr: `0x${string}`): { symbol: string; color: string; bg: string } => {
+    if (tokenAddr.toLowerCase() === ZERO_ADDR) return { symbol: nativeSymbol, color: 'text-neon-green', bg: 'bg-neon-green/20' }
+    if (dogeTokenReady && tokenAddr.toLowerCase() === dogeTokenAddr!.toLowerCase()) return { symbol: dogeTokenName, color: 'text-doge-cyan', bg: 'bg-doge-cyan/20' }
+    return { symbol: '???', color: 'text-gray-400', bg: 'bg-gray-400/20' }
+  }
+
+  const getDurationLabel = (duration: bigint) => {
+    const d = Number(duration)
+    if (d === 0) return '活期'
+    if (d === 1) return '30天'
+    if (d === 2) return '90天'
+    if (d === 3) return '180天'
+    const days = Math.floor(d / 86400)
+    if (days === 30) return '30天'
+    if (days === 90) return '90天'
+    if (days === 180) return '180天'
+    return `${days}天`
+  }
+
+  const getPositionStatus = (pos: StakePosition): 'withdrawn' | 'withdrawable' | 'locked' => {
+    if (pos.withdrawn) return 'withdrawn'
+    if (Number(pos.duration) === 0) return 'withdrawable'
+    if (pos.maturityTime > 0n) {
+      const now = Math.floor(Date.now() / 1000)
+      return Number(pos.maturityTime) <= now ? 'withdrawable' : 'locked'
+    }
+    return 'locked'
+  }
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+
+  const formatDate = (timestamp: number) => {
+    if (timestamp === 0) return '-'
+    const d = new Date(timestamp * 1000)
+    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  }
+
+  const handleRefresh = () => {
+    refetchActive()
+    refetchQueued()
+    refetchGrace()
+    refetchRecycle()
+    refetchRights()
+    refetchPositions()
+    refetchEffectiveRights()
+  }
+
+  const BSC_GAS_CAP = 5_000_000n
+
+  const doWrite = async (params: {
+    functionName: string
+    args: readonly unknown[]
+    value?: bigint
+    gas?: bigint
+  }): Promise<`0x${string}`> => {
+    try {
+      const hash = await writeContractAsync({
+        address: daoAddress,
+        abi: LAUNCH_DAO_ABI,
+        functionName: params.functionName,
+        args: params.args,
+        value: params.value,
+        gas: params.gas ?? BSC_GAS_CAP,
+      })
+      return hash
+    } catch (err: any) {
+      const msg = String(err?.shortMessage || err?.message || '')
+      const isRateLimit = msg.includes('rate limit') || msg.includes('rate limited') || msg.includes('Requested resource not available')
+      if (!isRateLimit) throw err
+
+      const result = await fixWalletNetwork(targetChainId)
+      if (result === 'success') {
+        await new Promise(r => setTimeout(r, 1500))
+        try {
+          const hash = await writeContractAsync({
+            address: daoAddress,
+            abi: LAUNCH_DAO_ABI,
+            functionName: params.functionName,
+            args: params.args,
+            value: params.value,
+            gas: params.gas ?? BSC_GAS_CAP,
+          })
+          return hash
+        } catch (retryErr: any) {
+          const retryMsg = String(retryErr?.shortMessage || retryErr?.message || '')
+          if (!retryMsg.includes('rate limit') && !retryMsg.includes('rate limited') && !retryMsg.includes('Requested resource')) {
+            throw retryErr
+          }
+        }
+      }
+
+      throw new Error('RPC_LIMITED')
+    }
+  }
+
+  const handleSubscribeBnb = async () => {
+    if (selectedCandidate === null) return
+    setTxError('')
+    if (!subBnbAmount || parseFloat(subBnbAmount) < 1) {
+      setTxError(`认购金额最少 1 ${nativeSymbol}`)
+      return
+    }
+    try {
+      await doWrite({
+        functionName: 'subscribeBnb',
+        args: [BigInt(selectedCandidate)],
+        value: parseEther(subBnbAmount),
+      })
+      setSubBnbAmount('')
+      setTimeout(() => handleRefresh(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleSubscribeDoge = async () => {
+    if (selectedCandidate === null) return
+    setTxError('')
+    if (!subDogeAmount || parseFloat(subDogeAmount) <= 0) {
+      setTxError('请输入认购平台币数量')
+      return
+    }
+    if (!dogeTokenReady) {
+      setTxError('平台币未设置')
+      return
+    }
+    const needed = parseEther(subDogeAmount)
+    if (dogeAllowanceData == null || (dogeAllowanceData as bigint) < needed) {
+      setTxError('请先授权平台币给 DAO 合约')
+      return
+    }
+    try {
+      await doWrite({
+        functionName: 'subscribeDoge',
+        args: [BigInt(selectedCandidate), needed],
+      })
+      setSubDogeAmount('')
+      setTimeout(() => handleRefresh(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleStake = async () => {
+    setTxError('')
+    if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
+      setTxError('请输入质押金额')
+      return
+    }
+    try {
+      if (stakeTokenTab === 'bnb') {
+        if (parseFloat(stakeAmount) < 0.1) {
+          setTxError(`${nativeSymbol}质押最少 0.1`)
+          return
+        }
+        await doWrite({
+          functionName: 'stakeBnb',
+          args: [stakeDuration],
+          value: parseEther(stakeAmount),
+        })
+      } else if (stakeTokenTab === 'doge') {
+        if (!dogeTokenReady) {
+          setTxError('平台币未设置')
+          return
+        }
+        const needed = parseEther(stakeAmount)
+        if (dogeAllowanceData == null || (dogeAllowanceData as bigint) < needed) {
+          setTxError('请先授权平台币给 DAO 合约')
+          return
+        }
+        await doWrite({
+          functionName: 'stakeDoge',
+          args: [needed, stakeDuration],
+        })
+      }
+      setStakeAmount('')
+      setTimeout(() => {
+        refetchPositions()
+        refetchDogeAllowance()
+      }, 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleUnstakePosition = async (positionId: number) => {
+    setTxError('')
+    try {
+      await doWrite({
+        functionName: 'unstakePosition',
+        args: [BigInt(positionId)],
+      })
+      setTimeout(() => {
+        refetchPositions()
+        refetchRights()
+        refetchEffectiveRights()
+      }, 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleClaimRights = async () => {
+    setTxError('')
+    try {
+      await doWrite({ functionName: 'claimRights', args: [] })
+      setTimeout(() => {
+        refetchRights()
+        refetchPositions()
+        refetchEffectiveRights()
+      }, 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleVoteWithRights = async () => {
+    if (selectedCandidate === null) return
+    setTxError('')
+    if (!voteRightsAmount || parseFloat(voteRightsAmount) <= 0) {
+      setTxError('请输入投票权益数量')
+      return
+    }
+    try {
+      await doWrite({
+        functionName: 'voteWithRights',
+        args: [BigInt(selectedCandidate), BigInt(Math.round(parseFloat(voteRightsAmount)))],
+      })
+      setVoteRightsAmount('')
+      setTimeout(() => handleRefresh(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleSettleEpoch = async () => {
+    setTxError('')
+    try {
+      await doWrite({ functionName: 'settleEpoch', args: [] })
+      setTimeout(() => handleRefresh(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
+    }
+  }
+
+  const handleLaunchToken = async () => {
+    setTxError('')
+    try {
+      await doWrite({ functionName: 'launchToken', args: [] })
+      setTimeout(() => handleRefresh(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
+    }
+  }
+
+  const handleApproveDoge = async () => {
+    if (!dogeTokenAddr || !address) return
+    setTxError('')
+    setIsApproving(true)
+    try {
+      const maxUint256 = BigInt('115792089237316195423570985008687907853269984665640564039457584007913129639935')
+      await writeContractAsync({
+        address: dogeTokenAddr,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [daoAddress, maxUint256],
+        gas: BSC_GAS_CAP,
+      })
+      setTimeout(() => refetchDogeAllowance(), 2000)
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Approve failed'
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  const renderTxError = () => {
+    if (!txError) return null
+    if (txError === 'RPC_LIMITED') {
+      return (
+        <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3 space-y-2">
+          <p className="text-xs text-neon-red">钱包RPC节点限速，交易发送失败</p>
+          <div className="bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-2 space-y-2">
+            <p className="text-xs text-neon-yellow">请手动修改钱包测试网RPC：</p>
+            <code className="text-xs text-white bg-dark-700 px-2 py-1 rounded select-all block break-all">
+              {targetChainId === 97 ? 'https://bsc-testnet.publicnode.com' : 'https://bsc.publicnode.com'}
+            </code>
+            <button
+              className="w-full py-1.5 text-xs rounded-lg bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/30 hover:bg-neon-yellow/20 transition-colors font-bold"
+              onClick={async () => {
+                const result = await fixWalletNetwork(targetChainId)
+                if (result === 'success') setTxError('')
+              }}
+            >
+              一键修复钱包RPC →
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
+        <p className="text-xs text-neon-red break-all">{txError}</p>
+      </div>
+    )
+  }
+
+  const currentTokenLabel = stakeTokenTab === 'bnb' ? nativeSymbol : dogeTokenName
+  const currentTotalStaked = stakeTokenTab === 'bnb' ? totalStakedBnb : totalStakedDoge
+  const currentBalance = stakeTokenTab === 'bnb' ? 0 : userDogeBalance
+  const currentAllowance = stakeTokenTab === 'doge' ? userDogeAllowance : Infinity
+  const needsApprove = stakeTokenTab === 'doge' && currentAllowance < (parseFloat(stakeAmount) || 0)
+
+  if (!contractReady) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <WifiOff className="w-12 h-12 text-gray-500 mb-4" />
+        <p className="text-gray-400 mb-2">合约未部署或网络未连接</p>
+        <p className="text-xs text-gray-500">请先部署合约并连接到正确的网络</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-display font-bold flex items-center gap-2">
+            <Vote className="w-6 h-6 text-doge-gold" />
+            {t('dao.title')}
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">{t('dao.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="badge-cyan">
+            <Clock className="w-3 h-3 mr-1" />
+            {formatTime(epochTimeRemaining)}
+          </span>
+          <span className="badge-gold">
+            <Flame className="w-3 h-3 mr-1" />
+            Queue: {queueLength}
+          </span>
+          <button onClick={handleRefresh} className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors">
+            <RefreshCw className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="card-dark">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-bold text-lg">{t('dao.candidates')}</h3>
+            </div>
+
+            <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  activeTab === 'voting' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('voting')}
+              >
+                <Vote className="w-4 h-4" /> Active ({activeIds.length})
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  activeTab === 'queue' ? 'bg-doge-cyan text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('queue')}
+              >
+                <Rocket className="w-4 h-4" /> Queue ({queuedIds.length})
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  activeTab === 'grace' ? 'bg-neon-yellow text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('grace')}
+              >
+                <ShieldAlert className="w-4 h-4" /> Grace ({graceIds.length})
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  activeTab === 'recycle' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('recycle')}
+              >
+                <Recycle className="w-4 h-4" /> Recycle ({recycleIds.length})
+              </button>
+            </div>
+
+            {activeTab === 'voting' && (
+              loadingActive ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-doge-gold animate-spin" />
+                </div>
+              ) : errorActive ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-neon-red/10 flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-neon-red" />
+                  </div>
+                  <p className="text-neon-red mb-2">读取合约失败</p>
+                  <p className="text-xs text-gray-500 max-w-md">{String(errorActive).slice(0, 200)}</p>
+                </div>
+              ) : activeIds.length > 0 ? (
+                <div className="space-y-3">
+                  {activeIds.map((id, idx) => (
+                    <CandidateDetailCard
+                      key={id}
+                      candidateId={id}
+                      isSelected={selectedCandidate === id}
+                      onSelect={() => setSelectedCandidate(id)}
+                      rank={idx}
+                      variant="active"
+                      daoAddress={daoAddress}
+                      abi={LAUNCH_DAO_ABI}
+                      doWrite={doWrite}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+                    <Inbox className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-2">No active candidates</p>
+                  <p className="text-xs text-gray-500">Submit a candidate to start the voting</p>
+                </div>
+              )
+            )}
+
+            {activeTab === 'queue' && (
+              loadingQueued ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-doge-cyan animate-spin" />
+                </div>
+              ) : queuedIds.length > 0 ? (
+                <div className="space-y-3">
+                  {queuedIds.map((id) => (
+                    <CandidateDetailCard
+                      key={id}
+                      candidateId={id}
+                      isSelected={false}
+                      onSelect={() => {}}
+                      rank={0}
+                      variant="queued"
+                      daoAddress={daoAddress}
+                      abi={LAUNCH_DAO_ABI}
+                      doWrite={doWrite}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+                    <Rocket className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-2">Launch queue is empty</p>
+                  <p className="text-xs text-gray-500">Winning candidates will appear here</p>
+                </div>
+              )
+            )}
+
+            {activeTab === 'grace' && (
+              loadingGrace ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-neon-yellow animate-spin" />
+                </div>
+              ) : graceIds.length > 0 ? (
+                <div className="space-y-3">
+                  {graceIds.map((id) => (
+                    <CandidateDetailCard
+                      key={id}
+                      candidateId={id}
+                      isSelected={false}
+                      onSelect={() => {}}
+                      rank={0}
+                      variant="grace"
+                      daoAddress={daoAddress}
+                      abi={LAUNCH_DAO_ABI}
+                      doWrite={doWrite}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+                    <ShieldAlert className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-2">No grace period candidates</p>
+                </div>
+              )
+            )}
+
+            {activeTab === 'recycle' && (
+              loadingRecycle ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-neon-red animate-spin" />
+                </div>
+              ) : recycleIds.length > 0 ? (
+                <div className="space-y-3">
+                  {recycleIds.map((id) => (
+                    <CandidateDetailCard
+                      key={id}
+                      candidateId={id}
+                      isSelected={false}
+                      onSelect={() => {}}
+                      rank={0}
+                      variant="recycle"
+                      daoAddress={daoAddress}
+                      abi={LAUNCH_DAO_ABI}
+                      doWrite={doWrite}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+                    <Recycle className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-2">No recyclable candidates</p>
+                </div>
+              )
+            )}
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-bold text-lg mb-4">Epoch Timeline</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : 'border-dark-500/30 bg-dark-700')}>
+                <Vote className={cn('w-5 h-5 mx-auto mb-2', epochTimeRemaining > 0 ? 'text-doge-gold' : 'text-gray-500')} />
+                <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
+                <div className="text-xs text-gray-400">Voting Phase</div>
+              </div>
+              <div className={cn('text-center p-3 rounded-lg border', queueLength > 0 ? 'border-doge-cyan/30 bg-doge-cyan/5' : 'border-dark-500/30 bg-dark-700')}>
+                <Rocket className={cn('w-5 h-5 mx-auto mb-2', queueLength > 0 ? 'text-doge-cyan' : 'text-gray-500')} />
+                <div className="text-sm font-bold">{queueLength} in queue</div>
+                <div className="text-xs text-gray-400">Launch Queue</div>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {epochTimeRemaining === 0 && (
+                <button
+                  className="btn-primary flex items-center gap-2 text-sm"
+                  onClick={handleSettleEpoch}
+                  disabled={isWriting || isConfirming}
+                >
+                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                  Settle Epoch
+                  <span className="text-xs opacity-70">(+10 DOGE reward)</span>
+                </button>
+              )}
+              {queueLength > 0 && (
+                <button
+                  className="btn-primary flex items-center gap-2 text-sm"
+                  onClick={handleLaunchToken}
+                  disabled={isWriting || isConfirming}
+                >
+                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  Launch Token
+                  <span className="text-xs opacity-70">(+20 DOGE reward)</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="card-dark">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-bold flex items-center gap-2">
+                <Zap className="w-5 h-5 text-doge-gold" />
+                认购
+              </h3>
+            </div>
+
+            {selectedCandidate !== null ? (
+              <div className="space-y-4">
+                <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3">
+                  <p className="text-xs text-doge-gold font-medium">已选择: 候选代币 #{selectedCandidate + 1}</p>
+                  <p className="text-xs text-gray-400 mt-1">认购BNB/DOGE直接为该代币加权重，发射成功自动兑换代币</p>
+                </div>
+
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">认购 {nativeSymbol}</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={subBnbAmount}
+                      onChange={(e) => setSubBnbAmount(e.target.value)}
+                      placeholder="1 - 20000"
+                      className="input-dark w-full pr-14"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">{nativeSymbol}</span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {[1, 10, 100, 1000, 5000].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setSubBnbAmount(String(v))}
+                        className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-gold hover:bg-dark-500 transition-colors"
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="btn-primary w-full mt-2"
+                    disabled={!subBnbAmount || parseFloat(subBnbAmount) < 1 || isWriting || isConfirming}
+                    onClick={handleSubscribeBnb}
+                  >
+                    {isWriting || isConfirming ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        确认中...
+                      </span>
+                    ) : `认购 ${nativeSymbol}`}
+                  </button>
+                </div>
+
+                {dogeTokenReady && (
+                  <div>
+                    <label className="text-sm text-gray-400 mb-1 block">认购 平台币</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={subDogeAmount}
+                        onChange={(e) => setSubDogeAmount(e.target.value)}
+                        placeholder="0"
+                        className="input-dark w-full pr-16"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-doge-cyan font-semibold">DOGE</span>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      {[100, 1000, 5000, 10000].map(v => (
+                        <button
+                          key={v}
+                          onClick={() => setSubDogeAmount(String(v))}
+                          className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-cyan hover:bg-dark-500 transition-colors"
+                        >
+                          {v >= 1000 ? `${v / 1000}K` : v}
+                        </button>
+                      ))}
+                    </div>
+                    {userDogeAllowance < (parseFloat(subDogeAmount) || 0) ? (
+                      <button
+                        className="w-full mt-2 py-2.5 rounded-lg bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 hover:bg-doge-cyan/20 transition-colors font-display font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={isApproving || isWriting || isConfirming}
+                        onClick={handleApproveDoge}
+                      >
+                        {isApproving ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />授权中...</span> : '授权认购'}
+                      </button>
+                    ) : (
+                      <button
+                        className="w-full mt-2 py-2.5 rounded-lg bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 hover:bg-doge-cyan/20 transition-colors font-display font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={!subDogeAmount || parseFloat(subDogeAmount) <= 0 || isWriting || isConfirming}
+                        onClick={handleSubscribeDoge}
+                      >
+                        {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : '认购 DOGE'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
+                  <p>• 认购{nativeSymbol}满20000 {nativeSymbol} → 触发发射</p>
+                  <p>• 不限认购额度，超额按比例分配代币，多余退还</p>
+                  <p>• 过期未发射 → 可退还认购金额</p>
+                  <p>• 认购1 {nativeSymbol} = 10分权重</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-dark-700 rounded-lg p-4 text-center">
+                <Vote className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">请在左侧候选列表中选择一个代币</p>
+                <p className="text-xs text-gray-500 mt-1">选择后即可认购</p>
+              </div>
+            )}
+          </div>
+
+          <div className="card-dark">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-bold flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-doge-gold" />
+                质押
+              </h3>
+            </div>
+
+            <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  stakeTokenTab === 'bnb' ? 'bg-doge-gold text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => { setStakeTokenTab('bnb'); setStakeAmount('') }}
+              >
+                <Coins className="w-4 h-4" /> {nativeSymbol}
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
+                  stakeTokenTab === 'doge' ? 'bg-doge-cyan text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => { setStakeTokenTab('doge'); setStakeAmount('') }}
+              >
+                <Gem className="w-4 h-4" /> {dogeTokenReady ? dogeTokenName : '平台币'}
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-sm text-gray-400 mb-2 block">期限选择</label>
+              <div className="grid grid-cols-4 gap-2">
+                {STAKE_DURATIONS.map((d) => (
+                  <button
+                    key={d.value}
+                    className={cn(
+                      'py-2 rounded-lg text-xs font-display font-semibold transition-all border',
+                      stakeDuration === d.value
+                        ? 'bg-doge-gold/15 text-doge-gold border-doge-gold/40'
+                        : 'bg-dark-700 text-gray-400 border-dark-500/30 hover:border-dark-500/60 hover:text-white'
+                    )}
+                    onClick={() => setStakeDuration(d.value)}
+                  >
+                    <div>{d.label}</div>
+                    <div className="text-[10px] opacity-70">{d.multiplier}权益</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-dark-700 rounded-lg p-3">
+                <p className="text-xs text-gray-400">全池质押</p>
+                <p className="font-display font-bold text-doge-gold">
+                  {formatUsdc(currentTotalStaked)} {currentTokenLabel}
+                </p>
+              </div>
+              <div className="bg-dark-700 rounded-lg p-3">
+                <p className="text-xs text-gray-400">钱包余额</p>
+                <p className="font-display font-bold">
+                  {stakeTokenTab === 'bnb' ? '-' : formatUsdc(currentBalance)} {currentTokenLabel}
+                </p>
+              </div>
+            </div>
+
+            {stakeTokenTab === 'doge' && !dogeTokenReady ? (
+              <div className="bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-3">
+                <p className="text-xs text-neon-yellow font-medium">平台币尚未设置</p>
+                <p className="text-xs text-gray-400 mt-1">第一个代币发射后自动成为平台币</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">质押金额</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={stakeAmount}
+                      onChange={(e) => setStakeAmount(e.target.value)}
+                      placeholder={stakeTokenTab === 'bnb' ? '0.1 - 300' : '0'}
+                      className="input-dark w-full pr-20"
+                    />
+                    <span className={cn(
+                      'absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold',
+                      stakeTokenTab === 'bnb' ? 'text-gray-400' : stakeTokenTab === 'doge' ? 'text-doge-cyan' : 'text-neon-green'
+                    )}>
+                      {currentTokenLabel}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {stakeTokenTab === 'bnb' && [0.1, 1, 10, 50].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setStakeAmount(String(v))}
+                        className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-gold hover:bg-dark-500 transition-colors"
+                      >
+                        {v}
+                      </button>
+                    ))}
+                    {stakeTokenTab === 'doge' && [100, 1000, 5000, 10000].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setStakeAmount(String(v))}
+                        className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-cyan hover:bg-dark-500 transition-colors"
+                      >
+                        {v >= 1000 ? `${v / 1000}K` : v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  {needsApprove ? (
+                    <button
+                      className={cn(
+                        'flex-1 py-2.5 rounded-lg font-display font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors',
+                        stakeTokenTab === 'doge'
+                          ? 'bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 hover:bg-doge-cyan/20'
+                          : 'bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20'
+                      )}
+                      disabled={isApproving || isWriting || isConfirming}
+                      onClick={handleApproveDoge}
+                    >
+                      {isApproving ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />授权中...</span> : `授权${currentTokenLabel}`}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-primary flex-1"
+                      disabled={!stakeAmount || parseFloat(stakeAmount) <= 0 || isWriting || isConfirming}
+                      onClick={handleStake}
+                    >
+                      {isWriting || isConfirming ? (
+                        <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span>
+                      ) : `质押 ${currentTokenLabel}`}
+                    </button>
+                  )}
+                  <button
+                    className={cn(
+                      'py-2.5 px-4 rounded-lg font-display font-bold text-sm border transition-all',
+                      showUnstakePanel
+                        ? 'bg-neon-green/10 text-neon-green border-neon-green/40'
+                        : 'bg-dark-700 text-gray-400 border-dark-500/30 hover:border-dark-500/60 hover:text-white'
+                    )}
+                    onClick={() => setShowUnstakePanel(!showUnstakePanel)}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      解押
+                      {showUnstakePanel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {showUnstakePanel && (
+              <div className="mt-4 border-t border-dark-500/30 pt-4">
+                <h4 className="text-sm font-display font-bold mb-3 flex items-center gap-2">
+                  <ArrowDownToLine className="w-4 h-4 text-neon-green" />
+                  我的质押仓位
+                </h4>
+                {stakePositions.length === 0 ? (
+                  <div className="bg-dark-700 rounded-lg p-4 text-center">
+                    <p className="text-xs text-gray-500">暂无质押仓位</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {stakePositions.map((pos) => {
+                      const status = getPositionStatus(pos)
+                      const tk = getTokenLabel(pos.token)
+                      const durationLabel = getDurationLabel(pos.duration)
+                      return (
+                        <div
+                          key={pos.id}
+                          className={cn(
+                            'rounded-lg border p-3',
+                            status === 'withdrawn'
+                              ? 'border-dark-500/20 bg-dark-700/50 opacity-60'
+                              : status === 'withdrawable'
+                              ? 'border-neon-green/30 bg-neon-green/5'
+                              : 'border-dark-500/30 bg-dark-700'
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold', tk.bg, tk.color)}>
+                                {tk.symbol.charAt(0)}
+                              </span>
+                              <span className="font-display font-bold text-sm">
+                                {formatUsdc(Number(formatEther(pos.amount)))} {tk.symbol}
+                              </span>
+                              <span className="text-xs bg-dark-600 px-1.5 py-0.5 rounded text-gray-400">{durationLabel}</span>
+                            </div>
+                            <span className={cn(
+                              'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                              status === 'withdrawn'
+                                ? 'bg-gray-500/10 text-gray-500'
+                                : status === 'withdrawable'
+                                ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
+                                : 'bg-doge-gold/10 text-doge-gold border border-doge-gold/30'
+                            )}>
+                              {status === 'withdrawn' ? '已提取' : status === 'withdrawable' ? '可提取' : '锁定中'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className="flex items-center gap-3">
+                              <span>开始: {formatDate(Number(pos.startTime))}</span>
+                              {Number(pos.duration) > 0 && (
+                                <span>到期: {formatDate(Number(pos.maturityTime))}</span>
+                              )}
+                            </div>
+                            {status === 'withdrawable' && (
+                              <button
+                                className="px-3 py-1 rounded-md bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-display font-bold text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                                disabled={isWriting || isConfirming}
+                                onClick={() => handleUnstakePosition(pos.id)}
+                              >
+                                {isWriting || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : '提取'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 mt-4">
+              <p className="text-xs text-doge-gold font-medium">质押权益</p>
+              <p className="text-xs text-gray-400 mt-1">0.1 {nativeSymbol}活期每8小时=1分，期限越长倍率越高，超500分收敛</p>
+            </div>
+          </div>
+
+          <div className="card-dark">
+            <h3 className="font-display font-bold mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-doge-gold" />
+              权益
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">总有效权益</p>
+                  <p className="font-display font-bold text-doge-gold">{totalEffectiveRights.toLocaleString()} 分</p>
+                  <p className="text-[10px] text-gray-500">含待领取 · 可投票</p>
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">已领取可用</p>
+                  <p className="font-display font-bold text-neon-green">{effectiveRights.toLocaleString()} 分</p>
+                  <p className="text-[10px] text-gray-500">原始 {rawRights.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {pendingRights > 0 && (
+                <button
+                  className="btn-primary w-full"
+                  disabled={isWriting || isConfirming}
+                  onClick={handleClaimRights}
+                >
+                  {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : `领取权益 (+${pendingRights.toLocaleString()} 分)`}
+                </button>
+              )}
+
+              {effectiveRights > 0 && (
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">用权益投票</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={voteRightsAmount}
+                      onChange={(e) => setVoteRightsAmount(e.target.value)}
+                      placeholder="0"
+                      className="input-dark w-full pr-14"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">分</span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {[0.25, 0.5, 0.75, 1].map(ratio => (
+                      <button
+                        key={ratio}
+                        onClick={() => setVoteRightsAmount(String(Math.round(effectiveRights * ratio)))}
+                        className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-gold hover:bg-dark-500 transition-colors"
+                      >
+                        {ratio * 100}%
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="btn-primary w-full mt-2"
+                    disabled={selectedCandidate === null || !voteRightsAmount || parseFloat(voteRightsAmount) <= 0 || isWriting || isConfirming}
+                    onClick={handleVoteWithRights}
+                  >
+                    {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : selectedCandidate !== null ? `投票给 #${selectedCandidate + 1}` : '请先选择候选'}
+                  </button>
+                </div>
+              )}
+
+              <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
+                <p>• 0.1 {nativeSymbol} 活期质押每8小时 = 1分权益</p>
+                <p>• 活期1x / 30天1.5x / 90天2x / 180天3x</p>
+                <p>• 超500分开始收敛，单钱包最高1000分</p>
+                <p>• 认购1 {nativeSymbol} = 10分权重，超额按比例退还本金</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {renderTxError()}
+    </div>
+  )
+}

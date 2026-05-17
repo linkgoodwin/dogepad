@@ -1,0 +1,84 @@
+type Token @entity {
+  id: ID!
+  address: Bytes!
+  name: String!
+  symbol: String!
+  creator: Bytes!
+  curveAddress: Bytes!
+  totalSupply: BigInt!
+  marketCapBnb: BigDecimal!
+  reserveBnb: BigDecimal!
+  priceBnb: BigDecimal!
+  isListedOnDex: Boolean!
+  createdAt: Int!
+  txCount: Int!
+  holderCount: Int!
+  volumeBnb: BigDecimal!
+  trades: [Trade!]! @derivedFrom(field: "token")
+}
+
+type Trade @entity {
+  id: ID!
+  token: Token!
+  trader: Bytes!
+  type: TradeType!
+  tokenAmount: BigInt!
+  bnbAmount: BigDecimal!
+  price: BigDecimal!
+  timestamp: Int!
+  blockNumber: Int!
+  transactionHash: Bytes!
+}
+
+enum TradeType {
+  BUY
+  SELL
+}
+
+type LendingDeposit @entity {
+  id: ID!
+  user: Bytes!
+  asset: Bytes!
+  amount: BigDecimal!
+  aTokenAmount: BigDecimal!
+  timestamp: Int!
+  blockNumber: Int!
+  transactionHash: Bytes!
+}
+
+type LendingBorrow @entity {
+  id: ID!
+  user: Bytes!
+  collateralAsset: Bytes!
+  borrowAsset: Bytes!
+  collateralAmount: BigDecimal!
+  borrowAmount: BigDecimal!
+  healthFactor: BigDecimal!
+  timestamp: Int!
+  blockNumber: Int!
+  transactionHash: Bytes!
+}
+
+type Liquidation @entity {
+  id: ID!
+  borrower: Bytes!
+  liquidator: Bytes!
+  collateralAsset: Bytes!
+  debtAsset: Bytes!
+  collateralAmount: BigDecimal!
+  debtAmount: BigDecimal!
+  bonus: BigDecimal!
+  timestamp: Int!
+  blockNumber: Int!
+  transactionHash: Bytes!
+}
+
+type DailySnapshot @entity {
+  id: ID!
+  date: Int!
+  totalTvlBnb: BigDecimal!
+  totalVolumeBnb: BigDecimal!
+  tokenCount: Int!
+  tradeCount: Int!
+  uniqueTraders: Int!
+}
