@@ -15,7 +15,7 @@ import Revival from "@/pages/Revival"
 
 export default function App() {
   return (
-    <Router>
+    <Router basename="/dogepad/">
       <ErrorBoundary>
       <Routes>
         <Route element={<LandingLayout />}>
