@@ -22,6 +22,11 @@ interface IBondingCurveLaunch {
     function buy(address token, uint256 minTokensOut, address recipient) external payable;
 }
 
+interface IBondingCurveTokenExclude {
+    function excludeFromTax(address account) external;
+    function excludeFromHoldingLimit(address account) external;
+}
+
 contract LaunchDAO is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -554,6 +559,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             defaultWantLpShare,
             defaultWantTokenAllocation
         );
+
+        IBondingCurveTokenExclude(token).excludeFromTax(address(this));
+        IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
 
         uint256 tokensReceived = 0;
         uint256 bnbUsed = c.totalSubBnb;

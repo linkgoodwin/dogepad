@@ -35,10 +35,11 @@ const config: HardhatUserConfig = {
     },
     arcTestnet: {
       type: "http",
-      url: process.env.ARC_TESTNET_RPC || "https://arc-testnet.drpc.org",
+      url: process.env.ARC_TESTNET_RPC || "https://rpc.testnet.arc.network",
       accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
       chainId: 5042002,
-      gasPrice: 2000000000,
+      gasPrice: 20000000000,
+      timeout: 120000,
     },
   },
   etherscan: {

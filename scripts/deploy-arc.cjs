@@ -1,175 +1,114 @@
 const { ethers } = require("ethers");
+require("dotenv").config();
 const fs = require("fs");
-const path = require("path");
 
-function loadEnv() {
-  const envPath = path.resolve(__dirname, "../.env");
-  if (!fs.existsSync(envPath)) return;
-  const content = fs.readFileSync(envPath, "utf8");
-  for (const line of content.split("\n")) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const val = match[2].trim();
-      if (!process.env[key]) process.env[key] = val;
+const RPC_URL = "https://rpc.testnet.arc.network";
+const CHAIN_ID = 5042002;
+const XYLO_ROUTER = "0x73742278c31a76dBb0D2587d03ef92E6E2141023";
+const WUSDC = "0x911b4000D3422F482F4062a913885f7b035382Df";
+
+function getArtifact(name) {
+  const subdirs = ["core", "periphery", "pool", "dao"];
+  for (const dir of subdirs) {
+    const p = `artifacts/contracts/${dir}/${name}.sol/${name}.json`;
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, "utf8"));
     }
   }
+  throw new Error(`Artifact not found for ${name}`);
 }
-
-loadEnv();
-
-function setEnvValue(key, value) {
-  const envPath = path.resolve(__dirname, "../.env");
-  let envContent = "";
-  if (fs.existsSync(envPath)) {
-    envContent = fs.readFileSync(envPath, "utf8");
-  }
-  const regex = new RegExp(`^${key}=.*$`, "m");
-  if (regex.test(envContent)) {
-    envContent = envContent.replace(regex, `${key}=${value}`);
-  } else {
-    envContent += `\n${key}=${value}`;
-  }
-  fs.writeFileSync(envPath, envContent);
-}
-
-const XYLO_ROUTER_ARC_TESTNET = "0x73742278c31a76dBb0D2587d03ef92E6E2141023";
-const WUSDC_ARC_TESTNET = "0x911b4000D3422F482F4062a913885f7b035382Df";
-const ARC_RPC = "https://rpc.testnet.arc.network";
 
 async function main() {
-  const pk = process.env.DEPLOYER_PRIVATE_KEY;
-  if (!pk) {
-    console.error("\nERROR: DEPLOYER_PRIVATE_KEY not set");
-    process.exit(1);
-  }
+  const p = new ethers.providers.JsonRpcProvider(RPC_URL, { chainId: CHAIN_ID, name: "arc", timeout: 120000 });
+  const w = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, p);
+  const gasPrice = ethers.utils.parseUnits("100", "gwei");
 
-  const provider = new ethers.providers.JsonRpcProvider(ARC_RPC);
-  const wallet = new ethers.Wallet(pk, provider);
-  const deployerAddress = wallet.address;
+  console.log("Deployer:", w.address);
+  console.log("Balance:", ethers.utils.formatEther(await p.getBalance(w.address)), "USDC\n");
 
-  const networkInfo = await provider.getNetwork();
-  const chainId = networkInfo.chainId;
-
-  console.log("========================================");
-  console.log("  DogePad - Arc Testnet Deployment");
-  console.log("========================================");
-  console.log("Deployer:", deployerAddress);
-  console.log("Balance:", ethers.utils.formatEther(await provider.getBalance(deployerAddress)), "USDC");
-  console.log("Chain ID:", chainId.toString());
-  console.log("");
-
-  const balance = await provider.getBalance(deployerAddress);
-  if (balance.lt(ethers.utils.parseEther("0.05"))) {
-    console.error("ERROR: Deployer needs at least 0.05 USDC to deploy!");
-    console.error("Get testnet USDC from: https://faucet.circle.com");
-    process.exit(1);
-  }
-
-  const DEX_ROUTER = XYLO_ROUTER_ARC_TESTNET;
-  const IS_XYLO_ROUTER = true;
-  const BASE_ASSET = WUSDC_ARC_TESTNET;
-  console.log("XyloRouter:", DEX_ROUTER);
-  console.log("isXyloRouter:", IS_XYLO_ROUTER);
-  console.log("baseAsset (WUSDC):", BASE_ASSET);
-  console.log("");
-
-  const deployOverrides = { gasPrice: ethers.utils.parseUnits("25", "gwei"), gasLimit: 15_000_000 };
-  const txOverrides = { gasPrice: ethers.utils.parseUnits("25", "gwei"), gasLimit: 1_000_000 };
-
-  function getFactory(name) {
-    const subdirs = ["core", "periphery", "pool", "dao"];
-    for (const dir of subdirs) {
-      const artifactPath = path.resolve(__dirname, `../artifacts/contracts/${dir}/${name}.sol/${name}.json`);
-      if (fs.existsSync(artifactPath)) {
-        const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
-        return new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
-      }
-    }
-    throw new Error(`Artifact not found for ${name}`);
-  }
-
-  async function deployContract(name, ...args) {
-    const factory = getFactory(name);
-    console.log(`Deploying ${name}...`);
-    const contract = await factory.deploy(...args, deployOverrides);
+  async function deploy(name, args = [], gasLimit = 3_000_000) {
+    const artifact = getArtifact(name);
+    const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, w);
+    console.log(`Deploying ${name}... (gasLimit: ${gasLimit})`);
+    const contract = await factory.deploy(...args, { gasPrice, gasLimit });
+    console.log(`  Tx: ${contract.deployTransaction.hash}`);
     await contract.deployed();
-    console.log(`${name}:`, contract.address);
+    console.log(`  Address: ${contract.address}`);
     return contract;
   }
 
-  async function sendTx(label, fn) {
-    console.log(`  Sending: ${label}...`);
-    const tx = await fn();
+  async function sendTx(contract, method, args, label) {
+    console.log(`  Sending ${label}...`);
+    const tx = await contract[method](...args, { gasPrice, gasLimit: 500_000 });
+    console.log(`  Tx: ${tx.hash}`);
     await tx.wait();
-    console.log(`  Done: ${label}`);
+    console.log(`  -> ${label} done`);
   }
 
   console.log("--- Phase 1: Rate Models + Oracle ---");
-
-  const priceOracle = await deployContract("PriceOracle");
-  const expRateModel = await deployContract("ExponentialRateModel");
-  const linRateModel = await deployContract("LinearRateModel");
+  const priceOracle = await deploy("PriceOracle");
+  const expRateModel = await deploy("ExponentialRateModel");
+  const linRateModel = await deploy("LinearRateModel");
 
   console.log("\n--- Phase 2: Core (BondingCurve + Factory) ---");
-
-  const bondingCurve = await deployContract("BondingCurve", DEX_ROUTER, deployerAddress, IS_XYLO_ROUTER, BASE_ASSET);
-  const factory = await deployContract("BondingCurveFactory", bondingCurve.address);
-
-  await sendTx("BondingCurve.setFactory", () => bondingCurve.setFactory(factory.address, txOverrides));
+  const bondingCurve = await deploy("BondingCurve", [XYLO_ROUTER, w.address, true, WUSDC], 10_000_000);
+  const factory = await deploy("BondingCurveFactory", [bondingCurve.address]);
+  await sendTx(bondingCurve, "setFactory", [factory.address], "setFactory");
 
   console.log("\n--- Phase 3: BuyAndBurn ---");
-
-  const burnEngine = await deployContract("BuyAndBurnEngine", DEX_ROUTER, deployerAddress, IS_XYLO_ROUTER, BASE_ASSET);
+  const burnEngine = await deploy("BuyAndBurnEngine", [XYLO_ROUTER, w.address, true, WUSDC], 5_000_000);
 
   console.log("\n--- Phase 4: FeeDistributor ---");
-
-  const feeDist = await deployContract("FeeDistributor", ethers.constants.AddressZero, DEX_ROUTER, burnEngine.address, BASE_ASSET);
+  const feeDist = await deploy("FeeDistributor", [ethers.constants.AddressZero, XYLO_ROUTER, burnEngine.address, WUSDC], 5_000_000);
 
   console.log("\n--- Phase 5: Pools ---");
+  const longPool = await deploy("LongPool", [expRateModel.address, linRateModel.address, priceOracle.address], 5_000_000);
+  const shortPool = await deploy("ShortPool", [expRateModel.address, linRateModel.address, priceOracle.address, burnEngine.address, longPool.address, w.address], 5_000_000);
 
-  const longPool = await deployContract("LongPool", expRateModel.address, linRateModel.address, priceOracle.address);
-  const shortPool = await deployContract("ShortPool", expRateModel.address, linRateModel.address, priceOracle.address, burnEngine.address, longPool.address, deployerAddress);
+  await sendTx(bondingCurve, "setPools", [longPool.address, shortPool.address], "setPools");
+  await sendTx(bondingCurve, "setBuyAndBurnEngine", [burnEngine.address], "setBuyAndBurnEngine");
+  await sendTx(bondingCurve, "setPriceOracle", [priceOracle.address], "setPriceOracle");
 
-  await sendTx("BondingCurve.setPools", () => bondingCurve.setPools(longPool.address, shortPool.address, txOverrides));
-  await sendTx("BondingCurve.setBuyAndBurnEngine", () => bondingCurve.setBuyAndBurnEngine(burnEngine.address, txOverrides));
-  await sendTx("BondingCurve.setPriceOracle", () => bondingCurve.setPriceOracle(priceOracle.address, txOverrides));
-
-  await sendTx("LongPool.setBurnEngine", () => longPool.setBurnEngine(burnEngine.address, txOverrides));
-  await sendTx("LongPool.setBondingCurve", () => longPool.setBondingCurve(bondingCurve.address, txOverrides));
-  await sendTx("LongPool.setShortPool", () => longPool.setShortPool(shortPool.address, txOverrides));
-
-  await sendTx("ShortPool.setBondingCurve", () => shortPool.setBondingCurve(bondingCurve.address, txOverrides));
+  await sendTx(longPool, "setBurnEngine", [burnEngine.address], "LongPool.setBurnEngine");
+  await sendTx(longPool, "setBondingCurve", [bondingCurve.address], "LongPool.setBondingCurve");
+  await sendTx(longPool, "setShortPool", [shortPool.address], "LongPool.setShortPool");
+  await sendTx(shortPool, "setBondingCurve", [bondingCurve.address], "ShortPool.setBondingCurve");
 
   console.log("\n--- Phase 6: LaunchDAO ---");
-
-  const launchDao = await deployContract("LaunchDAO", bondingCurve.address, deployerAddress);
-
-  await sendTx("BondingCurve.setLaunchDao", () => bondingCurve.setLaunchDao(launchDao.address, txOverrides));
-  await sendTx("BondingCurve.setDaoOnlyLaunch", () => bondingCurve.setDaoOnlyLaunch(true, txOverrides));
+  const launchDao = await deploy("LaunchDAO", [bondingCurve.address, w.address], 10_000_000);
+  await sendTx(bondingCurve, "setLaunchDao", [launchDao.address], "setLaunchDao");
+  await sendTx(bondingCurve, "setDaoOnlyLaunch", [true], "setDaoOnlyLaunch");
 
   console.log("\n--- Phase 7: CreatorRewardManager ---");
-
-  const creatorRewardMgr = await deployContract("CreatorRewardManager", bondingCurve.address);
-
-  await sendTx("BondingCurve.setCreatorRewardManager", () => bondingCurve.setCreatorRewardManager(creatorRewardMgr.address, txOverrides));
+  const creatorRewardMgr = await deploy("CreatorRewardManager", [bondingCurve.address], 3_000_000);
+  await sendTx(bondingCurve, "setCreatorRewardManager", [creatorRewardMgr.address], "setCreatorRewardManager");
 
   console.log("\n--- Phase 8: Final Wiring ---");
+  await sendTx(bondingCurve, "setFeeDistributor", [feeDist.address], "setFeeDistributor");
+  await sendTx(launchDao, "setFeeDistributor", [feeDist.address], "LaunchDAO.setFeeDistributor");
+  await sendTx(shortPool, "setPlatformTreasury", [feeDist.address], "setPlatformTreasury");
 
-  await sendTx("BondingCurve.setFeeDistributor", () => bondingCurve.setFeeDistributor(feeDist.address, txOverrides));
-  await sendTx("LaunchDAO.setFeeDistributor", () => launchDao.setFeeDistributor(feeDist.address, txOverrides));
-  await sendTx("ShortPool.setPlatformTreasury", () => shortPool.setPlatformTreasury(feeDist.address, txOverrides));
-
-  await sendTx("PriceOracle.authorize(bondingCurve)", () => priceOracle.setAuthorizedUpdater(bondingCurve.address, true, txOverrides));
-  await sendTx("PriceOracle.authorize(longPool)", () => priceOracle.setAuthorizedUpdater(longPool.address, true, txOverrides));
-  await sendTx("PriceOracle.authorize(shortPool)", () => priceOracle.setAuthorizedUpdater(shortPool.address, true, txOverrides));
+  await sendTx(priceOracle, "setAuthorizedUpdater", [bondingCurve.address, true], "PriceOracle: bondingCurve");
+  await sendTx(priceOracle, "setAuthorizedUpdater", [longPool.address, true], "PriceOracle: longPool");
+  await sendTx(priceOracle, "setAuthorizedUpdater", [shortPool.address, true], "PriceOracle: shortPool");
 
   console.log("\n========================================");
   console.log("  Writing addresses to .env ...");
   console.log("========================================");
 
-  const prefix = "VITE_ARC_TESTNET";
+  function setEnvValue(key, value) {
+    const envPath = ".env";
+    let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+    const regex = new RegExp(`^${key}=.*$`, "m");
+    if (regex.test(envContent)) {
+      envContent = envContent.replace(regex, `${key}=${value}`);
+    } else {
+      envContent += `\n${key}=${value}`;
+    }
+    fs.writeFileSync(envPath, envContent);
+  }
 
+  const prefix = "VITE_ARC_TESTNET";
   setEnvValue(`${prefix}_BONDING_CURVE_ADDRESS`, bondingCurve.address);
   setEnvValue(`${prefix}_FACTORY_ADDRESS`, factory.address);
   setEnvValue(`${prefix}_LONG_POOL_ADDRESS`, longPool.address);
@@ -181,9 +120,9 @@ async function main() {
   setEnvValue(`${prefix}_CREATOR_REWARD_MANAGER_ADDRESS`, creatorRewardMgr.address);
   setEnvValue(`${prefix}_EXP_RATE_MODEL_ADDRESS`, expRateModel.address);
   setEnvValue(`${prefix}_LIN_RATE_MODEL_ADDRESS`, linRateModel.address);
-  setEnvValue("VITE_CHAIN_ID", chainId.toString());
+  setEnvValue("VITE_CHAIN_ID", CHAIN_ID.toString());
 
-  console.log("Done! Contract addresses saved to .env");
+  console.log("Done! Addresses saved to .env");
 
   console.log("\n========================================");
   console.log("  ALL CONTRACTS DEPLOYED SUCCESSFULLY");

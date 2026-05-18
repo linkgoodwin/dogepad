@@ -167,9 +167,9 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
     if (!data) return null
     const d = data as any
     return {
-      name: String(d.name ?? d[0] ?? ''),
-      symbol: String(d.symbol ?? d[1] ?? ''),
-      totalSupply: BigInt(d.totalSupply ?? d[2] ?? 0n),
+      name: String(d.name ?? d[1] ?? ''),
+      symbol: String(d.symbol ?? d[2] ?? ''),
+      totalSupply: BigInt(d.totalSupply ?? d[3] ?? 0n),
     }
   }, [data])
 

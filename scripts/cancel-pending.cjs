@@ -1,56 +1,37 @@
 const { ethers } = require("ethers");
-const fs = require("fs");
-const path = require("path");
-
-function loadEnv() {
-  const envPath = path.resolve(__dirname, "../.env");
-  if (!fs.existsSync(envPath)) return;
-  const content = fs.readFileSync(envPath, "utf8");
-  for (const line of content.split("\n")) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const val = match[2].trim();
-      if (!process.env[key]) process.env[key] = val;
-    }
-  }
-}
-
-loadEnv();
+require("dotenv").config();
 
 async function main() {
-  const pk = process.env.DEPLOYER_PRIVATE_KEY;
-  if (!pk) {
-    console.error("ERROR: DEPLOYER_PRIVATE_KEY not set");
-    process.exit(1);
-  }
+  const p = new ethers.providers.JsonRpcProvider("https://rpc.testnet.arc.network", {
+    chainId: 5042002,
+    name: "arc",
+    timeout: 60000,
+  });
+  const w = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, p);
 
-  const provider = new ethers.providers.JsonRpcProvider("https://arc-testnet.drpc.org");
-  const wallet = new ethers.Wallet(pk, provider);
-  
-  const nonce = await provider.getTransactionCount(wallet.address, "latest");
-  const pendingNonce = await provider.getTransactionCount(wallet.address, "pending");
-  console.log("Confirmed nonce:", nonce);
-  console.log("Pending nonce:", pendingNonce);
-  
-  if (pendingNonce > nonce) {
-    console.log("Cancelling pending transaction by sending 0 to self with higher gas price...");
-    const tx = await wallet.sendTransaction({
-      to: wallet.address,
+  const nonce = await p.getTransactionCount(w.address, "latest");
+  const pendingNonce = await p.getTransactionCount(w.address, "pending");
+  console.log("Latest nonce:", nonce, "Pending nonce:", pendingNonce);
+
+  const gasPrice = ethers.utils.parseUnits("100", "gwei");
+
+  for (let i = nonce; i < pendingNonce; i++) {
+    console.log(`\nReplacing nonce ${i}...`);
+    const tx = await w.sendTransaction({
+      to: w.address,
       value: 0,
-      nonce: nonce,
-      gasPrice: ethers.utils.parseUnits("25", "gwei"),
+      nonce: i,
+      gasPrice: gasPrice,
       gasLimit: 21000,
     });
-    console.log("Cancel tx sent:", tx.hash);
-    await tx.wait();
-    console.log("Cancel tx confirmed");
+    console.log("Tx:", tx.hash);
+    const receipt = await tx.wait();
+    console.log("Status:", receipt.status, "Block:", receipt.blockNumber);
   }
-  
-  const newNonce = await provider.getTransactionCount(wallet.address, "latest");
-  const balance = ethers.utils.formatEther(await provider.getBalance(wallet.address));
-  console.log("Current nonce:", newNonce);
-  console.log("Balance:", balance, "USDC");
+
+  console.log("\nAll pending transactions cleared!");
+  const finalNonce = await p.getTransactionCount(w.address, "latest");
+  console.log("Final nonce:", finalNonce);
 }
 
-main().catch(console.error);
+main().catch(e => console.error("Error:", e.message));
