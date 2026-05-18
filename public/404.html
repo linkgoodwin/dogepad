@@ -6,7 +6,7 @@
 <script>
 // SPA redirect: GitHub Pages serves 404.html for non-root paths
 // This script reads the path from the URL and redirects to index.html with the path as a query param
-var pathSegmentsToKeep = 0; // for user/org pages; use 1 for project pages
+var pathSegmentsToKeep = 1; // for user/org pages; use 1 for project pages
 var l = window.location;
 l.replace(
   l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
