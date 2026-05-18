@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useReadContract } from 'wagmi'
+import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
-import { Flame, Vote, Rocket, TrendingUp, Shield, Coins, ArrowRight, Loader2, Search, Zap, Users, Gem, ChevronRight } from 'lucide-react'
-import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { Flame, Vote, Rocket, TrendingUp, Shield, Coins, ArrowRight, Loader2, Search, Zap, Users, Gem, ChevronRight, BarChart3 } from 'lucide-react'
+import { LAUNCH_DAO_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { parseMetadata, sanitizeHref, cn, formatUsdc } from '@/lib/utils'
 import type { TokenMeta } from '@/lib/utils'
@@ -111,6 +111,97 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
   return card
 }
 
+function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
+  const targetChainId = useTargetChainId()
+  const nativeSymbol = getNativeSymbol(targetChainId)
+  const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
+
+  const { data, isLoading } = useReadContract({
+    address: bondingCurveAddress as `0x${string}`,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getTokenInfo',
+    args: [tokenAddress as `0x${string}`],
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`), refetchInterval: 30000 },
+  })
+
+  const { data: reserveData } = useReadContract({
+    address: bondingCurveAddress as `0x${string}`,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getReserve',
+    args: [tokenAddress as `0x${string}`],
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`) },
+  })
+
+  const { data: listedData } = useReadContract({
+    address: bondingCurveAddress as `0x${string}`,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'isListed',
+    args: [tokenAddress as `0x${string}`],
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`) },
+  })
+
+  const tokenInfo = useMemo(() => {
+    if (!data) return null
+    const d = data as any
+    return {
+      name: String(d.name ?? d[0] ?? ''),
+      symbol: String(d.symbol ?? d[1] ?? ''),
+      totalSupply: BigInt(d.totalSupply ?? d[2] ?? 0n),
+    }
+  }, [data])
+
+  const reserve = reserveData ? Number(formatEther(reserveData as bigint)) : 0
+  const isListed = listedData ? Boolean(listedData) : false
+
+  if (isLoading || !tokenInfo) {
+    return (
+      <div className="bg-dark-800/50 border border-dark-500/20 rounded-xl p-5 flex items-center justify-center h-40">
+        <Loader2 className="w-5 h-5 text-neon-green animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <Link to={`/token/${tokenAddress}`} className="block">
+      <div className="group bg-dark-800/60 border border-neon-green/20 rounded-xl p-5 transition-all duration-300 hover:border-neon-green/40 hover:bg-dark-800/80">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-11 h-11 rounded-full bg-neon-green/10 flex items-center justify-center shrink-0 border border-neon-green/30">
+            <span className="font-display font-bold text-neon-green text-lg">
+              {tokenInfo.name ? tokenInfo.name.charAt(0).toUpperCase() : '#'}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display font-semibold text-white truncate">{tokenInfo.name}</span>
+              <span className="text-xs text-gray-500">{tokenInfo.symbol}</span>
+            </div>
+            <span className={cn(
+              'text-[10px] px-2 py-0.5 rounded-full font-medium',
+              isListed
+                ? 'bg-doge-violet/10 text-doge-violet border border-doge-violet/20'
+                : 'bg-neon-green/10 text-neon-green border border-neon-green/20'
+            )}>
+              {isListed ? 'DEX' : '内盘交易'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500">储备量</p>
+            <p className="font-display font-bold text-white">{formatUsdc(reserve)} {nativeSymbol}</p>
+          </div>
+          <div className="text-right">
+            <BarChart3 className="w-5 h-5 text-neon-green/50 group-hover:text-neon-green transition-colors" />
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 const FEATURES = [
   {
     icon: Vote,
@@ -196,6 +287,39 @@ export default function Home() {
     query: { enabled: contractReady },
   })
 
+  const candidateCount = candidateCountData ? Number(candidateCountData as bigint) : 0
+
+  const allCandidateQueries = useMemo(() => {
+    if (!candidateCount || !contractReady) return []
+    return Array.from({ length: candidateCount }, (_, i) => ({
+      address: daoAddress as `0x${string}`,
+      abi: LAUNCH_DAO_ABI,
+      functionName: 'candidates' as const,
+      args: [BigInt(i)],
+      chainId: targetChainId,
+    }))
+  }, [candidateCount, daoAddress, targetChainId, contractReady])
+
+  const { data: allCandidatesData } = useReadContracts({
+    contracts: allCandidateQueries,
+    query: { enabled: allCandidateQueries.length > 0 },
+  })
+
+  const launchedTokens = useMemo(() => {
+    if (!allCandidatesData) return []
+    const tokens: string[] = []
+    allCandidatesData.forEach((result) => {
+      if (result.status !== 'success' || !result.result) return
+      const raw = result.result as any
+      const wasLaunched = Boolean(raw.wasLaunched ?? raw[13] ?? false)
+      const launchedToken = String(raw.launchedToken ?? raw[14] ?? '')
+      if (wasLaunched && !isZeroAddress(launchedToken as `0x${string}`)) {
+        tokens.push(launchedToken)
+      }
+    })
+    return tokens
+  }, [allCandidatesData])
+
   const parsedCandidates = useMemo(() => {
     if (!activeData) return []
     const d = activeData as any
@@ -223,7 +347,6 @@ export default function Home() {
   }, [parsedCandidates, searchQuery])
 
   const totalStaked = totalStakedData ? Number(formatEther(totalStakedData as bigint)) : 0
-  const candidateCount = candidateCountData ? Number(candidateCountData as bigint) : 0
 
   const parallaxOffset = scrollY * 0.3
 
@@ -413,6 +536,25 @@ export default function Home() {
         )}
         </div>
       </section>
+
+      {launchedTokens.length > 0 && (
+        <section className="px-6 lg:px-16 py-20">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-display font-bold flex items-center justify-center gap-3">
+                <Rocket className="w-7 h-7 text-neon-green" />
+                已发射代币
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">通过联合曲线交易已发射的代币</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+              {launchedTokens.map((addr) => (
+                <LaunchedTokenCard key={addr} tokenAddress={addr} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="px-6 lg:px-16 py-20">
         <div className="max-w-4xl mx-auto">
