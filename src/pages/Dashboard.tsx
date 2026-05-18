@@ -4,6 +4,7 @@ import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
 import { TrendingUp, BarChart3, Flame, Users, Search, Vote, ArrowRight, Rocket, Loader2 } from 'lucide-react'
 import StatCard from '@/components/StatCard'
+import CopyableAddress from '@/components/CopyableAddress'
 import { LAUNCH_DAO_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { parseMetadata, sanitizeHref, cn, formatUsdc } from '@/lib/utils'
@@ -121,6 +122,20 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
           <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()}</p>
         </div>
       </div>
+
+      {isLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
+        <div className="pt-3 border-t border-dark-500/20" onClick={(e) => e.stopPropagation()}>
+          <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+          <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
+        </div>
+      )}
+
+      {!isLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
+        <div className="pt-3 border-t border-dark-500/20">
+          <p className="text-[10px] text-gray-500 mb-1">提案者</p>
+          <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
+        </div>
+      )}
     </div>
   )
 
@@ -244,6 +259,9 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
           <div className="text-right">
             <BarChart3 className="w-5 h-5 text-neon-green/50 group-hover:text-neon-green transition-colors" />
           </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-dark-500/20" onClick={(e) => e.stopPropagation()}>
+          <CopyableAddress address={tokenAddress} chainId={targetChainId} type="token" />
         </div>
       </div>
     </Link>

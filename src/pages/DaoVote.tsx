@@ -8,6 +8,7 @@ import { useT } from '@/i18n/useT'
 import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { fixWalletNetwork } from '@/config/wagmi'
+import CopyableAddress from '@/components/CopyableAddress'
 
 const ERC20_ABI = [
   {
@@ -308,6 +309,20 @@ function CandidateDetailCard({
                   <UsersRound className="w-3.5 h-3.5" />
                 </a>
               )}
+            </div>
+          )}
+
+          {candidate.wasLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
+            <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[10px] text-gray-500 mb-0.5">代币合约</p>
+              <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
+            </div>
+          )}
+
+          {!candidate.wasLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
+            <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[10px] text-gray-500 mb-0.5">提案者</p>
+              <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
             </div>
           )}
         </div>

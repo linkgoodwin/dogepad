@@ -8,6 +8,7 @@ import { BONDING_CURVE_ABI, LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, g
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { useTradeStore } from '@/stores/tradeStore'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
+import CopyableAddress from '@/components/CopyableAddress'
 import { useT } from '@/i18n/useT'
 
 const ERC20_ABI = [
@@ -472,7 +473,7 @@ export default function TokenDetail() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-400 font-mono">{tokenAddress.slice(0, 10)}...{tokenAddress.slice(-8)}</p>
+                <CopyableAddress address={tokenAddress} chainId={chainId} type="token" short={false} />
               </div>
             </div>
 

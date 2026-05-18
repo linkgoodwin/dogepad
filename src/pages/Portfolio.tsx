@@ -7,6 +7,7 @@ import { useTargetChainId } from '@/hooks/useNetwork'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 import { useT } from '@/i18n/useT'
+import CopyableAddress from '@/components/CopyableAddress'
 
 const STATUS_MAP: Record<number, { label: string; color: string }> = {
   0: { label: 'Active', color: 'text-neon-green' },
@@ -419,9 +420,11 @@ export default function Portfolio() {
                   )}
                   {s.wasLaunched && !isZeroAddress(s.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
+                      <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+                      <CopyableAddress address={s.launchedToken} chainId={chainId} type="token" />
                       <Link
                         to={`/token/${s.launchedToken}`}
-                        className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline"
+                        className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline mt-1"
                       >
                         查看代币 <ArrowRight className="w-3 h-3" />
                       </Link>
@@ -478,9 +481,11 @@ export default function Portfolio() {
                   </div>
                   {c.wasLaunched && !isZeroAddress(c.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
+                      <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+                      <CopyableAddress address={c.launchedToken} chainId={chainId} type="token" />
                       <Link
                         to={`/token/${c.launchedToken}`}
-                        className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline"
+                        className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline mt-1"
                       >
                         查看代币 <ArrowRight className="w-3 h-3" />
                       </Link>
