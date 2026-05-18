@@ -38,9 +38,28 @@ const ERC20_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  {
+    inputs: [],
+    name: 'name',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'symbol',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalSupply',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
 ] as const
-
-const DEX_THRESHOLD_BNB = 30
 
 export default function TokenDetail() {
   const { address } = useParams()
@@ -97,10 +116,39 @@ export default function TokenDetail() {
 
   const tokenData = useMemo(() => {
     if (!tokenInfo) return null
-    const [tokenAddr, name, symbol, totalSupply, reserveBnb, tokenBalance, listed, creator] = tokenInfo
-    if (isZeroAddress(tokenAddr)) return null
-    return { tokenAddr, name, symbol, totalSupply, reserveBnb, tokenBalance, listed, creator }
+    const d = tokenInfo as any
+    const tokenAddress_ = d.tokenAddress ?? d[0] ?? zeroAddress
+    if (isZeroAddress(tokenAddress_ as `0x${string}`)) return null
+    return {
+      tokenAddress: tokenAddress_ as `0x${string}`,
+      creator: (d.creator ?? d[1] ?? '') as string,
+      totalSupply: BigInt(d.totalSupply ?? d[2] ?? 0n),
+      reserveBnb: BigInt(d.reserveBnb ?? d[3] ?? 0n),
+      tokensSold: BigInt(d.tokensSold ?? d[4] ?? 0n),
+      isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
+      dexListingThreshold: BigInt(d.dexListingThreshold ?? d[6] ?? 0n),
+      metadataURI: String(d.metadataURI ?? d[7] ?? ''),
+    }
   }, [tokenInfo])
+
+  const { data: erc20Name } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'name',
+    chainId,
+    query: { enabled: tokenData !== null && isValidAddress },
+  })
+
+  const { data: erc20Symbol } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'symbol',
+    chainId,
+    query: { enabled: tokenData !== null && isValidAddress },
+  })
+
+  const tokenName = String(erc20Name ?? '')
+  const tokenSymbol = String(erc20Symbol ?? '')
 
   const meta = useMemo(() => {
     if (!tokenData || !candidatesData) return {}
@@ -196,7 +244,8 @@ export default function TokenDetail() {
   }, [sellPriceData])
 
   const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveBnb)) : 0
-  const progress = Math.min((reserveBnb / DEX_THRESHOLD_BNB) * 100, 100)
+  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20000
+  const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
   const pricePerToken = useMemo(() => {
     if (!buyPriceData || buyPriceData === BigInt(0)) return 0
@@ -225,7 +274,7 @@ export default function TokenDetail() {
     }
   }, [sellAmount, allowanceData])
 
-  const isListed = isListedData ?? tokenData?.listed ?? false
+  const isListed = isListedData ?? tokenData?.isListedOnDex ?? false
 
   const publicClient = usePublicClient({ chainId })
 
@@ -406,17 +455,17 @@ export default function TokenDetail() {
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden">
                 {meta.image ? (
-                  <img src={sanitizeHref(meta.image)} alt={tokenData.name} className="w-full h-full object-cover" />
+                  <img src={sanitizeHref(meta.image)} alt={tokenName} className="w-full h-full object-cover" />
                 ) : (
                   <span className="font-display font-bold text-xl text-neon-green">
-                    {tokenData.name.charAt(0)}
+                    {tokenName.charAt(0)}
                   </span>
                 )}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="font-display font-bold text-2xl">{tokenData.name}</h1>
-                  <span className="text-gray-400">{tokenData.symbol}</span>
+                  <h1 className="font-display font-bold text-2xl">{tokenName}</h1>
+                  <span className="text-gray-400">{tokenSymbol}</span>
                   {isListed && (
                     <span className="px-2 py-0.5 text-xs font-medium bg-neon-green/10 text-neon-green border border-neon-green/30 rounded-full">
                       DEX
@@ -447,8 +496,8 @@ export default function TokenDetail() {
               {(() => {
                 const subBnbVal = subBnb ? Number(formatEther(subBnb)) : 0
                 const curveBnbVal = Math.max(0, reserveBnb - subBnbVal)
-                const subPct = Math.min((subBnbVal / DEX_THRESHOLD_BNB) * 100, 100)
-                const curvePct = Math.min((curveBnbVal / DEX_THRESHOLD_BNB) * 100, 100 - subPct)
+                const subPct = Math.min((subBnbVal / dexThreshold) * 100, 100)
+                const curvePct = Math.min((curveBnbVal / dexThreshold) * 100, 100 - subPct)
                 return (
                   <>
                     <div className="h-full bg-doge-gold transition-all duration-500" style={{ width: `${subPct}%` }} title={`${t('tokenDetail.subBnb')}: ${formatUsdc(subBnbVal)} ${nativeSymbol}`} />
@@ -464,7 +513,7 @@ export default function TokenDetail() {
             <p className="text-sm text-gray-400 mt-2">
               {progress >= 100
                 ? t('tokenDetail.alreadyListed')
-                : `${formatUsdc(DEX_THRESHOLD_BNB - reserveBnb)} ${nativeSymbol} ${t('tokenDetail.remaining')}`}
+                : `${formatUsdc(dexThreshold - reserveBnb)} ${nativeSymbol} ${t('tokenDetail.remaining')}`}
             </p>
 
             {progress >= 100 && (
@@ -510,7 +559,7 @@ export default function TokenDetail() {
                       <th className="text-left py-2 px-2">{t('tokenDetail.tradeType')}</th>
                       <th className="text-left py-2 px-2">{t('tokenDetail.tradeAddress')}</th>
                       <th className="text-right py-2 px-2">{nativeSymbol}</th>
-                      <th className="text-right py-2 px-2">{tokenData?.symbol}</th>
+                      <th className="text-right py-2 px-2">{tokenSymbol}</th>
                       <th className="text-right py-2 px-2"></th>
                     </tr>
                   </thead>
@@ -632,7 +681,7 @@ export default function TokenDetail() {
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
                   <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                  <p className="font-display font-bold text-lg">{formatTokenAmount(estimatedTokens)} {tokenData.symbol}</p>
+                  <p className="font-display font-bold text-lg">{formatTokenAmount(estimatedTokens)} {tokenSymbol}</p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
@@ -663,7 +712,7 @@ export default function TokenDetail() {
                     onClick={handleBuy}
                     disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.buy')} ${tokenData.symbol}`}
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.buy')} ${tokenSymbol}`}
                   </button>
                 )}
               </div>
@@ -671,7 +720,7 @@ export default function TokenDetail() {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenData.symbol})</label>
+                    <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenSymbol})</label>
                     {userTokenBalance !== undefined && (
                       <button
                         className="text-xs text-neon-green hover:underline"
@@ -722,7 +771,7 @@ export default function TokenDetail() {
                     onClick={handleApprove}
                     disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `Approve ${tokenData.symbol}`}
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `Approve ${tokenSymbol}`}
                   </button>
                 ) : (
                   <button
@@ -730,7 +779,7 @@ export default function TokenDetail() {
                     onClick={handleSell}
                     disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.sell')} ${tokenData.symbol}`}
+                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.sell')} ${tokenSymbol}`}
                   </button>
                 )}
               </div>

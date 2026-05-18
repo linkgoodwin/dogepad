@@ -111,10 +111,28 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
   return card
 }
 
+const ERC20_ABI = [
+  {
+    inputs: [],
+    name: 'name',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'symbol',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
 function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
   const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
+  const isEnabled = !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`)
 
   const { data, isLoading } = useReadContract({
     address: bondingCurveAddress as `0x${string}`,
@@ -122,16 +140,23 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
     functionName: 'getTokenInfo',
     args: [tokenAddress as `0x${string}`],
     chainId: targetChainId,
-    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`), refetchInterval: 30000 },
+    query: { enabled: isEnabled, refetchInterval: 30000 },
   })
 
-  const { data: reserveData } = useReadContract({
-    address: bondingCurveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'getReserve',
-    args: [tokenAddress as `0x${string}`],
+  const { data: erc20Name } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'name',
     chainId: targetChainId,
-    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`) },
+    query: { enabled: isEnabled },
+  })
+
+  const { data: erc20Symbol } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'symbol',
+    chainId: targetChainId,
+    query: { enabled: isEnabled },
   })
 
   const { data: listedData } = useReadContract({
@@ -140,21 +165,24 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
     functionName: 'isListed',
     args: [tokenAddress as `0x${string}`],
     chainId: targetChainId,
-    query: { enabled: !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`) },
+    query: { enabled: isEnabled },
   })
 
   const tokenInfo = useMemo(() => {
     if (!data) return null
     const d = data as any
+    const tokenAddr = d.tokenAddress ?? d[0]
+    if (!tokenAddr || isZeroAddress(tokenAddr as `0x${string}`)) return null
     return {
-      name: String(d.name ?? d[1] ?? ''),
-      symbol: String(d.symbol ?? d[2] ?? ''),
-      totalSupply: BigInt(d.totalSupply ?? d[3] ?? 0n),
+      reserveBnb: BigInt(d.reserveBnb ?? d[3] ?? 0n),
+      isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
     }
   }, [data])
 
-  const reserve = reserveData ? Number(formatEther(reserveData as bigint)) : 0
-  const isListed = listedData ? Boolean(listedData) : false
+  const name = String(erc20Name ?? '')
+  const symbol = String(erc20Symbol ?? '')
+  const reserve = tokenInfo ? Number(formatEther(tokenInfo.reserveBnb)) : 0
+  const isListed = listedData ? Boolean(listedData) : tokenInfo?.isListedOnDex ?? false
 
   if (isLoading || !tokenInfo) {
     return (
@@ -170,13 +198,13 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
         <div className="flex items-center gap-3 mb-4">
           <div className="w-11 h-11 rounded-full bg-neon-green/10 flex items-center justify-center shrink-0 border border-neon-green/30">
             <span className="font-display font-bold text-neon-green text-lg">
-              {tokenInfo.name ? tokenInfo.name.charAt(0).toUpperCase() : '#'}
+              {name ? name.charAt(0).toUpperCase() : '#'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-display font-semibold text-white truncate">{tokenInfo.name}</span>
-              <span className="text-xs text-gray-500">{tokenInfo.symbol}</span>
+              <span className="font-display font-semibold text-white truncate">{name}</span>
+              <span className="text-xs text-gray-500">{symbol}</span>
             </div>
             <span className={cn(
               'text-[10px] px-2 py-0.5 rounded-full font-medium',
