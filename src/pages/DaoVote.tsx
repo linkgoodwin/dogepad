@@ -247,9 +247,9 @@ function CandidateDetailCard({
             {candidate.symbol && (
               <span className="text-xs text-gray-400 bg-dark-600 px-1.5 py-0.5 rounded">{candidate.symbol}</span>
             )}
-            {candidate.proposer && (
+            {candidate.proposer && typeof candidate.proposer === 'string' && (
               <span className="text-xs text-gray-500">
-                by {candidate.proposer.slice(0, 6)}...{candidate.proposer.slice(-4)}
+                by {String(candidate.proposer).slice(0, 6)}...{String(candidate.proposer).slice(-4)}
               </span>
             )}
           </div>

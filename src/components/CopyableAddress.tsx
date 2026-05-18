@@ -23,21 +23,26 @@ export default function CopyableAddress({
 }: CopyableAddressProps) {
   const [copied, setCopied] = useState(false)
 
+  if (!address || typeof address !== 'string') return null
+
+  const safeAddr = String(address)
+  const safeChainId = typeof chainId === 'number' ? chainId : 0
+
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    await navigator.clipboard.writeText(address)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(safeAddr)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {}
   }
 
-  const display = label || (short ? `${address.slice(0, 6)}...${address.slice(-4)}` : address)
+  const display = label || (short ? `${safeAddr.slice(0, 6)}...${safeAddr.slice(-4)}` : safeAddr)
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
-      <span className="text-xs text-gray-400 font-mono truncate" title={address}>
-        {display}
-      </span>
+      <span className="text-xs text-gray-400 font-mono truncate" title={safeAddr}>{display}</span>
       <button
         onClick={handleCopy}
         className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"
@@ -49,9 +54,9 @@ export default function CopyableAddress({
           <Copy className="w-3 h-3" />
         )}
       </button>
-      {showExplorer && (
+      {showExplorer && safeChainId > 0 && (
         <a
-          href={getBscScanUrl(chainId, type, address)}
+          href={getBscScanUrl(safeChainId, type, safeAddr)}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"

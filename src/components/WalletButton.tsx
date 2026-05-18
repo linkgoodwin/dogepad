@@ -7,7 +7,8 @@ import { cn, formatUsdc } from '@/lib/utils'
 import { fixWalletNetwork } from '@/config/wagmi'
 import { getNativeSymbol } from '@/config/contracts'
 
-function truncateAddress(address: string) {
+function truncateAddress(address: string | undefined) {
+  if (!address || typeof address !== 'string') return '...'
   return `${address.slice(0, 4)}...${address.slice(-4)}`
 }
 
@@ -188,7 +189,7 @@ export default function WalletButton() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
         </span>
-        <span className="font-display text-sm font-semibold tracking-wide">{truncateAddress(address!)}</span>
+        <span className="font-display text-sm font-semibold tracking-wide">{truncateAddress(address)}</span>
         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
       </button>
 

@@ -830,7 +830,7 @@ export default function TokenDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">{t('tokenDetail.creator')}</span>
-                <span className="font-mono text-xs">{tokenData.creator.slice(0, 6)}...{tokenData.creator.slice(-4)}</span>
+                <span className="font-mono text-xs">{String(tokenData.creator).slice(0, 6)}...{String(tokenData.creator).slice(-4)}</span>
               </div>
               <a
                 href={getBscScanUrl(chainId, 'address', tokenAddress)}
