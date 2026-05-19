@@ -45,7 +45,7 @@ export default function LendMarket() {
     grid: { top: 30, right: 20, bottom: 40, left: 60 },
     xAxis: {
       type: 'value' as const,
-      name: 'Utilization %',
+      name: t('lend.chart.utilization'),
       nameLocation: 'middle' as const,
       nameGap: 25,
       min: 0,
@@ -56,7 +56,7 @@ export default function LendMarket() {
     },
     yAxis: {
       type: 'value' as const,
-      name: 'Daily Rate %',
+      name: t('lend.chart.dailyRate'),
       nameLocation: 'middle' as const,
       nameGap: 45,
       min: 0,
@@ -84,7 +84,7 @@ export default function LendMarket() {
       markLine: {
         silent: true,
         lineStyle: { color: '#ffbb00', type: 'dashed' as const, width: 1 },
-        data: [{ yAxis: 10, label: { formatter: '10%/day', color: '#ffbb00', fontSize: 10 } }],
+        data: [{ yAxis: 10, label: { formatter: t('lend.chart.tenPercentDay'), color: '#ffbb00', fontSize: 10 } }],
       },
     }],
     tooltip: {
@@ -95,10 +95,10 @@ export default function LendMarket() {
       formatter: (params: Array<{ value: [number, number] }>) => {
         const u = params[0].value[0]
         const r = params[0].value[1]
-        return `Utilization: ${u}%<br/>Daily Rate: ${r.toFixed(2)}%<br/>APY: ${(Math.pow(1 + r / 100, 365) * 100).toFixed(0)}%`
+        return t('lend.chart.tooltip', { u: String(u), r: r.toFixed(2), apy: (Math.pow(1 + r / 100, 365) * 100).toFixed(0) })
       },
     },
-  }), [])
+  }), [t])
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -115,23 +115,23 @@ export default function LendMarket() {
           <p className="text-xs text-gray-400 mb-1">{t('lend.totalDeposits')}</p>
           <p className="text-2xl font-display font-bold neon-text">{formatUsdc(totalDeposits)} {nativeSymbol}</p>
           <span className="text-xs text-gray-400 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> {utilization.toFixed(1)}% utilized
+            <TrendingUp className="w-3 h-3" /> {utilization.toFixed(1)}% {t('lend.utilized')}
           </span>
         </div>
         <div className="card-dark border-neon-red/20">
           <p className="text-xs text-gray-400 mb-1">{t('lend.shortRate')}</p>
           <p className="text-2xl font-display font-bold text-neon-red">{dailyRate.toFixed(2)}%/day</p>
-          <span className="text-xs text-neon-red">Utilization: {utilization.toFixed(1)}%</span>
+          <span className="text-xs text-neon-red">{t('lend.utilization')}: {utilization.toFixed(1)}%</span>
         </div>
         <div className="card-dark border-neon-green/20">
           <p className="text-xs text-gray-400 mb-1">{t('lend.longApy')}</p>
           <p className="text-2xl font-display font-bold text-neon-green">{depositAPY.toFixed(2)}%</p>
-          <span className="text-xs text-gray-400">{nativeSymbol} Deposit</span>
+          <span className="text-xs text-gray-400">{nativeSymbol} {t('lend.depositLabel')}</span>
         </div>
         <div className="card-dark border-orange-500/20">
           <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Flame className="w-3 h-3 text-orange-500" /> {t('lend.totalBurned')}</p>
           <p className="text-2xl font-display font-bold text-orange-500">—</p>
-          <span className="text-xs text-gray-400">Requires BuyAndBurn contract</span>
+          <span className="text-xs text-gray-400">{t('lend.requiresBuyAndBurn')}</span>
         </div>
       </div>
 
@@ -258,7 +258,7 @@ export default function LendMarket() {
           <div className="bg-dark-700 rounded-lg p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">{t('lend.totalBurned')}</p>
             <p className="text-xl font-display font-bold text-orange-500">—</p>
-            <p className="text-xs text-gray-400">tokens</p>
+            <p className="text-xs text-gray-400">{t('lend.tokens')}</p>
           </div>
           <div className="bg-dark-700 rounded-lg p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">{t('lend.burn.bnbUsed')}</p>
@@ -268,12 +268,12 @@ export default function LendMarket() {
           <div className="bg-dark-700 rounded-lg p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">{t('lend.burn.burnRate')}</p>
             <p className="text-xl font-display font-bold text-orange-500">—</p>
-            <p className="text-xs text-gray-400">tokens/day</p>
+            <p className="text-xs text-gray-400">{t('lend.tokensPerDay')}</p>
           </div>
           <div className="bg-dark-700 rounded-lg p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">{t('lend.burn.burnCount')}</p>
             <p className="text-xl font-display font-bold text-orange-500">—</p>
-            <p className="text-xs text-gray-400">executions</p>
+            <p className="text-xs text-gray-400">{t('lend.executions')}</p>
           </div>
         </div>
         <div className="mt-4 bg-orange-500/5 border border-orange-500/20 rounded-lg p-4">
@@ -294,8 +294,8 @@ export default function LendMarket() {
           <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
             <Inbox className="w-8 h-8 text-gray-500" />
           </div>
-          <p className="text-gray-400 mb-2">No lending assets available</p>
-          <p className="text-xs text-gray-500">Assets will appear here when tokens are listed on DEX</p>
+          <p className="text-gray-400 mb-2">{t('lend.noAssets')}</p>
+          <p className="text-xs text-gray-500">{t('lend.noAssetsDesc')}</p>
         </div>
       </div>
     </div>

@@ -14,8 +14,6 @@ const DURATION_TIERS = [
   { value: 2, label: '30 Days', feeBnb: 10, desc: 'Extended — max reach' },
 ]
 
-const INCENTIVE_FEE = 1
-
 export default function CreateToken() {
   const t = useT()
   const { isConnected } = useAccount()
@@ -37,22 +35,18 @@ export default function CreateToken() {
   const [discord, setDiscord] = useState('')
   const [aboutCoin, setAboutCoin] = useState('')
   const [description, setDescription] = useState('')
-  const [wantTaxShare, setWantTaxShare] = useState(false)
-  const [wantLpShare, setWantLpShare] = useState(false)
-  const [wantTokenAllocation, setWantTokenAllocation] = useState(false)
   const [selectedTier, setSelectedTier] = useState(1)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
   const [txError, setTxError] = useState('')
 
-  const incentiveCount = [wantTaxShare, wantLpShare, wantTokenAllocation].filter(Boolean).length
   const selectedTierInfo = DURATION_TIERS[selectedTier]
   const isContractNotDeployed = isZeroAddress(daoAddress)
 
   const totalFee = useMemo(() => {
-    return selectedTierInfo.feeBnb + incentiveCount * INCENTIVE_FEE
-  }, [selectedTierInfo.feeBnb, incentiveCount])
+    return selectedTierInfo.feeBnb
+  }, [selectedTierInfo.feeBnb])
 
   const totalFeeStr = `${totalFee.toFixed(2)} ${nativeSymbol}`
 
@@ -142,7 +136,6 @@ export default function CreateToken() {
       setName(''); setSymbol(''); setAvatarUrl(''); setWebsite('')
       setTwitter(''); setTelegram(''); setDiscord('')
       setAboutCoin(''); setDescription('')
-      setWantTaxShare(false); setWantLpShare(false); setWantTokenAllocation(false)
       setSelectedTier(1)
     }
     setTxError('')
@@ -257,49 +250,6 @@ export default function CreateToken() {
             />
             <div className="text-right text-xs text-gray-500">{description.length}/1024</div>
           </div>
-
-          <div className="card-dark space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Info className="w-4 h-4 text-doge-gold" />
-                <span className="font-semibold text-white">{t('create.incentiveTitle')}</span>
-              </div>
-              <span className="text-xs text-doge-gold font-semibold">+1 {nativeSymbol} {t('create.each')}</span>
-            </div>
-            <p className="text-xs text-gray-400">{t('create.incentiveDesc')}</p>
-            <div className="space-y-2">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={wantTaxShare} onChange={(e) => setWantTaxShare(e.target.checked)} className="mt-1 accent-doge-gold" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-white">{t('create.incentiveTax')}</span>
-                    {wantTaxShare && <span className="text-xs text-doge-gold font-semibold">+1 {nativeSymbol}</span>}
-                  </div>
-                  <p className="text-xs text-gray-400">{t('create.incentiveTaxDesc')}</p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={wantLpShare} onChange={(e) => setWantLpShare(e.target.checked)} className="mt-1 accent-doge-gold" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-white">{t('create.incentiveLp')}</span>
-                    {wantLpShare && <span className="text-xs text-doge-gold font-semibold">+1 {nativeSymbol}</span>}
-                  </div>
-                  <p className="text-xs text-gray-400">{t('create.incentiveLpDesc')}</p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={wantTokenAllocation} onChange={(e) => setWantTokenAllocation(e.target.checked)} className="mt-1 accent-doge-gold" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-white">{t('create.incentiveToken')}</span>
-                    {wantTokenAllocation && <span className="text-xs text-doge-gold font-semibold">+1 {nativeSymbol}</span>}
-                  </div>
-                  <p className="text-xs text-gray-400">{t('create.incentiveTokenDesc')}</p>
-                </div>
-              </label>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-4">
@@ -371,18 +321,12 @@ export default function CreateToken() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">{t('create.suffix')}</span>
-                <span className="text-doge-gold font-semibold">doge</span>
+                <span className="text-doge-gold font-semibold">doge <span className="text-gray-500 text-xs font-normal">(auto)</span></span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">{t('create.durationFee')}</span>
                 <span className="text-doge-gold font-semibold">{selectedTierInfo.feeBnb.toFixed(2)} {nativeSymbol}</span>
               </div>
-              {incentiveCount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">{t('create.incentiveFee')} (×{incentiveCount})</span>
-                  <span className="text-doge-gold font-semibold">+{(incentiveCount * INCENTIVE_FEE).toFixed(2)} {nativeSymbol}</span>
-                </div>
-              )}
               <div className="flex justify-between pt-2 border-t border-dark-500/30">
                 <span className="text-gray-400">{t('create.expiry')}</span>
                 <span className="text-doge-gold font-semibold">{selectedTierInfo.label}</span>
@@ -398,7 +342,7 @@ export default function CreateToken() {
               </div>
               <div className="text-right">
                 <p className="text-2xl font-display font-bold text-doge-gold">{totalFeeStr}</p>
-                <p className="text-xs text-gray-400">{selectedTierInfo.label} {t('create.campaign')}{incentiveCount > 0 ? ` + ${incentiveCount} ${t('create.incentiveFeeLabel')}` : ''}</p>
+                <p className="text-xs text-gray-400">{selectedTierInfo.label} {t('create.campaign')}</p>
               </div>
             </div>
           </div>
@@ -455,12 +399,6 @@ export default function CreateToken() {
                       <span className="text-gray-400">{t('create.durationTier')}</span>
                       <span className="font-semibold">{selectedTierInfo.label}</span>
                     </div>
-                    {incentiveCount > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">{t('create.incentiveFeeLabel')}</span>
-                        <span className="font-semibold">×{incentiveCount}</span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 flex items-center justify-between">

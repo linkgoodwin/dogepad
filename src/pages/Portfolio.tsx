@@ -214,13 +214,13 @@ export default function Portfolio() {
       if (tokenAddr === zeroAddr) {
         tokenType = nativeSymbol; tokenSymbol = nativeSymbol; tokenColor = 'text-neon-green'; tokenBg = 'bg-neon-green/20'; tokenLetter = nativeSymbol[0]
       } else if (tokenAddr === dogeTokenAddr) {
-        tokenType = '平台币'; tokenSymbol = 'DOGE'; tokenColor = 'text-doge-cyan'; tokenBg = 'bg-doge-cyan/20'; tokenLetter = 'D'
+        tokenType = t('dao.platformTokenLabel'); tokenSymbol = 'DOGE'; tokenColor = 'text-doge-cyan'; tokenBg = 'bg-doge-cyan/20'; tokenLetter = 'D'
       } else {
-        tokenType = '未知'; tokenSymbol = '?'; tokenColor = 'text-gray-400'; tokenBg = 'bg-gray-400/20'; tokenLetter = '?'
+        tokenType = t('portfolio.unknown'); tokenSymbol = '?'; tokenColor = 'text-gray-400'; tokenBg = 'bg-gray-400/20'; tokenLetter = '?'
       }
 
       const durationNum = Number(durations[i])
-      const durationLabel = ['活期', '30天', '90天', '180天'][durationNum] || '未知'
+      const durationLabel = [t('dao.stakeDurationFlexible'), t('dao.stakeDuration30d'), t('dao.stakeDuration90d'), t('dao.stakeDuration180d')][durationNum] || t('portfolio.unknown')
       const maturityTime = Number(maturityTimes[i])
       const isDemand = maturityTime === 0
 
@@ -240,7 +240,7 @@ export default function Portfolio() {
         isWithdrawn: withdrawns[i],
       }
     })
-  }, [stakePositionsData, dogeTokenData, nativeSymbol])
+  }, [stakePositionsData, dogeTokenData, nativeSymbol, t])
 
   const pendingRights = pendingRightsData ? Number(pendingRightsData as bigint) : 0
   const totalEffectiveRights = totalEffectiveRightsData ? Number(totalEffectiveRightsData as bigint) : 0
@@ -362,7 +362,7 @@ export default function Portfolio() {
         <div className="card-dark">
           <h2 className="font-display font-semibold text-lg flex items-center gap-2 mb-4">
             <HandCoins className="w-5 h-5 text-doge-gold" />
-            我的认购
+            {t('portfolio.mySubscriptions')}
           </h2>
           <div className="space-y-3">
             {mySubscriptions.map(s => {
@@ -382,8 +382,8 @@ export default function Portfolio() {
                         </p>
                         <div className="flex items-center gap-2 text-xs">
                           <span className={cn('font-medium', statusInfo.color)}>{statusInfo.label}</span>
-                          {s.hasClaimed && <span className="text-neon-green">已领取</span>}
-                          {s.hasRefunded && <span className="text-neon-yellow">已退还</span>}
+                          {s.hasClaimed && <span className="text-neon-green">{t('portfolio.claimed')}</span>}
+                          {s.hasRefunded && <span className="text-neon-yellow">{t('portfolio.refunded')}</span>}
                         </div>
                       </div>
                     </div>
@@ -403,7 +403,7 @@ export default function Portfolio() {
                           disabled={isWritePending || isConfirming}
                         >
                           {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                          领取代币
+                          {t('portfolio.claimToken')}
                         </button>
                       )}
                       {canRefund && (
@@ -413,20 +413,20 @@ export default function Portfolio() {
                           disabled={isWritePending || isConfirming}
                         >
                           {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                          退还认购
+                          {t('portfolio.refundSubscription')}
                         </button>
                       )}
                     </div>
                   )}
                   {s.wasLaunched && !isZeroAddress(s.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
-                      <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+                      <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
                       <CopyableAddress address={s.launchedToken} chainId={chainId} type="token" />
                       <Link
                         to={`/token/${s.launchedToken}`}
                         className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline mt-1"
                       >
-                        查看代币 <ArrowRight className="w-3 h-3" />
+                        {t('portfolio.viewToken')} <ArrowRight className="w-3 h-3" />
                       </Link>
                     </div>
                   )}
@@ -441,7 +441,7 @@ export default function Portfolio() {
         <div className="card-dark">
           <h2 className="font-display font-semibold text-lg flex items-center gap-2 mb-4">
             <Sparkles className="w-5 h-5 text-doge-gold" />
-            我提交的代币
+            {t('portfolio.mySubmittedTokens')}
           </h2>
           <div className="space-y-3">
             {myCandidates.map(c => {
@@ -465,29 +465,29 @@ export default function Portfolio() {
                           <span className={cn('font-medium', statusInfo.color)}>{statusInfo.label}</span>
                           {c.status === 0 && remaining > 0 && (
                             <span className="text-gray-500">
-                              {Math.floor(remaining / 86400)}天{Math.floor((remaining % 86400) / 3600)}时后到期
+                              {t('portfolio.daysHoursUntilExpiry', { days: Math.floor(remaining / 86400), hours: Math.floor((remaining % 86400) / 3600) })}
                             </span>
                           )}
                           {c.status === 1 && (
-                            <span className="text-doge-cyan">待发射</span>
+                            <span className="text-doge-cyan">{t('portfolio.pendingLaunch')}</span>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-display font-bold">{formatUsdc(Number(formatEther(c.totalSubBnb)))} {nativeSymbol}</p>
-                      <p className="text-xs text-gray-400">认购</p>
+                      <p className="text-xs text-gray-400">{t('dao.subscribe')}</p>
                     </div>
                   </div>
                   {c.wasLaunched && !isZeroAddress(c.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
-                      <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+                      <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
                       <CopyableAddress address={c.launchedToken} chainId={chainId} type="token" />
                       <Link
                         to={`/token/${c.launchedToken}`}
                         className="inline-flex items-center gap-1 text-neon-green text-xs hover:underline mt-1"
                       >
-                        查看代币 <ArrowRight className="w-3 h-3" />
+                        {t('portfolio.viewToken')} <ArrowRight className="w-3 h-3" />
                       </Link>
                     </div>
                   )}
@@ -501,7 +501,7 @@ export default function Portfolio() {
       <div className="card-dark">
         <h2 className="font-display font-semibold text-lg flex items-center gap-2 mb-4">
           <Coins className="w-5 h-5 text-neon-green" />
-          质押仓位
+          {t('portfolio.stakingPositions')}
         </h2>
         <div className="space-y-3">
           {parsedStakePositions.length > 0 ? parsedStakePositions.map(pos => {
@@ -515,19 +515,19 @@ export default function Portfolio() {
                       {pos.tokenLetter}
                     </div>
                     <div>
-                      <p className="font-display font-semibold">{pos.tokenType} 质押</p>
+                      <p className="font-display font-semibold">{t('portfolio.tokenStaking', { type: pos.tokenType })}</p>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="text-gray-400">{pos.durationLabel}</span>
                         {pos.isWithdrawn ? (
-                          <span className="text-gray-500">已提取</span>
+                          <span className="text-gray-500">{t('dao.stakeWithdrawn')}</span>
                         ) : pos.isDemand ? (
-                          <span className="text-neon-green">随时可提取</span>
+                          <span className="text-neon-green">{t('portfolio.withdrawableAnytime')}</span>
                         ) : remaining > 0 ? (
                           <span className="text-neon-yellow">
-                            {Math.floor(remaining / 86400)}天{Math.floor((remaining % 86400) / 3600)}时{Math.floor((remaining % 3600) / 60)}分
+                            {t('portfolio.daysHoursMinutes', { days: Math.floor(remaining / 86400), hours: Math.floor((remaining % 86400) / 3600), minutes: Math.floor((remaining % 3600) / 60) })}
                           </span>
                         ) : (
-                          <span className="text-neon-green">已到期</span>
+                          <span className="text-neon-green">{t('portfolio.matured')}</span>
                         )}
                       </div>
                     </div>
@@ -537,7 +537,7 @@ export default function Portfolio() {
                       {formatUsdc(pos.amount)} {pos.tokenSymbol}
                     </p>
                     {pos.isWithdrawn ? (
-                      <span className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-400">已提取</span>
+                      <span className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-400">{t('dao.stakeWithdrawn')}</span>
                     ) : canWithdraw ? (
                       <button
                         className="text-xs px-3 py-1.5 rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-bold flex items-center gap-1"
@@ -545,7 +545,7 @@ export default function Portfolio() {
                         disabled={isWritePending || isConfirming}
                       >
                         {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                        提取
+                        {t('dao.withdrawBtn')}
                       </button>
                     ) : null}
                   </div>
@@ -555,9 +555,9 @@ export default function Portfolio() {
           }) : (
             <div className="bg-dark-700 rounded-lg p-8 text-center">
               <Coins className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 mb-2">暂无质押</p>
-              <p className="text-sm text-gray-500 mb-4">质押 {nativeSymbol} 或平台币获取投票权益</p>
-              <Link to="/dao" className="btn-primary inline-block">去质押</Link>
+              <p className="text-gray-400 mb-2">{t('portfolio.noStaking')}</p>
+              <p className="text-sm text-gray-500 mb-4">{t('portfolio.stakeForRights', { symbol: nativeSymbol })}</p>
+              <Link to="/dao" className="btn-primary inline-block">{t('portfolio.goStake')}</Link>
             </div>
           )}
           {(pendingRights > 0 || totalEffectiveRights > 0) && (
@@ -568,13 +568,13 @@ export default function Portfolio() {
                     <Sparkles className="w-4 h-4 text-doge-gold" />
                   </div>
                   <div>
-                    <p className="font-display font-semibold">投票权益</p>
-                    <p className="text-xs text-gray-400">待领取 {pendingRights.toLocaleString()} 分 · 有效 {totalEffectiveRights.toLocaleString()} 分</p>
+                    <p className="font-display font-semibold">{t('portfolio.votingRights')}</p>
+                    <p className="text-xs text-gray-400">{t('portfolio.pendingRightsInfo', { pending: pendingRights.toLocaleString(), effective: totalEffectiveRights.toLocaleString() })}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="font-display font-bold text-doge-gold">{totalEffectiveRights.toLocaleString()}</p>
-                  <p className="text-xs text-gray-400">有效权益(分)</p>
+                  <p className="text-xs text-gray-400">{t('portfolio.effectiveRightsPts')}</p>
                 </div>
               </div>
             </div>
@@ -622,7 +622,7 @@ export default function Portfolio() {
         <h2 className="font-display font-semibold text-lg mb-4">{t('portfolio.earnings')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-dark-700 rounded-lg p-4">
-            <p className="text-xs text-gray-400 mb-1">质押仓位</p>
+            <p className="text-xs text-gray-400 mb-1">{t('portfolio.stakingPositions')}</p>
             <p className="text-xl font-display font-bold text-neon-green">{formatUsdc(totalStakingBnb)} {nativeSymbol}</p>
             {parsedStakePositions.filter(p => p.tokenSymbol !== nativeSymbol && !p.isWithdrawn).length > 0 && (
               <div className="mt-1 space-y-0.5">

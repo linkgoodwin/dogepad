@@ -230,7 +230,7 @@ export default function WalletButton() {
             }}
           >
             <Globe className="w-4 h-4" />
-            修复RPC节点
+            Fix RPC Node
           </button>
 
           <button

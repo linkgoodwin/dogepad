@@ -45,7 +45,7 @@ export default function TokenCard({ token }: TokenCardProps) {
           {token.isListedOnDex ? (
             <span className="badge-gold">DEX</span>
           ) : (
-            <span className="badge-cyan">内盘</span>
+            <span className="badge-cyan">Bonding</span>
           )}
         </div>
 

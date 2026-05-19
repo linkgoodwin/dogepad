@@ -39,16 +39,6 @@ export const LAUNCH_DAO_ABI = [
     type: 'function',
   },
   {
-    inputs: [
-      { internalType: 'uint256', name: 'candidateId', type: 'uint256' },
-      { internalType: 'uint256', name: 'amount', type: 'uint256' },
-    ],
-    name: 'subscribeDoge',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
     inputs: [{ internalType: 'uint8', name: 'duration', type: 'uint8' }],
     name: 'stakeBnb',
     outputs: [],

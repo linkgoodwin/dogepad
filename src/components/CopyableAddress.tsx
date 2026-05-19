@@ -60,7 +60,7 @@ export default function CopyableAddress({
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"
-          title="在浏览器中查看"
+          title="View on explorer"
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="w-3 h-3" />

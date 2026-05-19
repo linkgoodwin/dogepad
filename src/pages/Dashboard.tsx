@@ -27,6 +27,7 @@ interface CandidateInfo {
 }
 
 function CandidateCard({ candidateId }: { candidateId: number }) {
+  const t = useT()
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
   const daoAddress = getContractAddress(targetChainId, 'launchDAO')
@@ -125,14 +126,14 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
 
       {isLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
         <div className="pt-3 border-t border-dark-500/20" onClick={(e) => e.stopPropagation()}>
-          <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+          <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
           <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
         </div>
       )}
 
       {!isLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
         <div className="pt-3 border-t border-dark-500/20">
-          <p className="text-[10px] text-gray-500 mb-1">提案者</p>
+          <p className="text-[10px] text-gray-500 mb-1">{t('dao.proposer')}</p>
           <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
         </div>
       )}
@@ -164,6 +165,7 @@ const ERC20_ABI = [
 ] as const
 
 function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
+  const t = useT()
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
   const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
@@ -247,13 +249,13 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
                 ? 'bg-doge-violet/10 text-doge-violet border border-doge-violet/20'
                 : 'bg-neon-green/10 text-neon-green border border-neon-green/20'
             )}>
-              {isListed ? 'DEX' : '内盘交易'}
+              {isListed ? 'DEX' : t('home.internalTrade')}
             </span>
           </div>
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-gray-500">储备量</p>
+            <p className="text-xs text-gray-500">{t('home.reserve')}</p>
             <p className="font-display font-bold text-white">{formatUsdc(reserve)} {nativeSymbol}</p>
           </div>
           <div className="text-right">
@@ -501,7 +503,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-display font-bold flex items-center gap-2">
               <Rocket className="w-6 h-6 text-neon-green" />
-              已发射代币
+              {t('home.launchedSection')}
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

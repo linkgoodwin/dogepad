@@ -42,7 +42,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                 className="px-4 py-2 bg-doge-gold text-black rounded-lg font-bold"
                 onClick={() => window.location.href = '/dogepad/'}
               >
-                回到首页
+                Back to Home
               </button>
               <button
                 className="px-4 py-2 bg-dark-700 text-white rounded-lg border border-dark-500"

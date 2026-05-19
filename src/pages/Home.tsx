@@ -25,6 +25,7 @@ function PawIcon({ className }: { className?: string }) {
 function CandidateCard({ candidateId }: { candidateId: number }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
+  const t = useT()
   const daoAddress = getContractAddress(targetChainId, 'launchDAO')
 
   const { data, isLoading } = useReadContract({
@@ -100,20 +101,20 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
         </div>
         <div className="text-right">
           <p className="text-xs text-gray-500">Weight</p>
-          <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()} 分</p>
+          <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()} {t('home.weightUnit')}</p>
         </div>
       </div>
 
       {isLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
         <div className="mt-3 pt-3 border-t border-dark-500/20" onClick={(e) => e.stopPropagation()}>
-          <p className="text-[10px] text-gray-500 mb-1">代币合约</p>
+          <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
           <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
         </div>
       )}
 
       {!isLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
         <div className="mt-3 pt-3 border-t border-dark-500/20">
-          <p className="text-[10px] text-gray-500 mb-1">提案者</p>
+          <p className="text-[10px] text-gray-500 mb-1">{t('dao.proposer')}</p>
           <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
         </div>
       )}
@@ -146,6 +147,7 @@ const ERC20_ABI = [
 function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
+  const t = useT()
   const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
   const isEnabled = !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`)
 
@@ -227,13 +229,13 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
                 ? 'bg-doge-violet/10 text-doge-violet border border-doge-violet/20'
                 : 'bg-neon-green/10 text-neon-green border border-neon-green/20'
             )}>
-              {isListed ? 'DEX' : '内盘交易'}
+              {isListed ? 'DEX' : t('home.internalTrade')}
             </span>
           </div>
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-gray-500">储备量</p>
+            <p className="text-xs text-gray-500">{t('home.reserve')}</p>
             <p className="font-display font-bold text-white">{formatUsdc(reserve)} {nativeSymbol}</p>
           </div>
           <div className="text-right">
@@ -248,57 +250,57 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   )
 }
 
-const FEATURES = [
-  {
-    icon: Vote,
-    title: 'DAO 民主发射',
-    desc: '社区质押投票决定哪些代币发射，DOGE 质押享 3 倍队列排序加成',
-    color: 'text-doge-gold',
-    bg: 'bg-doge-gold/10',
-    border: 'border-doge-gold/20',
-    glow: 'border-glow-gold',
-  },
-  {
-    icon: Shield,
-    title: 'USDC 公平认购',
-    desc: '认购只用 USDC，满 20000 自动入队，超额按比例退还本金',
-    color: 'text-doge-cyan',
-    bg: 'bg-doge-cyan/10',
-    border: 'border-doge-cyan/20',
-    glow: 'border-glow-cyan',
-  },
-  {
-    icon: Coins,
-    title: '每日限量发射',
-    desc: '每天只发射 1 只代币，队列按分值排序，认购满优先于投票胜出',
-    color: 'text-doge-gold',
-    bg: 'bg-doge-gold/10',
-    border: 'border-doge-gold/20',
-    glow: 'border-glow-gold',
-  },
-  {
-    icon: Zap,
-    title: '联合曲线交易',
-    desc: '70% USDC配30%代币组LP + 25%做多池 + 5%平台，做多做空双向获利',
-    color: 'text-neon-green',
-    bg: 'bg-neon-green/10',
-    border: 'border-neon-green/20',
-    glow: 'border-glow-gold',
-  },
-]
-
-const STEPS = [
-  { num: '01', title: '提交候选', desc: '支付 3-10 USDC 候选费，提交代币方案进入投票池', icon: Flame },
-  { num: '02', title: '认购投票', desc: '用 USDC 认购候选币（最低 1 USDC），质押 DOGE 获取投票权益加成', icon: Vote },
-  { num: '03', title: '发射交易', desc: '认购满 20000 USDC 或投票第一，代币进入联合曲线内盘交易', icon: Rocket },
-]
-
 export default function Home() {
   const t = useT()
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
   const daoAddress = getContractAddress(targetChainId, 'launchDAO')
   const contractReady = !isZeroAddress(daoAddress)
+
+  const FEATURES = [
+    {
+      icon: Vote,
+      title: t('home.feat1Title'),
+      desc: t('home.feat1Desc'),
+      color: 'text-doge-gold',
+      bg: 'bg-doge-gold/10',
+      border: 'border-doge-gold/20',
+      glow: 'border-glow-gold',
+    },
+    {
+      icon: Shield,
+      title: t('home.feat2Title'),
+      desc: t('home.feat2Desc'),
+      color: 'text-doge-cyan',
+      bg: 'bg-doge-cyan/10',
+      border: 'border-doge-cyan/20',
+      glow: 'border-glow-cyan',
+    },
+    {
+      icon: Coins,
+      title: t('home.feat3Title'),
+      desc: t('home.feat3Desc'),
+      color: 'text-doge-gold',
+      bg: 'bg-doge-gold/10',
+      border: 'border-doge-gold/20',
+      glow: 'border-glow-gold',
+    },
+    {
+      icon: Zap,
+      title: t('home.feat4Title'),
+      desc: t('home.feat4Desc'),
+      color: 'text-neon-green',
+      bg: 'bg-neon-green/10',
+      border: 'border-neon-green/20',
+      glow: 'border-glow-gold',
+    },
+  ]
+
+  const STEPS = [
+    { num: '01', title: t('home.step1Title'), desc: t('home.step1Desc'), icon: Flame },
+    { num: '02', title: t('home.step2Title'), desc: t('home.step2Desc'), icon: Vote },
+    { num: '03', title: t('home.step3Title'), desc: t('home.step3Desc'), icon: Rocket },
+  ]
 
   const [searchQuery, setSearchQuery] = useState('')
   const [scrollY, setScrollY] = useState(0)
@@ -429,46 +431,46 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="badge-gold">Launchpad</span>
-                <span className="badge-cyan">USDC 认购</span>
+                <span className="badge-cyan">{t('home.badgeSubscribe')}</span>
               </div>
             </div>
 
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-black mb-4 leading-[1.1] tracking-tight">
               <span className="text-gradient-gold">DogePad</span>
               <br />
-              <span className="text-white/90 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-wide">金狗发射台</span>
+              <span className="text-white/90 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-wide">{t('home.heroSubtitle')}</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-gray-400 mb-3 max-w-2xl mx-auto leading-relaxed">
-              社区驱动的公平发射平台 — USDC 认购、DOGE 质押加成、联合曲线交易
+              {t('home.heroDesc')}
             </p>
             <p className="text-sm text-gray-500 mb-8 max-w-xl mx-auto">
-              每一只金狗，都由社区选出。质押 DOGE 获取 3 倍投票加成，1 USDC 即可认购。
+              {t('home.heroDesc2')}
             </p>
 
             <div className="flex flex-wrap justify-center gap-4 mb-12">
               <Link to="/dao" className="btn-primary inline-flex items-center gap-2 text-base px-8 py-3">
                 <Vote className="w-5 h-5" />
-                进入 DAO 投票
+                {t('home.heroCta1')}
               </Link>
               <Link to="/create" className="btn-secondary inline-flex items-center gap-2 text-base px-8 py-3">
                 <Flame className="w-5 h-5" />
-                提交候选代币
+                {t('home.heroCta2')}
               </Link>
             </div>
 
             <div className="grid grid-cols-3 gap-6 max-w-md mx-auto">
               <div>
                 <p className="text-2xl font-display font-bold text-doge-gold">{formatUsdc(totalStaked)}</p>
-                <p className="text-xs text-gray-500">{nativeSymbol} 质押</p>
+                <p className="text-xs text-gray-500">{t('home.heroStat1', { symbol: nativeSymbol })}</p>
               </div>
               <div>
                 <p className="text-2xl font-display font-bold text-doge-cyan">{candidateCount}</p>
-                <p className="text-xs text-gray-500">候选代币</p>
+                <p className="text-xs text-gray-500">{t('home.heroStat2')}</p>
               </div>
               <div>
                 <p className="text-2xl font-display font-bold text-neon-green">20000</p>
-                <p className="text-xs text-gray-500">USDC 发射阈值</p>
+                <p className="text-xs text-gray-500">{t('home.heroStat3')}</p>
               </div>
             </div>
           </div>
@@ -480,10 +482,10 @@ export default function Home() {
       <section className="px-6 lg:px-16 py-20">
         <div className="text-center mb-14">
           <h2 className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            三步发射<span className="text-gradient-gold">金狗</span>
+            {t('home.stepTitle')}
           </h2>
           <p className="text-gray-400 max-w-lg mx-auto">
-            从提交到发射，全程社区驱动，公平透明
+            {t('home.stepDesc')}
           </p>
         </div>
 
@@ -508,10 +510,10 @@ export default function Home() {
       <section className="px-6 lg:px-16 py-20">
         <div className="text-center mb-14">
           <h2 className="text-3xl sm:text-4xl font-display font-bold mb-4">
-            为什么选择<span className="text-gradient-gold"> DogePad</span>
+            {t('home.whyTitle')}
           </h2>
           <p className="text-gray-400 max-w-lg mx-auto">
-            不只是发射台，更是社区共治的代币生态
+            {t('home.whyDesc')}
           </p>
         </div>
 
@@ -540,22 +542,22 @@ export default function Home() {
           <div className="text-center mb-8">
             <h2 className="text-3xl font-display font-bold flex items-center justify-center gap-3">
               <TrendingUp className="w-7 h-7 text-doge-gold" />
-              热门候选
+              {t('home.candidateSection')}
             </h2>
-            <p className="text-gray-400 text-sm mt-1">社区正在投票的代币项目</p>
+            <p className="text-gray-400 text-sm mt-1">{t('home.candidateSectionDesc')}</p>
             <div className="flex items-center justify-center gap-4 mt-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="搜索代币..."
+                  placeholder={t('common.search')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="input-dark pl-10 w-48"
                 />
               </div>
               <Link to="/dao" className="text-sm text-doge-gold hover:text-doge-gold-light flex items-center gap-1 shrink-0">
-                查看全部 <ArrowRight className="w-4 h-4" />
+                {t('home.viewAll')} <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -573,10 +575,10 @@ export default function Home() {
         ) : (
           <div className="bg-dark-800/50 border border-dark-500/20 rounded-xl text-center py-20">
             <PawIcon className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-            <p className="text-gray-400 text-lg font-display mb-2">还没有候选代币</p>
-            <p className="text-gray-500 text-sm mb-6">成为第一个在 DogePad 发射代币的创造者</p>
+            <p className="text-gray-400 text-lg font-display mb-2">{t('home.noCandidate')}</p>
+            <p className="text-gray-500 text-sm mb-6">{t('home.noCandidateDesc')}</p>
             <Link to="/create" className="btn-primary inline-flex items-center gap-2">
-              <Flame className="w-4 h-4" /> 提交候选代币
+              <Flame className="w-4 h-4" /> {t('home.submitCta')}
             </Link>
           </div>
         )}
@@ -589,9 +591,9 @@ export default function Home() {
             <div className="text-center mb-8">
               <h2 className="text-3xl font-display font-bold flex items-center justify-center gap-3">
                 <Rocket className="w-7 h-7 text-neon-green" />
-                已发射代币
+                {t('home.launchedSection')}
               </h2>
-              <p className="text-gray-400 text-sm mt-1">通过联合曲线交易已发射的代币</p>
+              <p className="text-gray-400 text-sm mt-1">{t('home.launchedSectionDesc')}</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
               {launchedTokens.map((addr) => (
@@ -612,19 +614,19 @@ export default function Home() {
 
             <div className="relative z-10 max-w-2xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-display font-bold mb-4">
-                准备好发射你的<span className="text-gradient-gold">金狗</span>了吗？
+                {t('home.ctaTitle')}
               </h2>
               <p className="text-gray-400 mb-8 leading-relaxed">
-                只需 3 USDC 即可提交候选代币，1 USDC 即可认购参与。质押 DOGE 享 3 倍投票加成。
+                {t('home.ctaDesc')}
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                 <Link to="/create" className="btn-primary inline-flex items-center gap-2 px-8 py-3">
                   <Rocket className="w-5 h-5" />
-                  立即提交代币
+                  {t('home.ctaBtn1')}
                 </Link>
                 <Link to="/dao" className="btn-secondary inline-flex items-center gap-2 px-8 py-3">
                   <Vote className="w-5 h-5" />
-                  参与投票
+                  {t('home.ctaBtn2')}
                 </Link>
               </div>
             </div>
@@ -638,29 +640,29 @@ export default function Home() {
             <div className="w-10 h-10 rounded-xl bg-doge-gold/10 flex items-center justify-center mx-auto mb-3">
               <Shield className="w-5 h-5 text-doge-gold" />
             </div>
-            <p className="font-display font-bold text-sm">公平认购</p>
-            <p className="text-xs text-gray-500 mt-1">USDC 认购，超额退还</p>
+            <p className="font-display font-bold text-sm">{t('home.fairSub')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('home.fairSubDesc')}</p>
           </div>
           <div>
             <div className="w-10 h-10 rounded-xl bg-doge-cyan/10 flex items-center justify-center mx-auto mb-3">
               <Users className="w-5 h-5 text-doge-cyan" />
             </div>
-            <p className="font-display font-bold text-sm">社区共治</p>
-            <p className="text-xs text-gray-500 mt-1">DOGE 3x 加成</p>
+            <p className="font-display font-bold text-sm">{t('home.communityGov')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('home.communityGovDesc')}</p>
           </div>
           <div>
             <div className="w-10 h-10 rounded-xl bg-neon-green/10 flex items-center justify-center mx-auto mb-3">
               <Gem className="w-5 h-5 text-neon-green" />
             </div>
-            <p className="font-display font-bold text-sm">双向交易</p>
-            <p className="text-xs text-gray-500 mt-1">做多+做空</p>
+            <p className="font-display font-bold text-sm">{t('home.dualTrade')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('home.dualTradeDesc')}</p>
           </div>
           <div>
             <div className="w-10 h-10 rounded-xl bg-doge-violet/10 flex items-center justify-center mx-auto mb-3">
               <Zap className="w-5 h-5 text-doge-violet" />
             </div>
-            <p className="font-display font-bold text-sm">反做空飞轮</p>
-            <p className="text-xs text-gray-500 mt-1">销毁引擎</p>
+            <p className="font-display font-bold text-sm">{t('home.antiShort')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('home.antiShortDesc')}</p>
           </div>
         </div>
       </section>

@@ -83,10 +83,10 @@ const STATUS_MAP: Record<number, string> = {
 }
 
 const STAKE_DURATIONS = [
-  { value: 0, label: '活期', multiplier: '1x' },
-  { value: 1, label: '30天', multiplier: '1.5x' },
-  { value: 2, label: '90天', multiplier: '2x' },
-  { value: 3, label: '180天', multiplier: '3x' },
+  { value: 0, label: 'dao.stakeDurationFlexible', multiplier: '1x' },
+  { value: 1, label: 'dao.stakeDuration30d', multiplier: '1.5x' },
+  { value: 2, label: 'dao.stakeDuration90d', multiplier: '2x' },
+  { value: 3, label: 'dao.stakeDuration180d', multiplier: '3x' },
 ]
 
 interface StakePosition {
@@ -120,6 +120,7 @@ function CandidateDetailCard({
 }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
+  const t = useT()
 
   const { data, isLoading } = useReadContract({
     address: daoAddress,
@@ -270,7 +271,7 @@ function CandidateDetailCard({
               </div>
             )}
             <div>
-              <div className="font-display font-bold text-sm">{Number(candidate.totalWeight).toLocaleString()} 分</div>
+              <div className="font-display font-bold text-sm">{Number(candidate.totalWeight).toLocaleString()} {t('dao.pointsUnit')}</div>
               <div className="text-xs text-gray-500">Weight</div>
             </div>
             {variant === 'active' && candidate.expireTime > 0n && (
@@ -314,14 +315,14 @@ function CandidateDetailCard({
 
           {candidate.wasLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
             <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-              <p className="text-[10px] text-gray-500 mb-0.5">代币合约</p>
+              <p className="text-[10px] text-gray-500 mb-0.5">{t('dao.tokenContract')}</p>
               <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
             </div>
           )}
 
           {!candidate.wasLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
             <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-              <p className="text-[10px] text-gray-500 mb-0.5">提案者</p>
+              <p className="text-[10px] text-gray-500 mb-0.5">{t('dao.proposer')}</p>
               <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
             </div>
           )}
@@ -433,7 +434,6 @@ export default function DaoVote() {
   }, [isConfirmed, lastAction])
 
   const [subBnbAmount, setSubBnbAmount] = useState('')
-  const [subDogeAmount, setSubDogeAmount] = useState('')
   const [voteRightsAmount, setVoteRightsAmount] = useState('')
 
   const { data: activeData, isLoading: loadingActive, error: errorActive, refetch: refetchActive } = useReadContract({
@@ -648,15 +648,15 @@ export default function DaoVote() {
 
   const getDurationLabel = (duration: bigint) => {
     const d = Number(duration)
-    if (d === 0) return '活期'
-    if (d === 1) return '30天'
-    if (d === 2) return '90天'
-    if (d === 3) return '180天'
+    if (d === 0) return t('dao.stakeDurationFlexible')
+    if (d === 1) return t('dao.stakeDuration30d')
+    if (d === 2) return t('dao.stakeDuration90d')
+    if (d === 3) return t('dao.stakeDuration180d')
     const days = Math.floor(d / 86400)
-    if (days === 30) return '30天'
-    if (days === 90) return '90天'
-    if (days === 180) return '180天'
-    return `${days}天`
+    if (days === 30) return t('dao.stakeDuration30d')
+    if (days === 90) return t('dao.stakeDuration90d')
+    if (days === 180) return t('dao.stakeDuration180d')
+    return `${days}${t('dao.daysUnit')}`
   }
 
   const getPositionStatus = (pos: StakePosition): 'withdrawn' | 'withdrawable' | 'locked' => {
@@ -743,7 +743,7 @@ export default function DaoVote() {
     if (selectedCandidate === null) return
     setTxError('')
     if (!subBnbAmount || parseFloat(subBnbAmount) < 1) {
-      setTxError(`认购金额最少 1 ${nativeSymbol}`)
+      setTxError(t('dao.subscribeMinAmount', { symbol: nativeSymbol }))
       return
     }
     try {
@@ -760,45 +760,16 @@ export default function DaoVote() {
     }
   }
 
-  const handleSubscribeDoge = async () => {
-    if (selectedCandidate === null) return
-    setTxError('')
-    if (!subDogeAmount || parseFloat(subDogeAmount) <= 0) {
-      setTxError('请输入认购平台币数量')
-      return
-    }
-    if (!dogeTokenReady) {
-      setTxError('平台币未设置')
-      return
-    }
-    const needed = parseEther(subDogeAmount)
-    if (dogeAllowanceData == null || (dogeAllowanceData as bigint) < needed) {
-      setTxError('请先授权平台币给 DAO 合约')
-      return
-    }
-    try {
-      await doWrite({
-        functionName: 'subscribeDoge',
-        args: [BigInt(selectedCandidate), needed],
-      })
-      setSubDogeAmount('')
-      setTimeout(() => handleRefresh(), 2000)
-    } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
-      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
-    }
-  }
-
   const handleStake = async () => {
     setTxError('')
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
-      setTxError('请输入质押金额')
+      setTxError(t('dao.enterStakeAmount'))
       return
     }
     try {
       if (stakeTokenTab === 'bnb') {
         if (parseFloat(stakeAmount) < 0.1) {
-          setTxError(`${nativeSymbol}质押最少 0.1`)
+          setTxError(t('dao.stakeMinAmount', { symbol: nativeSymbol }))
           return
         }
         await doWrite({
@@ -808,12 +779,12 @@ export default function DaoVote() {
         })
       } else if (stakeTokenTab === 'doge') {
         if (!dogeTokenReady) {
-          setTxError('平台币未设置')
+          setTxError(t('dao.platformTokenNotSet'))
           return
         }
         const needed = parseEther(stakeAmount)
         if (dogeAllowanceData == null || (dogeAllowanceData as bigint) < needed) {
-          setTxError('请先授权平台币给 DAO 合约')
+          setTxError(t('dao.approvePlatformTokenFirst'))
           return
         }
         await doWrite({
@@ -869,7 +840,7 @@ export default function DaoVote() {
     if (selectedCandidate === null) return
     setTxError('')
     if (!voteRightsAmount || parseFloat(voteRightsAmount) <= 0) {
-      setTxError('请输入投票权益数量')
+      setTxError(t('dao.enterVoteRightsAmount'))
       return
     }
     try {
@@ -938,9 +909,9 @@ export default function DaoVote() {
     if (txError === 'RPC_LIMITED') {
       return (
         <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3 space-y-2">
-          <p className="text-xs text-neon-red">钱包RPC节点限速，交易发送失败</p>
+          <p className="text-xs text-neon-red">{t('dao.rpcLimited')}</p>
           <div className="bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-2 space-y-2">
-            <p className="text-xs text-neon-yellow">请手动修改钱包测试网RPC：</p>
+            <p className="text-xs text-neon-yellow">{t('dao.rpcFixHint')}</p>
             <code className="text-xs text-white bg-dark-700 px-2 py-1 rounded select-all block break-all">
               {targetChainId === 97 ? 'https://bsc-testnet.publicnode.com' : 'https://bsc.publicnode.com'}
             </code>
@@ -951,7 +922,7 @@ export default function DaoVote() {
                 if (result === 'success') setTxError('')
               }}
             >
-              一键修复钱包RPC →
+              {t('dao.rpcFixBtn')}
             </button>
           </div>
         </div>
@@ -974,8 +945,8 @@ export default function DaoVote() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <WifiOff className="w-12 h-12 text-gray-500 mb-4" />
-        <p className="text-gray-400 mb-2">合约未部署或网络未连接</p>
-        <p className="text-xs text-gray-500">请先部署合约并连接到正确的网络</p>
+        <p className="text-gray-400 mb-2">{t('dao.contractNotDeployed')}</p>
+        <p className="text-xs text-gray-500">{t('dao.pleaseDeployAndConnect')}</p>
       </div>
     )
   }
@@ -1061,7 +1032,7 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-neon-red/10 flex items-center justify-center mb-4">
                     <AlertCircle className="w-8 h-8 text-neon-red" />
                   </div>
-                  <p className="text-neon-red mb-2">读取合约失败</p>
+                  <p className="text-neon-red mb-2">{t('dao.readContractFailed')}</p>
                   <p className="text-xs text-gray-500 max-w-md">{String(errorActive).slice(0, 200)}</p>
                 </div>
               ) : activeIds.length > 0 ? (
@@ -1209,7 +1180,7 @@ export default function DaoVote() {
                     <>
                       <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
                       <div className="text-sm font-bold text-emerald-400">Settled</div>
-                      <div className="text-xs text-gray-400">UTC 0:00 重置</div>
+                      <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
                     </>
                   ) : (
                     <>
@@ -1240,7 +1211,7 @@ export default function DaoVote() {
                     <>
                       <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
                       <div className="text-sm font-bold text-emerald-400">Launched</div>
-                      <div className="text-xs text-gray-400">UTC 0:00 重置</div>
+                      <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
                     </>
                   ) : (
                     <>
@@ -1260,19 +1231,19 @@ export default function DaoVote() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold flex items-center gap-2">
                 <Zap className="w-5 h-5 text-doge-gold" />
-                认购
+                {t('dao.subscribe')}
               </h3>
             </div>
 
             {selectedCandidate !== null ? (
               <div className="space-y-4">
                 <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3">
-                  <p className="text-xs text-doge-gold font-medium">已选择: 候选代币 #{selectedCandidate + 1}</p>
-                  <p className="text-xs text-gray-400 mt-1">认购BNB/DOGE直接为该代币加权重，发射成功自动兑换代币</p>
+                  <p className="text-xs text-doge-gold font-medium">{t('dao.selectedCandidate', { id: selectedCandidate + 1 })}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('dao.subscribeHint')}</p>
                 </div>
 
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">认购 {nativeSymbol}</label>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('dao.subscribeBnbLabel', { symbol: nativeSymbol })}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -1302,68 +1273,24 @@ export default function DaoVote() {
                     {isWriting || isConfirming ? (
                       <span className="flex items-center justify-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        确认中...
+                        {t('dao.confirming')}
                       </span>
-                    ) : `认购 ${nativeSymbol}`}
+                    ) : t('dao.subscribeBnbBtn', { symbol: nativeSymbol })}
                   </button>
                 </div>
 
-                {dogeTokenReady && (
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">认购 平台币</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={subDogeAmount}
-                        onChange={(e) => setSubDogeAmount(e.target.value)}
-                        placeholder="0"
-                        className="input-dark w-full pr-16"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-doge-cyan font-semibold">DOGE</span>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      {[100, 1000, 5000, 10000].map(v => (
-                        <button
-                          key={v}
-                          onClick={() => setSubDogeAmount(String(v))}
-                          className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-cyan hover:bg-dark-500 transition-colors"
-                        >
-                          {v >= 1000 ? `${v / 1000}K` : v}
-                        </button>
-                      ))}
-                    </div>
-                    {userDogeAllowance < (parseFloat(subDogeAmount) || 0) ? (
-                      <button
-                        className="w-full mt-2 py-2.5 rounded-lg bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 hover:bg-doge-cyan/20 transition-colors font-display font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                        disabled={isApproving || isWriting || isConfirming}
-                        onClick={handleApproveDoge}
-                      >
-                        {isApproving ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />授权中...</span> : '授权认购'}
-                      </button>
-                    ) : (
-                      <button
-                        className="w-full mt-2 py-2.5 rounded-lg bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 hover:bg-doge-cyan/20 transition-colors font-display font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                        disabled={!subDogeAmount || parseFloat(subDogeAmount) <= 0 || isWriting || isConfirming}
-                        onClick={handleSubscribeDoge}
-                      >
-                        {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : '认购 DOGE'}
-                      </button>
-                    )}
-                  </div>
-                )}
-
                 <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                  <p>• 认购{nativeSymbol}满20000 {nativeSymbol} → 触发发射</p>
-                  <p>• 不限认购额度，超额按比例分配代币，多余退还</p>
-                  <p>• 过期未发射 → 可退还认购金额</p>
-                  <p>• 认购1 {nativeSymbol} = 10分权重</p>
+                  <p>• {t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
+                  <p>• {t('dao.subscribeNoLimitHint')}</p>
+                  <p>• {t('dao.expiredRefundHint')}</p>
+                  <p>• {t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
                 </div>
               </div>
             ) : (
               <div className="bg-dark-700 rounded-lg p-4 text-center">
                 <Vote className="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">请在左侧候选列表中选择一个代币</p>
-                <p className="text-xs text-gray-500 mt-1">选择后即可认购</p>
+                <p className="text-sm text-gray-400">{t('dao.selectCandidateFromList')}</p>
+                <p className="text-xs text-gray-500 mt-1">{t('dao.selectThenSubscribe')}</p>
               </div>
             )}
           </div>
@@ -1372,7 +1299,7 @@ export default function DaoVote() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-doge-gold" />
-                质押
+                {t('dao.stakeTitle')}
               </h3>
             </div>
 
@@ -1393,12 +1320,12 @@ export default function DaoVote() {
                 )}
                 onClick={() => { setStakeTokenTab('doge'); setStakeAmount('') }}
               >
-                <Gem className="w-4 h-4" /> {dogeTokenReady ? dogeTokenName : '平台币'}
+                <Gem className="w-4 h-4" /> {dogeTokenReady ? dogeTokenName : t('dao.platformTokenLabel')}
               </button>
             </div>
 
             <div className="mb-4">
-              <label className="text-sm text-gray-400 mb-2 block">期限选择</label>
+              <label className="text-sm text-gray-400 mb-2 block">{t('dao.durationSelect')}</label>
               <div className="grid grid-cols-4 gap-2">
                 {STAKE_DURATIONS.map((d) => (
                   <button
@@ -1411,8 +1338,8 @@ export default function DaoVote() {
                     )}
                     onClick={() => setStakeDuration(d.value)}
                   >
-                    <div>{d.label}</div>
-                    <div className="text-[10px] opacity-70">{d.multiplier}权益</div>
+                    <div>{t(d.label)}</div>
+                    <div className="text-[10px] opacity-70">{d.multiplier}{t('dao.rightsLabel')}</div>
                   </button>
                 ))}
               </div>
@@ -1420,13 +1347,13 @@ export default function DaoVote() {
 
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-xs text-gray-400">全池质押</p>
+                <p className="text-xs text-gray-400">{t('dao.totalPoolStaked')}</p>
                 <p className="font-display font-bold text-doge-gold">
                   {formatUsdc(currentTotalStaked)} {currentTokenLabel}
                 </p>
               </div>
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-xs text-gray-400">钱包余额</p>
+                <p className="text-xs text-gray-400">{t('dao.walletBalance')}</p>
                 <p className="font-display font-bold">
                   {stakeTokenTab === 'bnb' ? '-' : formatUsdc(currentBalance)} {currentTokenLabel}
                 </p>
@@ -1435,13 +1362,13 @@ export default function DaoVote() {
 
             {stakeTokenTab === 'doge' && !dogeTokenReady ? (
               <div className="bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-3">
-                <p className="text-xs text-neon-yellow font-medium">平台币尚未设置</p>
-                <p className="text-xs text-gray-400 mt-1">第一个代币发射后自动成为平台币</p>
+                <p className="text-xs text-neon-yellow font-medium">{t('dao.platformTokenNotSetUp')}</p>
+                <p className="text-xs text-gray-400 mt-1">{t('dao.firstLaunchBecomesPlatform')}</p>
               </div>
             ) : (
               <>
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">质押金额</label>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('dao.stakeAmountLabel')}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -1491,7 +1418,7 @@ export default function DaoVote() {
                       disabled={isApproving || isWriting || isConfirming}
                       onClick={handleApproveDoge}
                     >
-                      {isApproving ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />授权中...</span> : `授权${currentTokenLabel}`}
+                      {isApproving ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t('dao.approving')}</span> : t('dao.approveAndStake', { label: currentTokenLabel })}
                     </button>
                   ) : (
                     <button
@@ -1500,8 +1427,8 @@ export default function DaoVote() {
                       onClick={handleStake}
                     >
                       {isWriting || isConfirming ? (
-                        <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span>
-                      ) : `质押 ${currentTokenLabel}`}
+                        <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t('dao.confirming')}</span>
+                      ) : t('dao.stakeBtn', { label: currentTokenLabel })}
                     </button>
                   )}
                   <button
@@ -1514,7 +1441,7 @@ export default function DaoVote() {
                     onClick={() => setShowUnstakePanel(!showUnstakePanel)}
                   >
                     <span className="flex items-center gap-1.5">
-                      解押
+                      {t('dao.unstakeBtn')}
                       {showUnstakePanel ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </span>
                   </button>
@@ -1526,11 +1453,11 @@ export default function DaoVote() {
               <div className="mt-4 border-t border-dark-500/30 pt-4">
                 <h4 className="text-sm font-display font-bold mb-3 flex items-center gap-2">
                   <ArrowDownToLine className="w-4 h-4 text-neon-green" />
-                  我的质押仓位
+                  {t('dao.myStakePositions')}
                 </h4>
                 {stakePositions.length === 0 ? (
                   <div className="bg-dark-700 rounded-lg p-4 text-center">
-                    <p className="text-xs text-gray-500">暂无质押仓位</p>
+                    <p className="text-xs text-gray-500">{t('dao.noStakePositions')}</p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -1568,14 +1495,14 @@ export default function DaoVote() {
                                 ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
                                 : 'bg-doge-gold/10 text-doge-gold border border-doge-gold/30'
                             )}>
-                              {status === 'withdrawn' ? '已提取' : status === 'withdrawable' ? '可提取' : '锁定中'}
+                              {status === 'withdrawn' ? t('dao.stakeWithdrawn') : status === 'withdrawable' ? t('dao.stakeWithdrawable') : t('dao.stakeLocked')}
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-xs text-gray-500">
                             <div className="flex items-center gap-3">
-                              <span>开始: {formatDate(Number(pos.startTime))}</span>
+                              <span>{t('dao.startTime')}: {formatDate(Number(pos.startTime))}</span>
                               {Number(pos.duration) > 0 && (
-                                <span>到期: {formatDate(Number(pos.maturityTime))}</span>
+                                <span>{t('dao.maturityTime')}: {formatDate(Number(pos.maturityTime))}</span>
                               )}
                             </div>
                             {status === 'withdrawable' && (
@@ -1584,7 +1511,7 @@ export default function DaoVote() {
                                 disabled={isWriting || isConfirming}
                                 onClick={() => handleUnstakePosition(pos.id)}
                               >
-                                {isWriting || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : '提取'}
+                                {isWriting || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : t('dao.withdrawBtn')}
                               </button>
                             )}
                           </div>
@@ -1597,27 +1524,27 @@ export default function DaoVote() {
             )}
 
             <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 mt-4">
-              <p className="text-xs text-doge-gold font-medium">质押权益</p>
-              <p className="text-xs text-gray-400 mt-1">0.1 {nativeSymbol}活期每8小时=1分，期限越长倍率越高，超500分收敛</p>
+              <p className="text-xs text-doge-gold font-medium">{t('dao.stakeRights')}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('dao.stakeRightsHint', { symbol: nativeSymbol })}</p>
             </div>
           </div>
 
           <div className="card-dark">
             <h3 className="font-display font-bold mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-doge-gold" />
-              权益
+              {t('dao.rightsTitle')}
             </h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">总有效权益</p>
-                  <p className="font-display font-bold text-doge-gold">{totalEffectiveRights.toLocaleString()} 分</p>
-                  <p className="text-[10px] text-gray-500">含待领取 · 可投票</p>
+                  <p className="text-xs text-gray-400">{t('dao.totalEffectiveRights')}</p>
+                  <p className="font-display font-bold text-doge-gold">{totalEffectiveRights.toLocaleString()} {t('dao.pointsUnit')}</p>
+                  <p className="text-[10px] text-gray-500">{t('dao.includesPendingVoteable')}</p>
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">已领取可用</p>
-                  <p className="font-display font-bold text-neon-green">{effectiveRights.toLocaleString()} 分</p>
-                  <p className="text-[10px] text-gray-500">原始 {rawRights.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">{t('dao.claimedAvailable')}</p>
+                  <p className="font-display font-bold text-neon-green">{effectiveRights.toLocaleString()} {t('dao.pointsUnit')}</p>
+                  <p className="text-[10px] text-gray-500">{t('dao.rawLabel')} {rawRights.toLocaleString()}</p>
                 </div>
               </div>
 
@@ -1627,13 +1554,13 @@ export default function DaoVote() {
                   disabled={isWriting || isConfirming}
                   onClick={handleClaimRights}
                 >
-                  {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : `领取权益 (+${pendingRights.toLocaleString()} 分)`}
+                  {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t('dao.confirming')}</span> : t('dao.claimRightsBtn', { amount: pendingRights.toLocaleString() })}
                 </button>
               )}
 
               {effectiveRights > 0 && (
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">用权益投票</label>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('dao.voteWithRightsLabel')}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -1642,7 +1569,7 @@ export default function DaoVote() {
                       placeholder="0"
                       className="input-dark w-full pr-14"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">分</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">{t('dao.pointsUnit')}</span>
                   </div>
                   <div className="flex gap-2 mt-2">
                     {[0.25, 0.5, 0.75, 1].map(ratio => (
@@ -1660,16 +1587,16 @@ export default function DaoVote() {
                     disabled={selectedCandidate === null || !voteRightsAmount || parseFloat(voteRightsAmount) <= 0 || isWriting || isConfirming}
                     onClick={handleVoteWithRights}
                   >
-                    {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />确认中...</span> : selectedCandidate !== null ? `投票给 #${selectedCandidate + 1}` : '请先选择候选'}
+                    {isWriting || isConfirming ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t('dao.confirming')}</span> : selectedCandidate !== null ? t('dao.voteForCandidate', { id: selectedCandidate + 1 }) : t('dao.selectCandidateFirst')}
                   </button>
                 </div>
               )}
 
               <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                <p>• 0.1 {nativeSymbol} 活期质押每8小时 = 1分权益</p>
-                <p>• 活期1x / 30天1.5x / 90天2x / 180天3x</p>
-                <p>• 超500分开始收敛，单钱包最高1000分</p>
-                <p>• 认购1 {nativeSymbol} = 10分权重，超额按比例退还本金</p>
+                <p>• {t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
+                <p>• {t('dao.durationMultiplierHint')}</p>
+                <p>• {t('dao.rightsCapHint')}</p>
+                <p>• {t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
               </div>
             </div>
           </div>

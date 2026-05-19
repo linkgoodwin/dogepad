@@ -130,9 +130,9 @@ export default function LendDetail() {
           <div className="w-20 h-20 rounded-2xl bg-dark-700 flex items-center justify-center mb-6">
             <SearchX className="w-10 h-10 text-gray-500" />
           </div>
-          <h2 className="font-display font-bold text-2xl mb-2">Asset Not Found</h2>
-          <p className="text-gray-400 mb-6">This lending asset does not exist or has not been created yet.</p>
-          <Link to="/lend" className="btn-primary">Back to Lend Market</Link>
+          <h2 className="font-display font-bold text-2xl mb-2">{t('lendDetail.assetNotFound')}</h2>
+          <p className="text-gray-400 mb-6">{t('lendDetail.assetNotFoundDesc')}</p>
+          <Link to="/lend" className="btn-primary">{t('lendDetail.backToLend')}</Link>
         </div>
       </div>
     )
@@ -150,8 +150,8 @@ export default function LendDetail() {
           B
         </div>
         <div>
-          <h1 className="font-display font-bold text-3xl">{nativeSymbol} Lending Pool</h1>
-          <p className="text-gray-400 font-mono text-sm">LongPool</p>
+          <h1 className="font-display font-bold text-3xl">{nativeSymbol} {t('lendDetail.lendingPool')}</h1>
+          <p className="text-gray-400 font-mono text-sm">{t('lendDetail.longPoolLabel')}</p>
         </div>
       </div>
 
@@ -178,22 +178,22 @@ export default function LendDetail() {
 
           {isConnected && (userDeposit > 0 || userBorrowPrincipal > 0) && (
             <div className="card-dark">
-              <h3 className="font-display font-semibold mb-3">Your Position</h3>
+              <h3 className="font-display font-semibold mb-3">{t('lendDetail.yourPosition')}</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">Deposited</p>
+                  <p className="text-xs text-gray-400">{t('lendDetail.deposited')}</p>
                   <p className="font-display font-bold text-neon-green">{formatUsdc(userDeposit)} {nativeSymbol}</p>
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">Pending Yield</p>
+                  <p className="text-xs text-gray-400">{t('lendDetail.pendingYield')}</p>
                   <p className="font-display font-bold text-neon-green">{formatUsdc(userPendingYield)} {nativeSymbol}</p>
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">Borrowed</p>
+                  <p className="text-xs text-gray-400">{t('lendDetail.borrowed')}</p>
                   <p className="font-display font-bold text-neon-red">{formatUsdc(userBorrowPrincipal)} {nativeSymbol}</p>
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">LTV</p>
+                  <p className="text-xs text-gray-400">{t('lendDetail.ltv')}</p>
                   <p className={cn('font-display font-bold', userLTV > 75 ? 'text-neon-red' : 'text-white')}>{userLTV.toFixed(2)}%</p>
                 </div>
               </div>
@@ -228,19 +228,19 @@ export default function LendDetail() {
             </p>
             <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">Base Rate</p>
+                <p className="text-gray-400 text-xs">{t('lendDetail.baseRate')}</p>
                 <p className="font-display font-semibold">{calculateExponentialRate(0).toFixed(2)}%</p>
               </div>
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">Optimal Rate</p>
+                <p className="text-gray-400 text-xs">{t('lendDetail.optimalRate')}</p>
                 <p className="font-display font-semibold">{calculateExponentialRate(80).toFixed(2)}%</p>
               </div>
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">At 50% Util</p>
+                <p className="text-gray-400 text-xs">{t('lendDetail.at50Util')}</p>
                 <p className="font-display font-semibold">{calculateExponentialRate(50).toFixed(2)}%</p>
               </div>
               <div className="bg-dark-700 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">At 95% Util</p>
+                <p className="text-gray-400 text-xs">{t('lendDetail.at95Util')}</p>
                 <p className="font-display font-semibold text-neon-red">{calculateExponentialRate(95).toFixed(2)}%</p>
               </div>
             </div>
@@ -285,11 +285,11 @@ export default function LendDetail() {
                 <div className="bg-dark-700 rounded-lg p-3">
                   <p className="text-xs text-gray-400 mb-1">{t('lendDetail.dailyEarnings')}</p>
                   <p className="font-display font-bold text-lg text-neon-green">{estimatedEarnings} {nativeSymbol}</p>
-                  <p className="text-xs text-gray-400 mt-1">APY: {depositAPY.toFixed(2)}%</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('lendDetail.apyLabel', { value: depositAPY.toFixed(2) })}</p>
                 </div>
                 {isConfirmed && (
                   <div className="bg-neon-green/10 border border-neon-green/30 rounded-lg p-3 text-xs text-neon-green">
-                    Deposit successful!
+                    {t('lendDetail.depositSuccess')}
                   </div>
                 )}
                 <button
@@ -298,7 +298,7 @@ export default function LendDetail() {
                   disabled={isWritePending || isConfirming || !depositAmount || Number(depositAmount) <= 0}
                 >
                   {isWritePending || isConfirming ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Confirming...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
                   ) : (
                     <><ArrowDownToLine className="w-4 h-4" /> {t('lendDetail.deposit')} {nativeSymbol}</>
                   )}
@@ -308,8 +308,8 @@ export default function LendDetail() {
               <div className="space-y-4">
                 <div className="bg-dark-700 rounded-lg p-6 text-center">
                   <ArrowUpFromLine className="w-8 h-8 text-gray-500 mx-auto mb-3" />
-                  <p className="font-display font-semibold text-gray-400 mb-1">Coming soon</p>
-                  <p className="text-xs text-gray-500">Borrowing requires ShortPool integration</p>
+                  <p className="font-display font-semibold text-gray-400 mb-1">{t('lendDetail.comingSoon')}</p>
+                  <p className="text-xs text-gray-500">{t('lendDetail.comingSoonDesc')}</p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.collateralAmount')}</label>
