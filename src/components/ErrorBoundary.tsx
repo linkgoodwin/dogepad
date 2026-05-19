@@ -51,7 +51,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                   window.location.reload();
                 }}
               >
-                重新加载
+                Reload
               </button>
             </div>
           </div>

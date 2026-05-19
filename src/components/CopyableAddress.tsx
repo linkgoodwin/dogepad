@@ -46,7 +46,7 @@ export default function CopyableAddress({
       <button
         onClick={handleCopy}
         className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"
-        title="复制地址"
+        title="Copy address"
       >
         {copied ? (
           <Check className="w-3 h-3 text-emerald-400" />

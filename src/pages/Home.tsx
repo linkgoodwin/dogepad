@@ -86,7 +86,7 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-display font-semibold text-white truncate">{candidate.name}</span>
-            <span className="text-xs text-gray-500">{candidate.symbol}doge</span>
+            <span className="text-xs text-gray-500">{candidate.symbol}</span>
           </div>
           <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', isLaunched ? 'bg-doge-gold/10 text-doge-gold border border-doge-gold/20' : 'bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/20')}>
             {isLaunched ? 'Launched' : 'Voting'}

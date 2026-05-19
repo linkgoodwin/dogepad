@@ -321,6 +321,21 @@ export default function TokenDetail() {
     staleTime: 30_000,
   })
 
+  const volume24h = useMemo(() => {
+    if (!trades || trades.length === 0) return 0
+    return trades.reduce((sum, trade) => sum + Number(formatEther(trade.bnbAmount)), 0)
+  }, [trades])
+
+  const priceChange24h = useMemo(() => {
+    if (!trades || trades.length < 2) return { change: 0, percent: 0 }
+    const oldestPrice = Number(formatEther(trades[trades.length - 1].bnbAmount)) / Number(formatEther(trades[trades.length - 1].tokenAmount))
+    const newestPrice = Number(formatEther(trades[0].bnbAmount)) / Number(formatEther(trades[0].tokenAmount))
+    if (oldestPrice === 0) return { change: 0, percent: 0 }
+    const change = newestPrice - oldestPrice
+    const percent = (change / oldestPrice) * 100
+    return { change, percent }
+  }, [trades])
+
   const { data: holders } = useQuery({
     queryKey: ['holders', tokenAddress, chainId],
     queryFn: async () => {
@@ -502,6 +517,11 @@ export default function TokenDetail() {
             <div className="flex items-end gap-4 mb-6">
               <span className="font-display font-bold text-4xl neon-text">{formatBnb(pricePerToken)}</span>
               <span className="text-gray-400 text-lg mb-1">{nativeSymbol}</span>
+              {priceChange24h.percent !== 0 && (
+                <span className={cn('text-sm font-semibold mb-1.5', priceChange24h.percent >= 0 ? 'text-neon-green' : 'text-neon-red')}>
+                  {priceChange24h.percent >= 0 ? '+' : ''}{priceChange24h.percent.toFixed(2)}%
+                </span>
+              )}
             </div>
 
             <PriceChart trades={trades ? [...trades].reverse() : []} />
@@ -594,7 +614,7 @@ export default function TokenDetail() {
                         </td>
                         <td className="py-2 px-2 font-mono text-xs">
                           <a href={getBscScanUrl(chainId, 'address', trade.address)} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-doge-gold transition-colors">
-                            {trade.address.slice(0, 6)}...{trade.address.slice(-4)}
+                            {String(trade.address ?? '').slice(0, 6)}...{String(trade.address ?? '').slice(-4)}
                           </a>
                         </td>
                         <td className="py-2 px-2 text-right font-mono text-xs">{formatUsdc(Number(formatEther(trade.bnbAmount)))}</td>
@@ -637,7 +657,7 @@ export default function TokenDetail() {
                           <td className="py-2 px-2 text-gray-500">{i + 1}</td>
                           <td className="py-2 px-2 font-mono text-xs">
                             <a href={getBscScanUrl(chainId, 'address', holder.address)} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-doge-gold transition-colors">
-                              {holder.address.slice(0, 6)}...{holder.address.slice(-4)}
+                              {String(holder.address ?? '').slice(0, 6)}...{String(holder.address ?? '').slice(-4)}
                             </a>
                           </td>
                           <td className="py-2 px-2 text-right font-mono text-xs">{Number(formatEther(holder.balance)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
@@ -677,8 +697,8 @@ export default function TokenDetail() {
 
             {isListed ? (
               <div className="text-center py-6">
-                <p className="text-neon-green font-display font-semibold mb-2">✅ Listed on Uniswap</p>
-                <p className="text-gray-400 text-sm">This token is now trading on DEX. Use Uniswap to trade.</p>
+                <p className="text-neon-green font-display font-semibold mb-2">✅ Listed on DEX</p>
+                <p className="text-gray-400 text-sm">This token is now trading on DEX. Use the DEX to trade.</p>
                 <a
                   href={getBscScanUrl(chainId, 'token', tokenAddress)}
                   target="_blank"
@@ -838,7 +858,7 @@ export default function TokenDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">{t('tokenDetail.24hVolume')}</span>
-                <span className="font-medium">--</span>
+                <span className="font-medium">{volume24h > 0 ? `${formatUsdc(volume24h)} ${nativeSymbol}` : '--'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">{t('tokenDetail.holders')}</span>
