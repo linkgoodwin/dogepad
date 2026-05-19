@@ -146,11 +146,12 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     uint256 public defaultDexThreshold = 20000 ether;
     bool public daoOnlyLaunch = false;
 
-    uint256 public lpRatio = 82;
-    uint256 public longPoolRatio = 8;
-    uint256 public shortPoolTokenRatio = 8;
-    uint256 public burnEngineRatio = 5;
+    uint256 public lpBnbRatio = 70;
+    uint256 public longPoolRatio = 25;
+    uint256 public shortPoolTokenRatio = 30;
+    uint256 public burnEngineRatio = 0;
     uint256 public platformRatio = 5;
+    uint256 public lpTokenRatio = 60;
 
     uint256 public maturityThreshold = 100 ether;
     mapping(address => bool) public isMatureOverride;
@@ -492,7 +493,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         uint256 creatorLpBps = (count > 0 && ci.wantLpShare) ? (BASE_LP_SHARE_BPS * multiplier) / 10000 : 0;
         uint256 creatorTokens = (totalTokens * creatorTokenBps) / 10000;
 
-        uint256 lpTokens = (totalTokens * lpRatio) / 100;
+        uint256 lpTokens = (totalTokens * lpTokenRatio) / 100;
         uint256 shortPoolTokens = (totalTokens * shortPoolTokenRatio) / 100;
 
         info.reserveBnb = 0;
@@ -517,7 +518,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
     function longPoolBnbAmt(uint256 totalBnb) internal view returns (uint256) {
         uint256 base = (totalBnb * longPoolRatio) / 100;
-        uint256 accounted = (totalBnb * (lpRatio + longPoolRatio + burnEngineRatio + platformRatio)) / 100;
+        uint256 accounted = (totalBnb * (lpBnbRatio + longPoolRatio + burnEngineRatio + platformRatio)) / 100;
         if (accounted < totalBnb) {
             base += totalBnb - accounted;
         }
@@ -533,7 +534,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     }
 
     function _addLiquidityAndDistribute(DexListingParams memory p) internal {
-        uint256 lpBnb = (p.totalBnb * lpRatio) / 100;
+        uint256 lpBnb = (p.totalBnb * lpBnbRatio) / 100;
 
         BondingCurveToken(p.token).setSkipHoldingLimit(true);
 
@@ -650,19 +651,21 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     }
 
     function setRatios(
-        uint256 _lp,
+        uint256 _lpBnb,
         uint256 _long,
         uint256 _shortToken,
         uint256 _burnEngine,
-        uint256 _platform
+        uint256 _platform,
+        uint256 _lpToken
     ) external onlyOwner {
-        if (_lp + _long + _burnEngine + _platform != 100) revert BnbRatiosInvalid();
-        if (_lp + _shortToken > 100) revert TokenRatiosInvalid();
-        lpRatio = _lp;
+        if (_lpBnb + _long + _burnEngine + _platform != 100) revert BnbRatiosInvalid();
+        if (_lpToken + _shortToken > 100) revert TokenRatiosInvalid();
+        lpBnbRatio = _lpBnb;
         longPoolRatio = _long;
         shortPoolTokenRatio = _shortToken;
         burnEngineRatio = _burnEngine;
         platformRatio = _platform;
+        lpTokenRatio = _lpToken;
     }
 
     function setCreationFee(uint256 _fee) external onlyOwner {

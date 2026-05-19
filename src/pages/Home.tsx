@@ -279,7 +279,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: '联合曲线交易',
-    desc: '82% LP + 8% 做多池 + 5% 销毁引擎 + 5% 平台，做多做空双向获利',
+    desc: '70% USDC配30%代币组LP + 25%做多池 + 5%平台，做多做空双向获利',
     color: 'text-neon-green',
     bg: 'bg-neon-green/10',
     border: 'border-neon-green/20',

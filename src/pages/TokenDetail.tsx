@@ -523,15 +523,11 @@ export default function TokenDetail() {
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-green inline-block" />{t('tokenDetail.distLp')}</span>
-                    <span className="font-semibold text-neon-green">82% {nativeSymbol} + 82% {t('tokenDetail.tokens')}</span>
+                    <span className="font-semibold text-neon-green">70% {nativeSymbol} + 30% {t('tokenDetail.tokens')}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-cyan inline-block" />{t('tokenDetail.distLongPool')}</span>
-                    <span className="font-semibold text-doge-cyan">8% {nativeSymbol}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-red inline-block" />{t('tokenDetail.distBurn')}</span>
-                    <span className="font-semibold text-neon-red">5% {nativeSymbol}</span>
+                    <span className="font-semibold text-doge-cyan">25% {nativeSymbol}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-gold inline-block" />{t('tokenDetail.distPlatform')}</span>
@@ -539,7 +535,7 @@ export default function TokenDetail() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-violet inline-block" />{t('tokenDetail.distShortPool')}</span>
-                    <span className="font-semibold text-doge-violet">8% {t('tokenDetail.tokens')}</span>
+                    <span className="font-semibold text-doge-violet">15% {t('tokenDetail.tokens')}</span>
                   </div>
                 </div>
               </div>
