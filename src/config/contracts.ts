@@ -414,7 +414,10 @@ export const BONDING_CURVE_ABI = [
     type: 'function',
   },
   {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'bnbAmount', type: 'uint256' },
+    ],
     name: 'getBuyPrice',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',

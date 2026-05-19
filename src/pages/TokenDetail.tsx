@@ -9,6 +9,7 @@ import { useTargetChainId } from '@/hooks/useNetwork'
 import { useTradeStore } from '@/stores/tradeStore'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import CopyableAddress from '@/components/CopyableAddress'
+import PriceChart from '@/components/PriceChart'
 import { useT } from '@/i18n/useT'
 
 const ERC20_ABI = [
@@ -174,11 +175,20 @@ export default function TokenDetail() {
     query: { enabled: contractReady },
   })
 
+  const buyBnbAmount = useMemo(() => {
+    if (!buyAmount || Number(buyAmount) <= 0) return parseEther('1')
+    try {
+      return parseEther(buyAmount)
+    } catch {
+      return parseEther('1')
+    }
+  }, [buyAmount])
+
   const { data: buyPriceData, refetch: refetchBuyPrice } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'getBuyPrice',
-    args: [tokenAddress],
+    args: [tokenAddress, buyBnbAmount],
     chainId,
     query: { enabled: contractReady },
   })
@@ -230,14 +240,9 @@ export default function TokenDetail() {
   }, [isConfirmed, refetchTokenInfo, refetchBuyPrice, refetchSellPrice, refetchBalance, refetchAllowance])
 
   const estimatedTokens = useMemo(() => {
-    if (!buyAmount || !buyPriceData || buyPriceData === BigInt(0)) return BigInt(0)
-    try {
-      const bnbWei = parseEther(buyAmount)
-      return (bnbWei * buyPriceData) / parseEther('1')
-    } catch {
-      return BigInt(0)
-    }
-  }, [buyAmount, buyPriceData])
+    if (!buyPriceData) return BigInt(0)
+    return buyPriceData
+  }, [buyPriceData])
 
   const estimatedBnb = useMemo(() => {
     if (!sellPriceData) return BigInt(0)
@@ -248,16 +253,33 @@ export default function TokenDetail() {
   const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20000
   const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
+  const { data: basePriceData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getBuyPrice',
+    args: [tokenAddress, parseEther('1')],
+    chainId,
+    query: { enabled: contractReady },
+  })
+
+  const basePricePerToken = useMemo(() => {
+    if (!basePriceData || basePriceData === BigInt(0)) return 0
+    const tokensPerUsdc = Number(formatEther(basePriceData))
+    if (tokensPerUsdc === 0) return 0
+    return 1 / tokensPerUsdc
+  }, [basePriceData])
+
   const pricePerToken = useMemo(() => {
-    if (!buyPriceData || buyPriceData === BigInt(0)) return 0
+    if (!buyAmount || Number(buyAmount) <= 0 || !estimatedTokens || estimatedTokens === BigInt(0)) return basePricePerToken
     try {
-      const tokensPerBnb = Number(formatEther(buyPriceData))
-      if (tokensPerBnb === 0) return 0
-      return 1 / tokensPerBnb
+      const usdcVal = Number(buyAmount)
+      const tokensVal = Number(formatEther(estimatedTokens))
+      if (tokensVal === 0) return basePricePerToken
+      return usdcVal / tokensVal
     } catch {
-      return 0
+      return basePricePerToken
     }
-  }, [buyPriceData])
+  }, [buyAmount, estimatedTokens, basePricePerToken])
 
   const marketCap = useMemo(() => {
     if (!tokenData || pricePerToken === 0) return 0
@@ -482,9 +504,7 @@ export default function TokenDetail() {
               <span className="text-gray-400 text-lg mb-1">{nativeSymbol}</span>
             </div>
 
-            <div className="bg-dark-700/50 rounded-lg p-6 text-center">
-              <p className="text-gray-400 text-sm">Price chart requires event indexing — coming soon</p>
-            </div>
+            <PriceChart trades={trades ? [...trades].reverse() : []} />
           </div>
 
           <div className="card-dark">
@@ -530,12 +550,12 @@ export default function TokenDetail() {
                     <span className="font-semibold text-doge-cyan">25% {nativeSymbol}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-gold inline-block" />{t('tokenDetail.distPlatform')}</span>
-                    <span className="font-semibold text-doge-gold">5% {nativeSymbol}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-violet inline-block" />{t('tokenDetail.distShortPool')}</span>
                     <span className="font-semibold text-doge-violet">15% {t('tokenDetail.tokens')}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-gold inline-block" />{t('tokenDetail.distPlatform')}</span>
+                    <span className="font-semibold text-doge-gold">5% {nativeSymbol}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-red inline-block" />{t('tokenDetail.distBurn')}</span>
