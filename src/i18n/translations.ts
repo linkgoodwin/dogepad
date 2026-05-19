@@ -219,7 +219,7 @@ export const zhTranslations: TranslationKeys = {
   'tokenDetail.distribution': '发射分配比例',
   'tokenDetail.distLp': 'LP 流动性池',
   'tokenDetail.distLongPool': '做多池',
-  'tokenDetail.distBurn': '销毁引擎',
+  'tokenDetail.distBurn': '开发/销毁',
   'tokenDetail.distPlatform': '平台',
   'tokenDetail.distShortPool': '做空池',
   'tokenDetail.tokens': '代币',
