@@ -95,6 +95,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 launchedDogeUsed;
         uint256 launchedExcessDoge;
         uint256 queueTime;
+        bool wantTaxShare;
+        bool wantLpShare;
+        bool wantTokenAllocation;
     }
 
     struct Subscription {
@@ -383,12 +386,16 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         string calldata name,
         string calldata symbol,
         string calldata metadataURI,
-        DurationTier tier
+        DurationTier tier,
+        bool _wantTaxShare,
+        bool _wantLpShare,
+        bool _wantTokenAllocation
     ) external payable nonReentrant {
         uint256 fee = getTierFee(tier);
         if (msg.value < fee) revert InsufficientFee();
         require(bytes(name).length > 0 && bytes(name).length <= 64, "invalid name");
         require(bytes(symbol).length >= 1 && bytes(symbol).length <= 11, "invalid symbol");
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
 
         _tryAdvanceDay();
 
@@ -420,18 +427,22 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             launchedExcessBnb: 0,
             launchedDogeUsed: 0,
             launchedExcessDoge: 0,
-            queueTime: 0
+            queueTime: 0,
+            wantTaxShare: _wantTaxShare,
+            wantLpShare: _wantLpShare,
+            wantTokenAllocation: _wantTokenAllocation
         }));
         activeCandidateIds.push(candidates.length - 1);
 
         emit CandidateSubmitted(candidates.length - 1, msg.sender, name, symbol, tier);
     }
 
-    function renewCandidate(uint256 candidateId, DurationTier tier) external payable nonReentrant {
+    function renewCandidate(uint256 candidateId, DurationTier tier, bool _wantTaxShare, bool _wantLpShare, bool _wantTokenAllocation) external payable nonReentrant {
         if (candidateId >= candidates.length) revert CandidateNotActive();
         Candidate storage c = candidates[candidateId];
         if (c.proposer != msg.sender) revert NotProposer();
         if (c.status != CandidateStatus.GracePeriod) revert NotInGracePeriod();
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
 
         uint256 fee = getTierFee(tier);
         if (msg.value < fee) revert InsufficientFee();
@@ -446,6 +457,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.expireTime = block.timestamp + duration;
         c.gracePeriodEnd = block.timestamp + duration + duration;
         c.status = CandidateStatus.Active;
+        c.wantTaxShare = _wantTaxShare;
+        c.wantLpShare = _wantLpShare;
+        c.wantTokenAllocation = _wantTokenAllocation;
 
         if (!_isInActiveList(candidateId)) {
             activeCandidateIds.push(candidateId);
@@ -454,10 +468,11 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         emit CandidateRenewed(candidateId, msg.sender, tier);
     }
 
-    function claimRecycled(uint256 candidateId, DurationTier tier) external payable nonReentrant {
+    function claimRecycled(uint256 candidateId, DurationTier tier, bool _wantTaxShare, bool _wantLpShare, bool _wantTokenAllocation) external payable nonReentrant {
         if (candidateId >= candidates.length) revert CandidateNotActive();
         Candidate storage c = candidates[candidateId];
         if (c.status != CandidateStatus.Recyclable) revert NotRecyclable();
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
 
         uint256 fee = getTierFee(tier);
         if (msg.value < fee) revert InsufficientFee();
@@ -478,6 +493,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.totalSubDoge = 0;
         c.totalRightsVotes = 0;
         c.status = CandidateStatus.Active;
+        c.wantTaxShare = _wantTaxShare;
+        c.wantLpShare = _wantLpShare;
+        c.wantTokenAllocation = _wantTokenAllocation;
 
         if (!_isInActiveList(candidateId)) {
             activeCandidateIds.push(candidateId);
@@ -555,9 +573,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             c.metadataURI,
             address(this),
             0,
-            defaultWantTaxShare,
-            defaultWantLpShare,
-            defaultWantTokenAllocation
+            c.wantTaxShare,
+            c.wantLpShare,
+            c.wantTokenAllocation
         );
 
         IBondingCurveTokenExclude(token).excludeFromTax(address(this));

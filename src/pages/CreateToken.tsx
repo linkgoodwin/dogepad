@@ -36,6 +36,9 @@ export default function CreateToken() {
   const [aboutCoin, setAboutCoin] = useState('')
   const [description, setDescription] = useState('')
   const [selectedTier, setSelectedTier] = useState(1)
+  const [wantTaxShare, setWantTaxShare] = useState(true)
+  const [wantLpShare, setWantLpShare] = useState(true)
+  const [wantTokenAllocation, setWantTokenAllocation] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
@@ -114,7 +117,7 @@ export default function CreateToken() {
         address: daoAddress,
         abi: LAUNCH_DAO_ABI,
         functionName: 'submitCandidate',
-        args: [name, symbol, metadataURI, selectedTier],
+        args: [name, symbol, metadataURI, selectedTier, wantTaxShare, wantLpShare, wantTokenAllocation],
         value: feeWei,
         chainId,
         gas: 5_000_000n,
@@ -195,6 +198,55 @@ export default function CreateToken() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 text-sm mb-2">
+                <Info className="w-4 h-4 text-doge-cyan" />
+                <span className="font-semibold text-white">{t('create.creatorIncentives')}</span>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{t('create.creatorIncentivesDesc')}</p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className={cn(
+                    'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                    wantTaxShare ? 'border-doge-gold bg-doge-gold/20' : 'border-dark-400 bg-dark-700'
+                  )} onClick={() => setWantTaxShare(!wantTaxShare)}>
+                    {wantTaxShare && <CheckCircle className="w-3.5 h-3.5 text-doge-gold" />}
+                  </div>
+                  <div>
+                    <span className="text-sm text-white group-hover:text-doge-gold transition-colors">{t('create.wantTaxShare')}</span>
+                    <p className="text-[10px] text-gray-500">{t('create.wantTaxShareDesc')}</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className={cn(
+                    'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                    wantLpShare ? 'border-doge-gold bg-doge-gold/20' : 'border-dark-400 bg-dark-700'
+                  )} onClick={() => setWantLpShare(!wantLpShare)}>
+                    {wantLpShare && <CheckCircle className="w-3.5 h-3.5 text-doge-gold" />}
+                  </div>
+                  <div>
+                    <span className="text-sm text-white group-hover:text-doge-gold transition-colors">{t('create.wantLpShare')}</span>
+                    <p className="text-[10px] text-gray-500">{t('create.wantLpShareDesc')}</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className={cn(
+                    'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
+                    wantTokenAllocation ? 'border-doge-gold bg-doge-gold/20' : 'border-dark-400 bg-dark-700'
+                  )} onClick={() => setWantTokenAllocation(!wantTokenAllocation)}>
+                    {wantTokenAllocation && <CheckCircle className="w-3.5 h-3.5 text-doge-gold" />}
+                  </div>
+                  <div>
+                    <span className="text-sm text-white group-hover:text-doge-gold transition-colors">{t('create.wantTokenAllocation')}</span>
+                    <p className="text-[10px] text-gray-500">{t('create.wantTokenAllocationDesc')}</p>
+                  </div>
+                </label>
+              </div>
+              {!(wantTaxShare || wantLpShare || wantTokenAllocation) && (
+                <p className="text-xs text-neon-red mt-2">{t('create.incentiveRequired')}</p>
+              )}
             </div>
           </div>
 
@@ -354,7 +406,7 @@ export default function CreateToken() {
               <p className="text-xs text-gray-400 mt-1">{t('create.connectWalletDesc')}</p>
             </div>
           ) : (
-            <button className="btn-primary w-full" disabled={!name || !symbol || uploading || isContractNotDeployed} onClick={handleSubmit}>
+            <button className="btn-primary w-full" disabled={!name || !symbol || uploading || isContractNotDeployed || !(wantTaxShare || wantLpShare || wantTokenAllocation)} onClick={handleSubmit}>
               {isContractNotDeployed ? (
                 t('create.contractNotDeployed')
               ) : uploading ? (
@@ -398,6 +450,16 @@ export default function CreateToken() {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">{t('create.durationTier')}</span>
                       <span className="font-semibold">{selectedTierInfo.label}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">{t('create.creatorIncentives')}</span>
+                      <span className="font-semibold text-doge-gold text-xs">
+                        {[
+                          wantTaxShare && t('create.wantTaxShare'),
+                          wantLpShare && t('create.wantLpShare'),
+                          wantTokenAllocation && t('create.wantTokenAllocation'),
+                        ].filter(Boolean).join(' / ')}
+                      </span>
                     </div>
                   </div>
 
