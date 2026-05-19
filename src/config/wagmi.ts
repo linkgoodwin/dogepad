@@ -55,7 +55,7 @@ export const arcTestnet: Chain = defineChain({
   nativeCurrency: {
     name: 'USDC',
     symbol: 'USDC',
-    decimals: 6,
+    decimals: 18,
   },
   rpcUrls: {
     default: { http: ARC_TESTNET_RPC_URLS },
@@ -158,7 +158,7 @@ export async function fixWalletNetwork(chainId: number): Promise<'success' | 're
           nativeCurrency: {
             name: 'USDC',
             symbol: 'USDC',
-            decimals: 6,
+            decimals: 18,
           },
           rpcUrls: [ARC_TESTNET_RPC_URLS[0]],
           blockExplorerUrls: ['https://testnet.arcscan.app'],
