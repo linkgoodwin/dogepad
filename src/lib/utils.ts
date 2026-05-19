@@ -52,6 +52,17 @@ export function formatUsdc(value: number): string {
   return sign + parseFloat(abs.toFixed(2)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+export function formatTokenAmount(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '0'
+  const abs = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  if (abs >= 1e9) return sign + (abs / 1e9).toFixed(2) + 'B'
+  if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2) + 'M'
+  if (abs >= 1e3) return sign + parseFloat(abs.toFixed(0)).toLocaleString()
+  if (abs < 0.01) return sign + abs.toExponential(2)
+  return sign + parseFloat(abs.toFixed(2)).toString()
+}
+
 export function sanitizeHref(url: string): string {
   if (!url) return ''
   const trimmed = url.trim()

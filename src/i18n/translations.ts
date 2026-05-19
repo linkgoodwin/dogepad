@@ -579,6 +579,19 @@ export const zhTranslations: TranslationKeys = {
   'dao.durationMultiplierHint': '活期1x / 30天1.5x / 90天2x / 180天3x',
   'dao.rightsCapHint': '超500分开始收敛，单钱包最高1000分',
   'dao.subscribeWeightRefundHint': '认购1 {symbol} = 10分权重，超额按比例退还本金',
+  'lend.shortMarkets': '做空市场',
+  'lend.shortMarketsDesc': '可做空的已发射代币',
+  'lend.shortTokenList': '做空代币市场',
+  'lend.shortMarketsUnit': '个市场',
+  'lend.noShortMarkets': '暂无做空市场',
+  'lend.noShortMarketsDesc': '代币发射后，30%代币会自动存入做空池',
+  'lend.detail': '详情',
+  'lend.table.token': '代币',
+  'lend.table.available': '可借数量',
+  'lend.table.borrowed': '已借数量',
+  'lend.table.utilization': '利用率',
+  'lend.table.dailyRate': '日利率',
+  'lend.table.short': '做空',
 }
 
 export const enTranslations: TranslationKeys = {
@@ -1157,6 +1170,19 @@ export const enTranslations: TranslationKeys = {
   'dao.durationMultiplierHint': 'Flexible 1x / 30d 1.5x / 90d 2x / 180d 3x',
   'dao.rightsCapHint': 'Converges over 500 pts, max 1000 per wallet',
   'dao.subscribeWeightRefundHint': 'Subscribe 1 {symbol} = 10 weight, excess refunded proportionally',
+  'lend.shortMarkets': 'Short Markets',
+  'lend.shortMarketsDesc': 'Launched tokens available to short',
+  'lend.shortTokenList': 'Short Token Markets',
+  'lend.shortMarketsUnit': 'markets',
+  'lend.noShortMarkets': 'No short markets yet',
+  'lend.noShortMarketsDesc': 'After token launch, 30% of tokens are deposited into the short pool',
+  'lend.detail': 'Detail',
+  'lend.table.token': 'Token',
+  'lend.table.available': 'Available',
+  'lend.table.borrowed': 'Borrowed',
+  'lend.table.utilization': 'Utilization',
+  'lend.table.dailyRate': 'Daily Rate',
+  'lend.table.short': 'Short',
 }
 
 const translations: Record<Lang, TranslationKeys> = {

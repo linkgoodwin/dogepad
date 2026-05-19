@@ -536,6 +536,92 @@ export const LONG_POOL_ABI = [
   },
 ] as const
 
+export const SHORT_POOL_ABI = [
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'tokenAvailable',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'tokenBorrowed',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getUtilization',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getDailyRate',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'tokenAmount', type: 'uint256' },
+    ],
+    name: 'borrow',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'tokenAmount', type: 'uint256' },
+    ],
+    name: 'repay',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: '', type: 'address' },
+      { internalType: 'address', name: '', type: 'address' },
+    ],
+    name: 'positions',
+    outputs: [
+      { internalType: 'uint256', name: 'collateralBnb', type: 'uint256' },
+      { internalType: 'uint256', name: 'borrowedTokens', type: 'uint256' },
+      { internalType: 'uint256', name: 'borrowTimestamp', type: 'uint256' },
+      { internalType: 'bool', name: 'isActive', type: 'bool' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'user', type: 'address' },
+      { internalType: 'address', name: 'token', type: 'address' },
+    ],
+    name: 'getHealthFactor',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'user', type: 'address' },
+      { internalType: 'address', name: 'token', type: 'address' },
+    ],
+    name: 'calculateInterest',
+    outputs: [{ internalType: 'uint256', name: 'bnbInterest', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
 const BSC_MAINNET = 56
 const BSC_TESTNET = 97
 const MONAD_TESTNET = 10143

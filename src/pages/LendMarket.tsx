@@ -1,13 +1,24 @@
 import { useMemo } from 'react'
-import { Landmark, TrendingUp, Flame, Inbox, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Landmark, TrendingUp, Flame, AlertTriangle, ArrowRight } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
-import { useReadContract } from 'wagmi'
+import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
-import { LONG_POOL_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LONG_POOL_ABI, SHORT_POOL_ABI, LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { calculateExponentialRate, rateCurveData } from '@/data/poolData'
-import { cn, formatUsdc } from '@/lib/utils'
+import { cn, formatUsdc, formatTokenAmount } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
+
+interface ShortPoolTokenData {
+  address: string
+  name: string
+  symbol: string
+  available: number
+  borrowed: number
+  utilization: number
+  dailyRate: number
+}
 
 export default function LendMarket() {
   const t = useT()
@@ -15,7 +26,11 @@ export default function LendMarket() {
   const nativeSymbol = getNativeSymbol(chainId)
 
   const longPoolAddress = getContractAddress(chainId, 'longPool')
+  const shortPoolAddress = getContractAddress(chainId, 'shortPool')
+  const daoAddress = getContractAddress(chainId, 'launchDAO')
   const longPoolReady = !isZeroAddress(longPoolAddress)
+  const shortPoolReady = !isZeroAddress(shortPoolAddress)
+  const daoReady = !isZeroAddress(daoAddress)
 
   const { data: totalDepositsData } = useReadContract({
     address: longPoolAddress,
@@ -33,12 +48,103 @@ export default function LendMarket() {
     query: { enabled: longPoolReady },
   })
 
+  const { data: candidateCountData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getCandidateCount',
+    chainId,
+    query: { enabled: daoReady },
+  })
+
   const totalDeposits = totalDepositsData != null ? Number(formatEther(totalDepositsData as bigint)) : 0
   const totalBorrows = totalBorrowsData != null ? Number(formatEther(totalBorrowsData as bigint)) : 0
-  const utilization = totalDeposits > 0 ? (totalBorrows / totalDeposits) * 100 : 0
-  const depositAPY = totalDeposits > 0 ? (Math.pow(1 + calculateExponentialRate(utilization) / 100, 365) - 1) * 100 : 0
-  const borrowAPY = totalDeposits > 0 ? (Math.pow(1 + calculateExponentialRate(utilization) / 100, 365) - 1) * 100 : 0
-  const dailyRate = calculateExponentialRate(utilization)
+  const longUtilization = totalDeposits > 0 ? (totalBorrows / totalDeposits) * 100 : 0
+  const depositAPY = totalDeposits > 0 ? (Math.pow(1 + calculateExponentialRate(longUtilization) / 100, 365) - 1) * 100 : 0
+  const borrowAPY = depositAPY
+  const candidateCount = candidateCountData ? Number(candidateCountData as bigint) : 0
+
+  const allCandidateQueries = useMemo(() => {
+    if (!candidateCount || !daoReady) return []
+    return Array.from({ length: candidateCount }, (_, i) => ({
+      address: daoAddress as `0x${string}`,
+      abi: LAUNCH_DAO_ABI,
+      functionName: 'candidates' as const,
+      args: [BigInt(i)],
+      chainId,
+    }))
+  }, [candidateCount, daoAddress, chainId, daoReady])
+
+  const { data: allCandidatesData } = useReadContracts({
+    contracts: allCandidateQueries,
+    query: { enabled: allCandidateQueries.length > 0 },
+  })
+
+  const launchedTokenAddresses = useMemo(() => {
+    if (!allCandidatesData) return [] as { address: string; name: string; symbol: string }[]
+    const tokens: { address: string; name: string; symbol: string }[] = []
+    allCandidatesData.forEach((result) => {
+      if (result.status !== 'success' || !result.result) return
+      const raw = result.result as any
+      const wasLaunched = Boolean(raw.wasLaunched ?? raw[13] ?? false)
+      const launchedToken = String(raw.launchedToken ?? raw[14] ?? '')
+      if (wasLaunched && !isZeroAddress(launchedToken as `0x${string}`)) {
+        tokens.push({
+          address: launchedToken,
+          name: String(raw.name ?? raw[1] ?? ''),
+          symbol: String(raw.symbol ?? raw[2] ?? ''),
+        })
+      }
+    })
+    return tokens
+  }, [allCandidatesData])
+
+  const shortPoolQueries = useMemo(() => {
+    if (!shortPoolReady || launchedTokenAddresses.length === 0) return []
+    const queries: Array<{
+      address: `0x${string}`
+      abi: typeof SHORT_POOL_ABI
+      functionName: 'tokenAvailable' | 'tokenBorrowed' | 'getUtilization' | 'getDailyRate'
+      args: [`0x${string}`]
+      chainId: number
+    }> = []
+    for (const token of launchedTokenAddresses) {
+      const addr = token.address as `0x${string}`
+      queries.push({ address: shortPoolAddress as `0x${string}`, abi: SHORT_POOL_ABI, functionName: 'tokenAvailable', args: [addr], chainId })
+      queries.push({ address: shortPoolAddress as `0x${string}`, abi: SHORT_POOL_ABI, functionName: 'tokenBorrowed', args: [addr], chainId })
+      queries.push({ address: shortPoolAddress as `0x${string}`, abi: SHORT_POOL_ABI, functionName: 'getUtilization', args: [addr], chainId })
+      queries.push({ address: shortPoolAddress as `0x${string}`, abi: SHORT_POOL_ABI, functionName: 'getDailyRate', args: [addr], chainId })
+    }
+    return queries
+  }, [shortPoolReady, shortPoolAddress, launchedTokenAddresses, chainId])
+
+  const { data: shortPoolData } = useReadContracts({
+    contracts: shortPoolQueries,
+    query: { enabled: shortPoolQueries.length > 0 },
+  })
+
+  const shortPoolTokens: ShortPoolTokenData[] = useMemo(() => {
+    if (!shortPoolData || launchedTokenAddresses.length === 0) return []
+    return launchedTokenAddresses.map((token, i) => {
+      const base = i * 4
+      const available = shortPoolData[base]?.status === 'success' && shortPoolData[base].result != null
+        ? Number(formatEther(shortPoolData[base].result as bigint)) : 0
+      const borrowed = shortPoolData[base + 1]?.status === 'success' && shortPoolData[base + 1].result != null
+        ? Number(formatEther(shortPoolData[base + 1].result as bigint)) : 0
+      const util = shortPoolData[base + 2]?.status === 'success' && shortPoolData[base + 2].result != null
+        ? Number(shortPoolData[base + 2].result as bigint) / 1e16 : 0
+      const dailyRate = shortPoolData[base + 3]?.status === 'success' && shortPoolData[base + 3].result != null
+        ? Number(shortPoolData[base + 3].result as bigint) / 1e16 : 0
+      return {
+        address: token.address,
+        name: token.name,
+        symbol: token.symbol,
+        available,
+        borrowed,
+        utilization: util,
+        dailyRate,
+      }
+    }).filter(t => t.available > 0 || t.borrowed > 0)
+  }, [shortPoolData, launchedTokenAddresses])
 
   const rateChartOption = useMemo(() => ({
     backgroundColor: 'transparent',
@@ -115,13 +221,13 @@ export default function LendMarket() {
           <p className="text-xs text-gray-400 mb-1">{t('lend.totalDeposits')}</p>
           <p className="text-2xl font-display font-bold neon-text">{formatUsdc(totalDeposits)} {nativeSymbol}</p>
           <span className="text-xs text-gray-400 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> {utilization.toFixed(1)}% {t('lend.utilized')}
+            <TrendingUp className="w-3 h-3" /> {longUtilization.toFixed(1)}% {t('lend.utilized')}
           </span>
         </div>
         <div className="card-dark border-neon-red/20">
-          <p className="text-xs text-gray-400 mb-1">{t('lend.shortRate')}</p>
-          <p className="text-2xl font-display font-bold text-neon-red">{dailyRate.toFixed(2)}%/day</p>
-          <span className="text-xs text-neon-red">{t('lend.utilization')}: {utilization.toFixed(1)}%</span>
+          <p className="text-xs text-gray-400 mb-1">{t('lend.shortMarkets')}</p>
+          <p className="text-2xl font-display font-bold text-neon-red">{shortPoolTokens.length}</p>
+          <span className="text-xs text-gray-400">{t('lend.shortMarketsDesc')}</span>
         </div>
         <div className="card-dark border-neon-green/20">
           <p className="text-xs text-gray-400 mb-1">{t('lend.longApy')}</p>
@@ -142,6 +248,9 @@ export default function LendMarket() {
               <span className="w-3 h-3 rounded-full bg-neon-green" />
               {t('lend.longPool')}
             </h2>
+            <Link to="/lend/long" className="text-xs text-doge-gold hover:underline flex items-center gap-1">
+              {t('lend.detail')} <ArrowRight className="w-3 h-3" />
+            </Link>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-dark-700 rounded-lg p-3">
@@ -180,35 +289,12 @@ export default function LendMarket() {
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-dark-700 rounded-lg p-3">
-              <p className="text-xs text-gray-400">{t('lend.availableTokens')}</p>
-              <p className="font-display font-bold text-lg">—</p>
-            </div>
-            <div className="bg-dark-700 rounded-lg p-3">
-              <p className="text-xs text-gray-400">{t('lend.borrowedTokens')}</p>
-              <p className="font-display font-bold text-lg text-neon-red">—</p>
-            </div>
-            <div className="bg-dark-700 rounded-lg p-3">
-              <p className="text-xs text-gray-400">{t('lend.dailyRate')}</p>
-              <p className="font-display font-bold text-lg text-neon-red">{dailyRate.toFixed(2)}%</p>
+              <p className="text-xs text-gray-400">{t('lend.shortMarkets')}</p>
+              <p className="font-display font-bold text-lg text-neon-red">{shortPoolTokens.length}</p>
             </div>
             <div className="bg-dark-700 rounded-lg p-3">
               <p className="text-xs text-gray-400">{t('lend.collateralRatio')}</p>
               <p className="font-display font-bold text-lg">150%</p>
-            </div>
-          </div>
-          <div className="mb-4">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>{t('lend.utilization')}</span>
-              <span>{utilization.toFixed(1)}%</span>
-            </div>
-            <div className="progress-bar h-3">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-500',
-                  utilization > 70 ? 'bg-neon-red' : utilization > 40 ? 'bg-neon-yellow' : 'bg-neon-green'
-                )}
-                style={{ width: `${Math.min(utilization, 100)}%` }}
-              />
             </div>
           </div>
           <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
@@ -220,6 +306,87 @@ export default function LendMarket() {
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="card-dark overflow-hidden p-0">
+        <div className="px-6 py-4 border-b border-dark-500/50 flex items-center justify-between">
+          <h2 className="font-display font-semibold text-lg">{t('lend.shortTokenList')}</h2>
+          <span className="text-xs text-gray-400">{shortPoolTokens.length} {t('lend.shortMarketsUnit')}</span>
+        </div>
+        {shortPoolTokens.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-dark-500/30 text-gray-400 text-xs">
+                  <th className="px-4 py-3 text-left font-medium">{t('lend.table.token')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.available')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.borrowed')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.utilization')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.dailyRate')}</th>
+                  <th className="px-4 py-3 text-right font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {shortPoolTokens.map((token) => (
+                  <tr key={token.address} className="border-b border-dark-500/10 hover:bg-dark-700/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center shrink-0">
+                          <span className="font-display font-bold text-xs text-doge-gold">{token.symbol.charAt(0)}</span>
+                        </div>
+                        <div>
+                          <p className="font-display font-semibold text-white text-sm">{token.name}</p>
+                          <p className="text-xs text-gray-500">{token.symbol}doge</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatTokenAmount(token.available)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-neon-red">{formatTokenAmount(token.borrowed)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              token.utilization > 70 ? 'bg-neon-red' : token.utilization > 40 ? 'bg-neon-yellow' : 'bg-neon-green'
+                            )}
+                            style={{ width: `${Math.min(token.utilization, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400 w-10 text-right">{token.utilization.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn(
+                        'font-display font-semibold',
+                        token.dailyRate > 10 ? 'text-neon-red' : token.dailyRate > 3 ? 'text-neon-yellow' : 'text-gray-300'
+                      )}>
+                        {token.dailyRate.toFixed(2)}%
+                      </span>
+                      <span className="text-xs text-gray-500">/day</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/lend/short/${token.address}`}
+                        className="text-xs text-doge-gold hover:underline flex items-center gap-1 justify-end"
+                      >
+                        {t('lend.table.short')} <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+              <span className="text-2xl">📉</span>
+            </div>
+            <p className="text-gray-400 mb-2">{t('lend.noShortMarkets')}</p>
+            <p className="text-xs text-gray-500">{t('lend.noShortMarketsDesc')}</p>
+          </div>
+        )}
       </div>
 
       <div className="card-dark">
@@ -283,19 +450,6 @@ export default function LendMarket() {
           <p className="text-sm text-gray-300 leading-relaxed mt-1">
             {t('lend.burnEngineAntiShort')}
           </p>
-        </div>
-      </div>
-
-      <div className="card-dark overflow-hidden p-0">
-        <div className="px-6 py-4 border-b border-dark-500/50">
-          <h2 className="font-display font-semibold text-lg">{t('lend.allAssets')}</h2>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
-            <Inbox className="w-8 h-8 text-gray-500" />
-          </div>
-          <p className="text-gray-400 mb-2">{t('lend.noAssets')}</p>
-          <p className="text-xs text-gray-500">{t('lend.noAssetsDesc')}</p>
         </div>
       </div>
     </div>
