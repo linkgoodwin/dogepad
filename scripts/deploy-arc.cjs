@@ -18,31 +18,67 @@ function getArtifact(name) {
   throw new Error(`Artifact not found for ${name}`);
 }
 
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
 async function main() {
-  const p = new ethers.providers.JsonRpcProvider(RPC_URL, { chainId: CHAIN_ID, name: "arc", timeout: 120000 });
+  const p = new ethers.providers.JsonRpcProvider({ url: RPC_URL, timeout: 300000 });
   const w = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, p);
   const gasPrice = ethers.utils.parseUnits("100", "gwei");
 
   console.log("Deployer:", w.address);
-  console.log("Balance:", ethers.utils.formatEther(await p.getBalance(w.address)), "USDC\n");
+  const balance = await p.getBalance(w.address);
+  console.log("Balance:", ethers.utils.formatEther(balance), "USDC");
 
   async function deploy(name, args = [], gasLimit = 3_000_000) {
     const artifact = getArtifact(name);
     const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, w);
     console.log(`Deploying ${name}... (gasLimit: ${gasLimit})`);
-    const contract = await factory.deploy(...args, { gasPrice, gasLimit });
-    console.log(`  Tx: ${contract.deployTransaction.hash}`);
-    await contract.deployed();
-    console.log(`  Address: ${contract.address}`);
-    return contract;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const currentNonce = await p.getTransactionCount(w.address, "pending");
+        const contract = await factory.deploy(...args, { gasPrice, gasLimit, nonce: currentNonce });
+        console.log(`  Tx: ${contract.deployTransaction.hash}`);
+        console.log(`  Waiting for confirmation...`);
+        await contract.deployed(300);
+        console.log(`  Address: ${contract.address}`);
+        return contract;
+      } catch (e) {
+        if (e.message && (e.message.includes("already known") || e.message.includes("nonce"))) {
+          console.log(`  Retry ${attempt + 1}: nonce issue, waiting 15s...`);
+          await sleep(15000);
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error(`Failed to deploy ${name} after 3 attempts`);
   }
 
   async function sendTx(contract, method, args, label) {
     console.log(`  Sending ${label}...`);
-    const tx = await contract[method](...args, { gasPrice, gasLimit: 500_000 });
-    console.log(`  Tx: ${tx.hash}`);
-    await tx.wait();
-    console.log(`  -> ${label} done`);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const currentNonce = await p.getTransactionCount(w.address, "pending");
+        const tx = await contract[method](...args, { gasPrice, gasLimit: 500_000, nonce: currentNonce });
+        console.log(`  Tx: ${tx.hash}`);
+        console.log(`  Waiting for confirmation...`);
+        await tx.wait(1, 300000);
+        console.log(`  -> ${label} done`);
+        return;
+      } catch (e) {
+        if (e.message && (e.message.includes("already known") || e.message.includes("nonce"))) {
+          console.log(`  Retry ${attempt + 1}: nonce issue, waiting 15s...`);
+          await sleep(15000);
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error(`Failed to send ${label} after 3 attempts`);
   }
 
   console.log("--- Phase 1: Rate Models + Oracle ---");

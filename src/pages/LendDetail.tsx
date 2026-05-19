@@ -20,55 +20,85 @@ export default function LendDetail() {
 
   const pathMode: PoolMode = params.mode === 'short' ? 'short' : 'long'
   const tokenAddr = params.tokenAddress as `0x${string}` | undefined
-  const isShortMode = pathMode === 'short' && tokenAddr && !isZeroAddress(tokenAddr)
+  const isShortMode = pathMode === 'short' && !!tokenAddr && !isZeroAddress(tokenAddr)
+  const isLongMode = pathMode === 'long' && !!tokenAddr && !isZeroAddress(tokenAddr)
 
   const longPoolAddress = getContractAddress(chainId, 'longPool')
   const shortPoolAddress = getContractAddress(chainId, 'shortPool')
   const longPoolReady = !isZeroAddress(longPoolAddress)
   const shortPoolReady = !isZeroAddress(shortPoolAddress)
 
-  const [activeTab, setActiveTab] = useState<'deposit' | 'borrow'>('deposit')
+  const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'borrow'>('deposit')
   const [depositAmount, setDepositAmount] = useState('')
+  const [withdrawAmount, setWithdrawAmount] = useState('')
   const [borrowAmount, setBorrowAmount] = useState('')
   const [collateralAmount, setCollateralAmount] = useState('')
   const [shortTokenAmount, setShortTokenAmount] = useState('')
-  const [shortCollateralAmount, setShortCollateralAmount] = useState('')
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
-  const { data: totalDepositsData } = useReadContract({
+  const { data: tokenDepositsData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
-    functionName: 'totalDeposits',
+    functionName: 'tokenDeposits',
+    args: tokenAddr ? [tokenAddr] : undefined,
     chainId,
-    query: { enabled: longPoolReady },
+    query: { enabled: longPoolReady && !!tokenAddr },
   })
 
-  const { data: totalBorrowsData } = useReadContract({
+  const { data: longUtilData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
-    functionName: 'totalBorrows',
+    functionName: 'getUtilization',
+    args: tokenAddr ? [tokenAddr] : undefined,
     chainId,
-    query: { enabled: longPoolReady },
+    query: { enabled: longPoolReady && !!tokenAddr },
+  })
+
+  const { data: longDailyRateData } = useReadContract({
+    address: longPoolAddress,
+    abi: LONG_POOL_ABI,
+    functionName: 'getDailyRate',
+    args: tokenAddr ? [tokenAddr] : undefined,
+    chainId,
+    query: { enabled: longPoolReady && !!tokenAddr },
   })
 
   const { data: depositData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'deposits',
-    args: userAddress ? [userAddress] : undefined,
+    args: tokenAddr && userAddress ? [tokenAddr, userAddress] : undefined,
     chainId,
-    query: { enabled: longPoolReady && !!userAddress },
+    query: { enabled: longPoolReady && !!tokenAddr && !!userAddress },
   })
 
   const { data: pendingYieldData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'pendingYield',
-    args: userAddress ? [userAddress] : undefined,
+    args: tokenAddr && userAddress ? [tokenAddr, userAddress] : undefined,
     chainId,
-    query: { enabled: longPoolReady && !!userAddress },
+    query: { enabled: longPoolReady && !!tokenAddr && !!userAddress },
+  })
+
+  const { data: longBorrowData } = useReadContract({
+    address: longPoolAddress,
+    abi: LONG_POOL_ABI,
+    functionName: 'borrows',
+    args: tokenAddr && userAddress ? [tokenAddr, userAddress] : undefined,
+    chainId,
+    query: { enabled: longPoolReady && !!tokenAddr && !!userAddress },
+  })
+
+  const { data: longHealthData } = useReadContract({
+    address: longPoolAddress,
+    abi: LONG_POOL_ABI,
+    functionName: 'getHealthFactor',
+    args: tokenAddr && userAddress ? [tokenAddr, userAddress] : undefined,
+    chainId,
+    query: { enabled: longPoolReady && !!tokenAddr && !!userAddress },
   })
 
   const { data: shortAvailableData } = useReadContract({
@@ -125,14 +155,19 @@ export default function LendDetail() {
     query: { enabled: shortPoolReady && !!userAddress && !!tokenAddr },
   })
 
-  const totalDeposits = totalDepositsData != null ? Number(formatEther(totalDepositsData as bigint)) : 0
-  const totalBorrows = totalBorrowsData != null ? Number(formatEther(totalBorrowsData as bigint)) : 0
-  const longUtilization = totalDeposits > 0 ? (totalBorrows / totalDeposits) * 100 : 0
-  const depositAPY = totalDeposits > 0 ? (Math.pow(1 + calculateExponentialRate(longUtilization) / 100, 365) - 1) * 100 : 0
+  const totalDeposits = tokenDepositsData != null ? Number(formatEther(tokenDepositsData as bigint)) : 0
+  const longUtilization = longUtilData != null ? Number(longUtilData as bigint) / 1e16 : 0
+  const longDailyRate = longDailyRateData != null ? Number(longDailyRateData as bigint) / 1e16 : 0
+  const depositAPY = (Math.pow(1 + longDailyRate / 100, 365) - 1) * 100
   const borrowAPY = depositAPY
 
   const userDeposit = depositData ? Number(formatEther((depositData as [bigint, bigint, bigint])[0])) : 0
   const userPendingYield = pendingYieldData != null ? Number(formatEther(pendingYieldData as bigint)) : 0
+
+  const longBorrow = longBorrowData as [bigint, bigint, bigint] | undefined
+  const hasLongBorrow = longBorrow ? longBorrow[0] > 0n : false
+  const longBorrowAmount = longBorrow ? Number(formatEther(longBorrow[1])) : 0
+  const longHealth = longHealthData != null ? Number(formatEther(longHealthData as bigint)) : 0
 
   const shortAvailable = shortAvailableData != null ? Number(formatEther(shortAvailableData as bigint)) : 0
   const shortBorrowed = shortBorrowedData != null ? Number(formatEther(shortBorrowedData as bigint)) : 0
@@ -161,12 +196,35 @@ export default function LendDetail() {
     : '0'
 
   const handleDeposit = () => {
-    if (!depositAmount || Number(depositAmount) <= 0 || !longPoolReady) return
+    if (!depositAmount || Number(depositAmount) <= 0 || !longPoolReady || !tokenAddr) return
     writeContractAsync({
       address: longPoolAddress,
       abi: LONG_POOL_ABI,
       functionName: 'deposit',
+      args: [tokenAddr],
       value: parseEther(depositAmount),
+      gas: 5_000_000n,
+    } as any).catch(() => {})
+  }
+
+  const handleWithdraw = () => {
+    if (!withdrawAmount || Number(withdrawAmount) <= 0 || !longPoolReady || !tokenAddr) return
+    writeContractAsync({
+      address: longPoolAddress,
+      abi: LONG_POOL_ABI,
+      functionName: 'withdraw',
+      args: [tokenAddr, parseEther(withdrawAmount)],
+      gas: 5_000_000n,
+    } as any).catch(() => {})
+  }
+
+  const handleClaimYield = () => {
+    if (!longPoolReady || !tokenAddr) return
+    writeContractAsync({
+      address: longPoolAddress,
+      abi: LONG_POOL_ABI,
+      functionName: 'claimYield',
+      args: [tokenAddr],
       gas: 5_000_000n,
     } as any).catch(() => {})
   }
@@ -198,7 +256,7 @@ export default function LendDetail() {
     } as any).catch(() => {})
   }
 
-  if (!isShortMode && pathMode !== 'long') {
+  if (!isShortMode && !isLongMode) {
     return (
       <div className="animate-fade-in">
         <Link to="/lend" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-green mb-6 transition-colors">
@@ -401,7 +459,7 @@ export default function LendDetail() {
         </div>
         <div>
           <h1 className="font-display font-bold text-3xl">{nativeSymbol} {t('lendDetail.lendingPool')}</h1>
-          <p className="text-gray-400 font-mono text-sm">{t('lendDetail.longPoolLabel')}</p>
+          <p className="text-gray-400 font-mono text-sm">{tokenAddr?.slice(0, 6)}...{tokenAddr?.slice(-4)}</p>
         </div>
       </div>
 
@@ -426,19 +484,50 @@ export default function LendDetail() {
             </div>
           </div>
 
-          {isConnected && userDeposit > 0 && (
+          {isConnected && (userDeposit > 0 || hasLongBorrow) && (
             <div className="card-dark">
               <h3 className="font-display font-semibold mb-3">{t('lendDetail.yourPosition')}</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">{t('lendDetail.deposited')}</p>
-                  <p className="font-display font-bold text-neon-green">{formatUsdc(userDeposit)} {nativeSymbol}</p>
-                </div>
-                <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400">{t('lendDetail.pendingYield')}</p>
-                  <p className="font-display font-bold text-neon-green">{formatUsdc(userPendingYield)} {nativeSymbol}</p>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {userDeposit > 0 && (
+                  <>
+                    <div className="bg-dark-700 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">{t('lendDetail.deposited')}</p>
+                      <p className="font-display font-bold text-neon-green">{formatUsdc(userDeposit)} {nativeSymbol}</p>
+                    </div>
+                    <div className="bg-dark-700 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">{t('lendDetail.pendingYield')}</p>
+                      <p className="font-display font-bold text-neon-green">{formatUsdc(userPendingYield)} {nativeSymbol}</p>
+                    </div>
+                  </>
+                )}
+                {hasLongBorrow && (
+                  <>
+                    <div className="bg-dark-700 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">{t('lendDetail.borrowed')}</p>
+                      <p className="font-display font-bold text-neon-purple">{formatUsdc(longBorrowAmount)} {nativeSymbol}</p>
+                    </div>
+                    <div className="bg-dark-700 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">{t('lendDetail.healthFactor')}</p>
+                      <p className={cn('font-display font-bold', longHealth > 2 ? 'text-neon-green' : longHealth > 1.5 ? 'text-neon-yellow' : 'text-neon-red')}>
+                        {longHealth > 0 ? longHealth.toFixed(2) : '—'}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
+              {userPendingYield > 0 && (
+                <button
+                  className="mt-3 btn-primary w-full text-center flex items-center justify-center gap-2"
+                  onClick={handleClaimYield}
+                  disabled={isWritePending || isConfirming}
+                >
+                  {isWritePending || isConfirming ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                  ) : (
+                    <><ArrowDownToLine className="w-4 h-4" /> {t('lendDetail.claimYield')} ({formatUsdc(userPendingYield)} {nativeSymbol})</>
+                  )}
+                </button>
+              )}
             </div>
           )}
 
@@ -504,6 +593,15 @@ export default function LendDetail() {
               <button
                 className={cn(
                   'flex-1 py-2.5 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-2',
+                  activeTab === 'withdraw' ? 'bg-neon-yellow text-dark-900' : 'text-gray-400 hover:text-white'
+                )}
+                onClick={() => setActiveTab('withdraw')}
+              >
+                <ArrowUpFromLine className="w-4 h-4" /> {t('lendDetail.withdraw')}
+              </button>
+              <button
+                className={cn(
+                  'flex-1 py-2.5 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-2',
                   activeTab === 'borrow' ? 'bg-neon-purple text-white' : 'text-gray-400 hover:text-white'
                 )}
                 onClick={() => setActiveTab('borrow')}
@@ -543,6 +641,40 @@ export default function LendDetail() {
                     <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
                   ) : (
                     <><ArrowDownToLine className="w-4 h-4" /> {t('lendDetail.deposit')} {nativeSymbol}</>
+                  )}
+                </button>
+              </div>
+            ) : activeTab === 'withdraw' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.withdrawAmount')} ({nativeSymbol})</label>
+                  <input
+                    type="number"
+                    className="input-dark w-full"
+                    placeholder="0.0"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                  />
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">{t('lendDetail.deposited')}</p>
+                  <p className="font-display font-bold text-lg">{formatUsdc(userDeposit)} {nativeSymbol}</p>
+                </div>
+                {isConfirmed && (
+                  <div className="bg-neon-green/10 border border-neon-green/30 rounded-lg p-3 text-xs text-neon-green">
+                    {t('lendDetail.withdrawSuccess')}
+                  </div>
+                )}
+                <button
+                  className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                  style={{ background: '#eab308' }}
+                  onClick={handleWithdraw}
+                  disabled={isWritePending || isConfirming || !withdrawAmount || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > userDeposit}
+                >
+                  {isWritePending || isConfirming ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                  ) : (
+                    <><ArrowUpFromLine className="w-4 h-4" /> {t('lendDetail.withdraw')} {nativeSymbol}</>
                   )}
                 </button>
               </div>

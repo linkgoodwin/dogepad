@@ -20,6 +20,17 @@ interface ShortPoolTokenData {
   dailyRate: number
 }
 
+interface LongPoolTokenData {
+  address: string
+  name: string
+  symbol: string
+  deposits: number
+  borrows: number
+  utilization: number
+  depositAPY: number
+  dailyRate: number
+}
+
 export default function LendMarket() {
   const t = useT()
   const chainId = useTargetChainId()
@@ -32,22 +43,6 @@ export default function LendMarket() {
   const shortPoolReady = !isZeroAddress(shortPoolAddress)
   const daoReady = !isZeroAddress(daoAddress)
 
-  const { data: totalDepositsData } = useReadContract({
-    address: longPoolAddress,
-    abi: LONG_POOL_ABI,
-    functionName: 'totalDeposits',
-    chainId,
-    query: { enabled: longPoolReady },
-  })
-
-  const { data: totalBorrowsData } = useReadContract({
-    address: longPoolAddress,
-    abi: LONG_POOL_ABI,
-    functionName: 'totalBorrows',
-    chainId,
-    query: { enabled: longPoolReady },
-  })
-
   const { data: candidateCountData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -56,11 +51,6 @@ export default function LendMarket() {
     query: { enabled: daoReady },
   })
 
-  const totalDeposits = totalDepositsData != null ? Number(formatEther(totalDepositsData as bigint)) : 0
-  const totalBorrows = totalBorrowsData != null ? Number(formatEther(totalBorrowsData as bigint)) : 0
-  const longUtilization = totalDeposits > 0 ? (totalBorrows / totalDeposits) * 100 : 0
-  const depositAPY = totalDeposits > 0 ? (Math.pow(1 + calculateExponentialRate(longUtilization) / 100, 365) - 1) * 100 : 0
-  const borrowAPY = depositAPY
   const candidateCount = candidateCountData ? Number(candidateCountData as bigint) : 0
 
   const allCandidateQueries = useMemo(() => {
@@ -97,6 +87,64 @@ export default function LendMarket() {
     })
     return tokens
   }, [allCandidatesData])
+
+  const longPoolQueries = useMemo(() => {
+    if (!longPoolReady || launchedTokenAddresses.length === 0) return []
+    const queries: Array<{
+      address: `0x${string}`
+      abi: typeof LONG_POOL_ABI
+      functionName: 'tokenDeposits' | 'tokenBorrows' | 'getUtilization' | 'getDailyRate'
+      args: [`0x${string}`]
+      chainId: number
+    }> = []
+    for (const token of launchedTokenAddresses) {
+      const addr = token.address as `0x${string}`
+      queries.push({ address: longPoolAddress as `0x${string}`, abi: LONG_POOL_ABI, functionName: 'tokenDeposits', args: [addr], chainId })
+      queries.push({ address: longPoolAddress as `0x${string}`, abi: LONG_POOL_ABI, functionName: 'tokenBorrows', args: [addr], chainId })
+      queries.push({ address: longPoolAddress as `0x${string}`, abi: LONG_POOL_ABI, functionName: 'getUtilization', args: [addr], chainId })
+      queries.push({ address: longPoolAddress as `0x${string}`, abi: LONG_POOL_ABI, functionName: 'getDailyRate', args: [addr], chainId })
+    }
+    return queries
+  }, [longPoolReady, longPoolAddress, launchedTokenAddresses, chainId])
+
+  const { data: longPoolData } = useReadContracts({
+    contracts: longPoolQueries,
+    query: { enabled: longPoolQueries.length > 0 },
+  })
+
+  const longPoolTokens: LongPoolTokenData[] = useMemo(() => {
+    if (!longPoolData || launchedTokenAddresses.length === 0) return []
+    return launchedTokenAddresses.map((token, i) => {
+      const base = i * 4
+      const deposits = longPoolData[base]?.status === 'success' && longPoolData[base].result != null
+        ? Number(formatEther(longPoolData[base].result as bigint)) : 0
+      const borrows = longPoolData[base + 1]?.status === 'success' && longPoolData[base + 1].result != null
+        ? Number(formatEther(longPoolData[base + 1].result as bigint)) : 0
+      const util = longPoolData[base + 2]?.status === 'success' && longPoolData[base + 2].result != null
+        ? Number(longPoolData[base + 2].result as bigint) / 1e16 : 0
+      const dailyRate = longPoolData[base + 3]?.status === 'success' && longPoolData[base + 3].result != null
+        ? Number(longPoolData[base + 3].result as bigint) / 1e16 : 0
+      const depositAPY = (Math.pow(1 + dailyRate / 100, 365) - 1) * 100
+      return {
+        address: token.address,
+        name: token.name,
+        symbol: token.symbol,
+        deposits,
+        borrows,
+        utilization: util,
+        depositAPY,
+        dailyRate,
+      }
+    }).filter(t => t.deposits > 0 || t.borrows > 0)
+  }, [longPoolData, launchedTokenAddresses])
+
+  const totalDeposits = useMemo(() => longPoolTokens.reduce((sum, t) => sum + t.deposits, 0), [longPoolTokens])
+  const totalBorrows = useMemo(() => longPoolTokens.reduce((sum, t) => sum + t.borrows, 0), [longPoolTokens])
+  const longUtilization = totalDeposits > 0 ? (totalBorrows / totalDeposits) * 100 : 0
+  const avgDepositAPY = useMemo(() => {
+    if (totalDeposits === 0) return 0
+    return longPoolTokens.reduce((sum, t) => sum + t.depositAPY * t.deposits, 0) / totalDeposits
+  }, [longPoolTokens, totalDeposits])
 
   const shortPoolQueries = useMemo(() => {
     if (!shortPoolReady || launchedTokenAddresses.length === 0) return []
@@ -228,8 +276,8 @@ export default function LendMarket() {
           <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-neon-green" /> {t('lend.longApy')}
           </p>
-          <p className="text-2xl font-display font-bold text-neon-green">{depositAPY.toFixed(2)}%</p>
-          <span className="text-xs text-gray-400">{t('lend.depositApy')} · {nativeSymbol} {t('lend.depositLabel')}</span>
+          <p className="text-2xl font-display font-bold text-neon-green">{avgDepositAPY.toFixed(2)}%</p>
+          <span className="text-xs text-gray-400">{t('lend.depositApy')} · {t('lend.longMarkets')} {longPoolTokens.length}</span>
         </div>
         <div className="card-dark border-neon-red/20">
           <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
@@ -247,16 +295,103 @@ export default function LendMarket() {
         </div>
       </div>
 
+      <div className="card-dark overflow-hidden p-0">
+        <div className="px-6 py-4 border-b border-dark-500/50 flex items-center justify-between">
+          <h2 className="font-display font-semibold text-lg flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-neon-green" />
+            {t('lend.longTokenList')}
+          </h2>
+          <span className="text-xs text-gray-400">{longPoolTokens.length} {t('lend.longMarketsUnit')}</span>
+        </div>
+        {longPoolTokens.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-dark-500/30 text-gray-400 text-xs">
+                  <th className="px-4 py-3 text-left font-medium">{t('lend.table.token')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.deposits')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.borrowed')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.utilization')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.depositApy')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('lend.table.dailyRate')}</th>
+                  <th className="px-4 py-3 text-right font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {longPoolTokens.map((token) => (
+                  <tr key={token.address} className="border-b border-dark-500/10 hover:bg-dark-700/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center shrink-0">
+                          <span className="font-display font-bold text-xs text-neon-green">{token.symbol.charAt(0)}</span>
+                        </div>
+                        <div>
+                          <p className="font-display font-semibold text-white text-sm">{token.name}</p>
+                          <p className="text-xs text-gray-500">{token.symbol}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{formatUsdc(token.deposits)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm text-neon-red">{formatUsdc(token.borrows)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              token.utilization > 70 ? 'bg-neon-red' : token.utilization > 40 ? 'bg-neon-yellow' : 'bg-neon-green'
+                            )}
+                            style={{ width: `${Math.min(token.utilization, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400 w-10 text-right">{token.utilization.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-display font-semibold text-neon-green">
+                        {token.depositAPY.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn(
+                        'font-display font-semibold',
+                        token.dailyRate > 10 ? 'text-neon-red' : token.dailyRate > 3 ? 'text-neon-yellow' : 'text-gray-300'
+                      )}>
+                        {token.dailyRate.toFixed(2)}%
+                      </span>
+                      <span className="text-xs text-gray-500">/day</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/lend/long/${token.address}`}
+                        className="text-xs text-doge-gold hover:underline flex items-center gap-1 justify-end"
+                      >
+                        {t('lend.table.long')} <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
+              <span className="text-2xl">📈</span>
+            </div>
+            <p className="text-gray-400 mb-2">{t('lend.noLongMarkets')}</p>
+            <p className="text-xs text-gray-500">{t('lend.noLongMarketsDesc')}</p>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card-dark">
+        <div className="card-dark border-neon-green/10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display font-semibold text-lg flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-neon-green" />
               {t('lend.longPool')}
             </h2>
-            <Link to="/lend/long" className="text-xs text-doge-gold hover:underline flex items-center gap-1">
-              {t('lend.detail')} <ArrowRight className="w-3 h-3" />
-            </Link>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-dark-700 rounded-lg p-3">
@@ -269,11 +404,11 @@ export default function LendMarket() {
             </div>
             <div className="bg-dark-700 rounded-lg p-3">
               <p className="text-xs text-gray-400">{t('lend.depositApy')}</p>
-              <p className="font-display font-bold text-lg text-neon-green">{depositAPY.toFixed(2)}%</p>
+              <p className="font-display font-bold text-lg text-neon-green">{avgDepositAPY.toFixed(2)}%</p>
             </div>
             <div className="bg-dark-700 rounded-lg p-3">
-              <p className="text-xs text-gray-400">{t('lend.borrowApy')}</p>
-              <p className="font-display font-bold text-lg">{borrowAPY.toFixed(2)}%</p>
+              <p className="text-xs text-gray-400">{t('lend.longMarkets')}</p>
+              <p className="font-display font-bold text-lg text-neon-green">{longPoolTokens.length}</p>
             </div>
           </div>
           <div className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3">

@@ -18,7 +18,7 @@ interface IMaturityCheck {
 }
 
 interface ILongPoolReceiver {
-    function receiveShortPoolInterest() external payable;
+    function receiveShortPoolInterest(address token) external payable;
 }
 
 struct ShortPosition {
@@ -213,7 +213,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         }
 
         if (longPoolShare > 0 && longPool != address(0)) {
-            ILongPoolReceiver(longPool).receiveShortPoolInterest{value: longPoolShare}();
+            ILongPoolReceiver(longPool).receiveShortPoolInterest{value: longPoolShare}(token);
         }
         if (burnEngineShare > 0) {
             (bool beSuccess,) = payable(burnEngine).call{value: burnEngineShare}("");

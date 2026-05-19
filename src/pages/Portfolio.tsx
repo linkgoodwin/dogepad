@@ -249,24 +249,24 @@ export default function Portfolio() {
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'deposits',
-    args: userAddress ? [userAddress] : undefined,
+    args: undefined,
     chainId,
-    query: { enabled: longPoolReady && !!userAddress },
+    query: { enabled: false },
   })
 
   const { data: pendingYieldData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'pendingYield',
-    args: userAddress ? [userAddress] : undefined,
+    args: undefined,
     chainId,
-    query: { enabled: longPoolReady && !!userAddress },
+    query: { enabled: false },
   })
 
-  const lendingDeposit = depositData ? Number(formatEther((depositData as [bigint, bigint, bigint])[0])) : 0
-  const lendingYieldEarned = depositData ? Number(formatEther((depositData as [bigint, bigint, bigint])[1])) : 0
-  const lendingYieldClaimed = depositData ? Number(formatEther((depositData as [bigint, bigint, bigint])[2])) : 0
-  const pendingYield = pendingYieldData != null ? Number(formatEther(pendingYieldData as bigint)) : 0
+  const lendingDeposit = 0
+  const lendingYieldEarned = 0
+  const lendingYieldClaimed = 0
+  const pendingYield = 0
 
   const totalStakingBnb = parsedStakePositions.filter(p => p.tokenSymbol === nativeSymbol && !p.isWithdrawn).reduce((sum, p) => sum + p.amount, 0)
   const totalSubBnbValue = mySubscriptions.reduce((sum, s) => sum + s.bnbAmount, 0)

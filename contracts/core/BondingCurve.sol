@@ -90,6 +90,10 @@ error ExceedsSoldTokens();
 error BnbRatiosInvalid();
 error TokenRatiosInvalid();
 error LongPoolTransferFailed();
+
+interface ILongPoolDeposit {
+    function deposit(address token) external payable;
+}
 error BurnEngineTransferFailed();
 error PlatformTransferFailed();
 
@@ -588,8 +592,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         }
 
         if (p.longPoolBnb > 0 && longPool != address(0)) {
-            (bool sent, ) = longPool.call{value: p.longPoolBnb}("");
-            if (!sent) revert LongPoolTransferFailed();
+            ILongPoolDeposit(longPool).deposit{value: p.longPoolBnb}(p.token);
         }
 
         if (p.shortPoolTokens > 0 && shortPool != address(0)) {
