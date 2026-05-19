@@ -592,6 +592,20 @@ export const zhTranslations: TranslationKeys = {
   'lend.table.utilization': '利用率',
   'lend.table.dailyRate': '日利率',
   'lend.table.short': '做空',
+  'lendDetail.shortPoolTitle': '做空池',
+  'lendDetail.shortCollateral': '抵押金',
+  'lendDetail.shortBorrowedTokens': '已借代币',
+  'lendDetail.shortRules': '做空规则',
+  'lendDetail.shortRule1': '做空需要 150% USDC 抵押，借出代币卖出获得 USDC',
+  'lendDetail.shortRule2': '日利率随利用率指数增长，高利用率时利率极高',
+  'lendDetail.shortRule3': '健康因子低于 1.0 将被清算，清算罚金 10%',
+  'lendDetail.shortRule4': '还款时需归还借入代币 + 利息，赎回抵押金',
+  'lendDetail.openShort': '开仓做空',
+  'lendDetail.closeShort': '平仓还款',
+  'lendDetail.borrowTokenAmount': '借入代币数量',
+  'lendDetail.requiredCollateral': '所需抵押金',
+  'lendDetail.collateralRatio150': '抵押率 150%',
+  'lendDetail.shortOpenSuccess': '做空仓位已开启！',
 }
 
 export const enTranslations: TranslationKeys = {
@@ -1183,6 +1197,20 @@ export const enTranslations: TranslationKeys = {
   'lend.table.utilization': 'Utilization',
   'lend.table.dailyRate': 'Daily Rate',
   'lend.table.short': 'Short',
+  'lendDetail.shortPoolTitle': 'Short Pool',
+  'lendDetail.shortCollateral': 'Collateral',
+  'lendDetail.shortBorrowedTokens': 'Borrowed Tokens',
+  'lendDetail.shortRules': 'Short Rules',
+  'lendDetail.shortRule1': 'Shorting requires 150% USDC collateral, borrow tokens and sell for USDC',
+  'lendDetail.shortRule2': 'Daily rate grows exponentially with utilization, extremely high at high utilization',
+  'lendDetail.shortRule3': 'Health factor below 1.0 triggers liquidation with 10% penalty',
+  'lendDetail.shortRule4': 'Repay borrowed tokens + interest to redeem collateral',
+  'lendDetail.openShort': 'Open Short',
+  'lendDetail.closeShort': 'Close Position',
+  'lendDetail.borrowTokenAmount': 'Borrow Token Amount',
+  'lendDetail.requiredCollateral': 'Required Collateral',
+  'lendDetail.collateralRatio150': 'Collateral ratio 150%',
+  'lendDetail.shortOpenSuccess': 'Short position opened!',
 }
 
 const translations: Record<Lang, TranslationKeys> = {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Landmark, TrendingUp, Flame, AlertTriangle, ArrowRight } from 'lucide-react'
+import { Landmark, Flame, AlertTriangle, ArrowRight } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
@@ -216,26 +216,32 @@ export default function LendMarket() {
         <p className="text-gray-400">{t('lend.subtitle')}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card-dark">
-          <p className="text-xs text-gray-400 mb-1">{t('lend.totalDeposits')}</p>
-          <p className="text-2xl font-display font-bold neon-text">{formatUsdc(totalDeposits)} {nativeSymbol}</p>
-          <span className="text-xs text-gray-400 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> {longUtilization.toFixed(1)}% {t('lend.utilized')}
-          </span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card-dark border-neon-green/20">
+          <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-neon-green" /> {t('lend.longPool')}
+          </p>
+          <p className="text-2xl font-display font-bold text-neon-green">{formatUsdc(totalDeposits)}</p>
+          <span className="text-xs text-gray-400">{nativeSymbol} {t('lend.depositLabel')} · {longUtilization.toFixed(1)}% {t('lend.utilized')}</span>
+        </div>
+        <div className="card-dark border-neon-green/20">
+          <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-neon-green" /> {t('lend.longApy')}
+          </p>
+          <p className="text-2xl font-display font-bold text-neon-green">{depositAPY.toFixed(2)}%</p>
+          <span className="text-xs text-gray-400">{t('lend.depositApy')} · {nativeSymbol} {t('lend.depositLabel')}</span>
         </div>
         <div className="card-dark border-neon-red/20">
-          <p className="text-xs text-gray-400 mb-1">{t('lend.shortMarkets')}</p>
+          <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-neon-red" /> {t('lend.shortMarkets')}
+          </p>
           <p className="text-2xl font-display font-bold text-neon-red">{shortPoolTokens.length}</p>
           <span className="text-xs text-gray-400">{t('lend.shortMarketsDesc')}</span>
         </div>
-        <div className="card-dark border-neon-green/20">
-          <p className="text-xs text-gray-400 mb-1">{t('lend.longApy')}</p>
-          <p className="text-2xl font-display font-bold text-neon-green">{depositAPY.toFixed(2)}%</p>
-          <span className="text-xs text-gray-400">{nativeSymbol} {t('lend.depositLabel')}</span>
-        </div>
         <div className="card-dark border-orange-500/20">
-          <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Flame className="w-3 h-3 text-orange-500" /> {t('lend.totalBurned')}</p>
+          <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+            <Flame className="w-3 h-3 text-orange-500" /> {t('lend.burnEngine')}
+          </p>
           <p className="text-2xl font-display font-bold text-orange-500">—</p>
           <span className="text-xs text-gray-400">{t('lend.requiresBuyAndBurn')}</span>
         </div>

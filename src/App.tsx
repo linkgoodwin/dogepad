@@ -27,7 +27,8 @@ export default function App() {
           <Route path="/create" element={<CreateToken />} />
           <Route path="/token/:address" element={<TokenDetail />} />
           <Route path="/lend" element={<LendMarket />} />
-          <Route path="/lend/:address" element={<LendDetail />} />
+          <Route path="/lend/:mode" element={<LendDetail />} />
+          <Route path="/lend/:mode/:tokenAddress" element={<LendDetail />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/guide" element={<HowToPlay />} />
           <Route path="/revival" element={<Revival />} />
