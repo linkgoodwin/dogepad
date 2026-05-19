@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
-import { Vote, Clock, Flame, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkles, Inbox, Recycle, RefreshCw, ShieldAlert, Loader2, WifiOff, Globe, Twitter, MessageCircle, UsersRound, Rocket, Wallet, ArrowDownToLine, HandCoins, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { Vote, Clock, Flame, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkles, Inbox, Recycle, RefreshCw, ShieldAlert, Loader2, WifiOff, Globe, Twitter, MessageCircle, UsersRound, Rocket, Wallet, ArrowDownToLine, HandCoins, Zap, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import type { TokenMeta } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
@@ -404,6 +404,33 @@ export default function DaoVote() {
   const [showUnstakePanel, setShowUnstakePanel] = useState(false)
   const [txError, setTxError] = useState('')
   const [isApproving, setIsApproving] = useState(false)
+  const [lastAction, setLastAction] = useState<'settle' | 'launch' | null>(null)
+
+  const getUtcDay = () => new Date().toISOString().slice(0, 10)
+
+  const isSettledToday = (() => {
+    try { return localStorage.getItem('dogepad-settle-day') === getUtcDay() } catch { return false }
+  })()
+  const isLaunchedToday = (() => {
+    try { return localStorage.getItem('dogepad-launch-day') === getUtcDay() } catch { return false }
+  })()
+
+  const [settleDone, setSettleDone] = useState(isSettledToday)
+  const [launchDone, setLaunchDone] = useState(isLaunchedToday)
+
+  useEffect(() => {
+    if (isConfirmed && lastAction) {
+      const day = getUtcDay()
+      if (lastAction === 'settle') {
+        localStorage.setItem('dogepad-settle-day', day)
+        setSettleDone(true)
+      } else if (lastAction === 'launch') {
+        localStorage.setItem('dogepad-launch-day', day)
+        setLaunchDone(true)
+      }
+      setLastAction(null)
+    }
+  }, [isConfirmed, lastAction])
 
   const [subBnbAmount, setSubBnbAmount] = useState('')
   const [subDogeAmount, setSubDogeAmount] = useState('')
@@ -860,10 +887,12 @@ export default function DaoVote() {
 
   const handleSettleEpoch = async () => {
     setTxError('')
+    setLastAction('settle')
     try {
       await doWrite({ functionName: 'settleEpoch', args: [] })
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
+      setLastAction(null)
       const msg = err?.shortMessage || err?.message || 'Transaction failed'
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     }
@@ -871,10 +900,12 @@ export default function DaoVote() {
 
   const handleLaunchToken = async () => {
     setTxError('')
+    setLastAction('launch')
     try {
       await doWrite({ functionName: 'launchToken', args: [] })
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
+      setLastAction(null)
       const msg = err?.shortMessage || err?.message || 'Transaction failed'
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     }
@@ -1158,7 +1189,7 @@ export default function DaoVote() {
           <div className="card-dark">
             <h3 className="font-display font-bold text-lg mb-4">Epoch Timeline</h3>
             <div className="grid grid-cols-2 gap-3">
-              {epochTimeRemaining === 0 ? (
+              {epochTimeRemaining === 0 && !settleDone ? (
                 <button
                   className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleSettleEpoch}
@@ -1173,13 +1204,23 @@ export default function DaoVote() {
                   <div className="text-xs text-neon-green/70">+10 DOGE reward</div>
                 </button>
               ) : (
-                <div className={cn('text-center p-3 rounded-lg border', 'border-doge-gold/30 bg-doge-gold/5')}>
-                  <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
-                  <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
-                  <div className="text-xs text-gray-400">Voting Phase</div>
+                <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : settleDone ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
+                  {settleDone && epochTimeRemaining === 0 ? (
+                    <>
+                      <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
+                      <div className="text-sm font-bold text-emerald-400">Settled</div>
+                      <div className="text-xs text-gray-400">UTC 0:00 重置</div>
+                    </>
+                  ) : (
+                    <>
+                      <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
+                      <div className="text-xs text-gray-400">Voting Phase</div>
+                    </>
+                  )}
                 </div>
               )}
-              {queueLength > 0 ? (
+              {queueLength > 0 && !launchDone ? (
                 <button
                   className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleLaunchToken}
@@ -1194,10 +1235,20 @@ export default function DaoVote() {
                   <div className="text-xs text-neon-green/70">+20 DOGE reward</div>
                 </button>
               ) : (
-                <div className={cn('text-center p-3 rounded-lg border', 'border-dark-500/30 bg-dark-700')}>
-                  <Rocket className="w-5 h-5 mx-auto mb-2 text-gray-500" />
-                  <div className="text-sm font-bold">{queueLength} in queue</div>
-                  <div className="text-xs text-gray-400">Launch Queue</div>
+                <div className={cn('text-center p-3 rounded-lg border', launchDone && queueLength > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
+                  {launchDone && queueLength > 0 ? (
+                    <>
+                      <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
+                      <div className="text-sm font-bold text-emerald-400">Launched</div>
+                      <div className="text-xs text-gray-400">UTC 0:00 重置</div>
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                      <div className="text-sm font-bold">{queueLength} in queue</div>
+                      <div className="text-xs text-gray-400">Launch Queue</div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
