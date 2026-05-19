@@ -1158,39 +1158,47 @@ export default function DaoVote() {
           <div className="card-dark">
             <h3 className="font-display font-bold text-lg mb-4">Epoch Timeline</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : 'border-dark-500/30 bg-dark-700')}>
-                <Vote className={cn('w-5 h-5 mx-auto mb-2', epochTimeRemaining > 0 ? 'text-doge-gold' : 'text-gray-500')} />
-                <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
-                <div className="text-xs text-gray-400">Voting Phase</div>
-              </div>
-              <div className={cn('text-center p-3 rounded-lg border', queueLength > 0 ? 'border-doge-cyan/30 bg-doge-cyan/5' : 'border-dark-500/30 bg-dark-700')}>
-                <Rocket className={cn('w-5 h-5 mx-auto mb-2', queueLength > 0 ? 'text-doge-cyan' : 'text-gray-500')} />
-                <div className="text-sm font-bold">{queueLength} in queue</div>
-                <div className="text-xs text-gray-400">Launch Queue</div>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {epochTimeRemaining === 0 && (
+              {epochTimeRemaining === 0 ? (
                 <button
-                  className="btn-primary flex items-center gap-2 text-sm"
+                  className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleSettleEpoch}
                   disabled={isWriting || isConfirming}
                 >
-                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-                  Settle Epoch
-                  <span className="text-xs opacity-70">(+10 DOGE reward)</span>
+                  {isWriting || isConfirming ? (
+                    <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
+                  ) : (
+                    <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                  )}
+                  <div className="text-sm font-bold text-neon-green">Settle Epoch</div>
+                  <div className="text-xs text-neon-green/70">+10 DOGE reward</div>
                 </button>
+              ) : (
+                <div className={cn('text-center p-3 rounded-lg border', 'border-doge-gold/30 bg-doge-gold/5')}>
+                  <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
+                  <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
+                  <div className="text-xs text-gray-400">Voting Phase</div>
+                </div>
               )}
-              {queueLength > 0 && (
+              {queueLength > 0 ? (
                 <button
-                  className="btn-primary flex items-center gap-2 text-sm"
+                  className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleLaunchToken}
                   disabled={isWriting || isConfirming}
                 >
-                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                  Launch Token
-                  <span className="text-xs opacity-70">(+20 DOGE reward)</span>
+                  {isWriting || isConfirming ? (
+                    <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
+                  ) : (
+                    <Rocket className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                  )}
+                  <div className="text-sm font-bold text-neon-green">Launch Token</div>
+                  <div className="text-xs text-neon-green/70">+20 DOGE reward</div>
                 </button>
+              ) : (
+                <div className={cn('text-center p-3 rounded-lg border', 'border-dark-500/30 bg-dark-700')}>
+                  <Rocket className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                  <div className="text-sm font-bold">{queueLength} in queue</div>
+                  <div className="text-xs text-gray-400">Launch Queue</div>
+                </div>
               )}
             </div>
           </div>
