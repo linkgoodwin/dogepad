@@ -593,7 +593,7 @@ export const enTranslations: TranslationKeys = {
   'tokenDetail.distribution': 'Launch Distribution',
   'tokenDetail.distLp': 'LP Liquidity Pool',
   'tokenDetail.distLongPool': 'Long Pool',
-  'tokenDetail.distBurn': 'Burn Engine',
+  'tokenDetail.distBurn': 'Dev/Burn',
   'tokenDetail.distPlatform': 'Platform',
   'tokenDetail.distShortPool': 'Short Pool',
   'tokenDetail.tokens': 'Tokens',

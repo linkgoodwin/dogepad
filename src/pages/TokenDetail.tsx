@@ -537,6 +537,10 @@ export default function TokenDetail() {
                     <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-violet inline-block" />{t('tokenDetail.distShortPool')}</span>
                     <span className="font-semibold text-doge-violet">15% {t('tokenDetail.tokens')}</span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-red inline-block" />{t('tokenDetail.distBurn')}</span>
+                    <span className="font-semibold text-neon-red">5% {t('tokenDetail.tokens')}</span>
+                  </div>
                 </div>
               </div>
             )}
