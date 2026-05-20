@@ -9,9 +9,9 @@ import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, isTestnet, getNetwor
 import { useTargetChainId } from '@/hooks/useNetwork'
 
 const DURATION_TIERS = [
-  { value: 0, label: '3 Days', feeBnb: 3, desc: 'Short — quick test' },
-  { value: 1, label: '7 Days', feeBnb: 5, desc: 'Standard — balanced' },
-  { value: 2, label: '30 Days', feeBnb: 10, desc: 'Extended — max reach' },
+  { value: 0, feeBnb: 3, labelKey: 'create.tier3Days' as const, descKey: 'create.tier3Desc' as const },
+  { value: 1, feeBnb: 5, labelKey: 'create.tier7Days' as const, descKey: 'create.tier7Desc' as const },
+  { value: 2, feeBnb: 10, labelKey: 'create.tier30Days' as const, descKey: 'create.tier30Desc' as const },
 ]
 
 export default function CreateToken() {
@@ -188,12 +188,12 @@ export default function CreateToken() {
                     onClick={() => setSelectedTier(tier.value)}
                   >
                     <div className={cn('text-base font-display font-bold', selectedTier === tier.value ? 'text-doge-gold' : 'text-gray-300')}>
-                      {tier.label}
+                      {t(tier.labelKey)}
                     </div>
                     <div className={cn('text-sm font-display font-semibold mt-0.5', selectedTier === tier.value ? 'text-doge-gold' : 'text-gray-400')}>
                       {tier.feeBnb.toFixed(2)} {nativeSymbol}
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">{tier.desc}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{t(tier.descKey)}</div>
                     {selectedTier === tier.value && <CheckCircle className="w-3.5 h-3.5 text-doge-gold mx-auto mt-1.5" />}
                   </button>
                 ))}
@@ -339,7 +339,7 @@ export default function CreateToken() {
                 ) : (
                   <div className="flex flex-col items-center gap-1">
                     <Upload className="w-7 h-7 text-gray-500 group-hover:text-doge-gold transition-colors" />
-                    <span className="text-[10px] text-gray-500 group-hover:text-doge-gold/70 transition-colors">Upload</span>
+                    <span className="text-[10px] text-gray-500 group-hover:text-doge-gold/70 transition-colors">{t('create.upload')}</span>
                   </div>
                 )}
                 {!uploading && avatarUrl && (
@@ -353,7 +353,7 @@ export default function CreateToken() {
                 type="url"
                 value={avatarUrl}
                 onChange={(e) => { setAvatarUrl(e.target.value); setUploadError('') }}
-                placeholder="Or paste URL..."
+                placeholder={t('create.orPasteUrl')}
                 className="input-dark w-full text-center text-xs"
               />
               {uploadError && <p className="text-xs text-neon-red">{uploadError}</p>}
@@ -381,7 +381,7 @@ export default function CreateToken() {
               </div>
               <div className="flex justify-between pt-2 border-t border-dark-500/30">
                 <span className="text-gray-400">{t('create.expiry')}</span>
-                <span className="text-doge-gold font-semibold">{selectedTierInfo.label}</span>
+                <span className="text-doge-gold font-semibold">{t(selectedTierInfo.labelKey)}</span>
               </div>
             </div>
           </div>
@@ -394,7 +394,7 @@ export default function CreateToken() {
               </div>
               <div className="text-right">
                 <p className="text-2xl font-display font-bold text-doge-gold">{totalFeeStr}</p>
-                <p className="text-xs text-gray-400">{selectedTierInfo.label} {t('create.campaign')}</p>
+                <p className="text-xs text-gray-400">{t(selectedTierInfo.labelKey)} {t('create.campaign')}</p>
               </div>
             </div>
           </div>
@@ -449,7 +449,7 @@ export default function CreateToken() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">{t('create.durationTier')}</span>
-                      <span className="font-semibold">{selectedTierInfo.label}</span>
+                      <span className="font-semibold">{t(selectedTierInfo.labelKey)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">{t('create.creatorIncentives')}</span>

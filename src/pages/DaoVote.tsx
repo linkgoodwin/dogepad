@@ -223,7 +223,7 @@ function CandidateDetailCard({
       )}
       {variant === 'queued' && (
         <div className="absolute top-2 right-2">
-          <span className="px-2 py-0.5 text-[10px] font-medium bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 rounded-full">Queued</span>
+          <span className="px-2 py-0.5 text-[10px] font-medium bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 rounded-full">{t('dao.queuedBadge')}</span>
         </div>
       )}
 
@@ -260,7 +260,7 @@ function CandidateDetailCard({
               <div className={cn('font-display font-bold text-sm', accentColor)}>
                 {formatUsdc(Number(formatEther(candidate.totalSubBnb)))} {nativeSymbol}
               </div>
-              <div className="text-xs text-gray-500">Subscribed</div>
+              <div className="text-xs text-gray-500">{t('dao.subscribed')}</div>
             </div>
             {candidate.totalSubDoge > 0n && (
               <div>
@@ -272,18 +272,18 @@ function CandidateDetailCard({
             )}
             <div>
               <div className="font-display font-bold text-sm">{Number(candidate.totalWeight).toLocaleString()} {t('dao.pointsUnit')}</div>
-              <div className="text-xs text-gray-500">Weight</div>
+              <div className="text-xs text-gray-500">{t('dao.weight')}</div>
             </div>
             {variant === 'active' && candidate.expireTime > 0n && (
               <div>
                 <div className="text-xs text-gray-300">{formatCountdown(Number(candidate.expireTime))}</div>
-                <div className="text-xs text-gray-500">Expires</div>
+                <div className="text-xs text-gray-500">{t('dao.expires')}</div>
               </div>
             )}
             {variant === 'grace' && candidate.gracePeriodEnd > 0n && (
               <div>
                 <div className="text-xs font-bold text-neon-yellow">{formatCountdown(Number(candidate.gracePeriodEnd))}</div>
-                <div className="text-xs text-gray-500">Grace ends</div>
+                <div className="text-xs text-gray-500">{t('dao.graceEnds')}</div>
               </div>
             )}
           </div>
@@ -331,7 +331,7 @@ function CandidateDetailCard({
 
       {variant === 'grace' && (
         <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
-          <p className="text-xs text-neon-yellow mb-2">Creator renewal period — only the original proposer can renew</p>
+          <p className="text-xs text-neon-yellow mb-2">{t('dao.graceOnlyCreator')}</p>
           <div className="flex gap-2">
             {DURATION_TIERS.map((t) => (
               <button
@@ -357,7 +357,7 @@ function CandidateDetailCard({
 
       {variant === 'recycle' && (
         <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
-          <p className="text-xs text-neon-red mb-2">Grace period expired — any player can claim and become the new creator</p>
+          <p className="text-xs text-neon-red mb-2">{t('revival.anyoneClaim')}</p>
           <div className="flex gap-2">
             {DURATION_TIERS.map((t) => (
               <button
@@ -1008,7 +1008,7 @@ export default function DaoVote() {
           </span>
           <span className="badge-gold">
             <Flame className="w-3 h-3 mr-1" />
-            Queue: {queueLength} (Top 3/day)
+            Queue: {queueLength} ({t('dao.top3PerDay')})
           </span>
           <button onClick={handleRefresh} className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors">
             <RefreshCw className="w-4 h-4 text-gray-400" />
@@ -1031,7 +1031,7 @@ export default function DaoVote() {
                 )}
                 onClick={() => setActiveTab('voting')}
               >
-                <Vote className="w-4 h-4" /> Active ({activeIds.length})
+                <Vote className="w-4 h-4" /> {t('dao.activeTab')} ({activeIds.length})
               </button>
               <button
                 className={cn(
@@ -1040,7 +1040,7 @@ export default function DaoVote() {
                 )}
                 onClick={() => setActiveTab('queue')}
               >
-                <Rocket className="w-4 h-4" /> Queue ({queuedIds.length})
+                <Rocket className="w-4 h-4" /> {t('dao.queueTab')} ({queuedIds.length})
               </button>
               <button
                 className={cn(
@@ -1049,7 +1049,7 @@ export default function DaoVote() {
                 )}
                 onClick={() => setActiveTab('grace')}
               >
-                <ShieldAlert className="w-4 h-4" /> Grace ({graceIds.length})
+                <ShieldAlert className="w-4 h-4" /> {t('dao.graceTab')} ({graceIds.length})
               </button>
               <button
                 className={cn(
@@ -1058,7 +1058,7 @@ export default function DaoVote() {
                 )}
                 onClick={() => setActiveTab('recycle')}
               >
-                <Recycle className="w-4 h-4" /> Recycle ({recycleIds.length})
+                <Recycle className="w-4 h-4" /> {t('dao.recycleTab')} ({recycleIds.length})
               </button>
             </div>
 
@@ -1096,8 +1096,8 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
                     <Inbox className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">No active candidates</p>
-                  <p className="text-xs text-gray-500">Submit a candidate to start the voting</p>
+                  <p className="text-gray-400 mb-2">{t('dao.noActiveCandidates')}</p>
+                  <p className="text-xs text-gray-500">{t('dao.submitToStartVoting')}</p>
                 </div>
               )
             )}
@@ -1128,8 +1128,8 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
                     <Rocket className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">Launch queue is empty</p>
-                  <p className="text-xs text-gray-500">Top 3 candidates by weight enter queue daily at UTC 00:00</p>
+                  <p className="text-gray-400 mb-2">{t('dao.queueEmpty')}</p>
+                  <p className="text-xs text-gray-500">{t('dao.queueEmptyDesc')}</p>
                 </div>
               )
             )}
@@ -1160,7 +1160,7 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
                     <ShieldAlert className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">No grace period candidates</p>
+                  <p className="text-gray-400 mb-2">{t('dao.noGraceCandidates')}</p>
                 </div>
               )
             )}
@@ -1191,14 +1191,14 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
                     <Recycle className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">No recyclable candidates</p>
+                  <p className="text-gray-400 mb-2">{t('dao.noRecyclableCandidates')}</p>
                 </div>
               )
             )}
           </div>
 
           <div className="card-dark">
-            <h3 className="font-display font-bold text-lg mb-4">Epoch Timeline</h3>
+            <h3 className="font-display font-bold text-lg mb-4">{t('dao.epochTimeline')}</h3>
             <div className="grid grid-cols-2 gap-3">
               {epochTimeRemaining === 0 && !settleDone ? (
                 <button
@@ -1211,22 +1211,22 @@ export default function DaoVote() {
                   ) : (
                     <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
                   )}
-                  <div className="text-sm font-bold text-neon-green">Settle Epoch</div>
-                  <div className="text-xs text-neon-green/70">+10 DOGE reward</div>
+                  <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
+                  <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
                 </button>
               ) : (
                 <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : settleDone ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
                   {settleDone && epochTimeRemaining === 0 ? (
                     <>
                       <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
-                      <div className="text-sm font-bold text-emerald-400">Settled</div>
+                      <div className="text-sm font-bold text-emerald-400">{t('dao.settleDone')}</div>
                       <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
                     </>
                   ) : (
                     <>
                       <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
                       <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
-                      <div className="text-xs text-gray-400">Voting Phase</div>
+                      <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
                     </>
                   )}
                 </div>
@@ -1242,7 +1242,7 @@ export default function DaoVote() {
                   ) : (
                     <Rocket className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
                   )}
-                  <div className="text-sm font-bold text-neon-green">Launch Token</div>
+                  <div className="text-sm font-bold text-neon-green">{t('dao.launchToken')}</div>
                   <div className="text-xs text-neon-green/70">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
                 </button>
               ) : queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
@@ -1262,8 +1262,8 @@ export default function DaoVote() {
                   ) : (
                     <>
                       <Rocket className="w-5 h-5 mx-auto mb-2 text-gray-500" />
-                      <div className="text-sm font-bold">{queueLength} in queue</div>
-                      <div className="text-xs text-gray-400">Launch Queue</div>
+                      <div className="text-sm font-bold">{queueLength} {t('dao.inQueue')}</div>
+                      <div className="text-xs text-gray-400">{t('dao.launchQueue')}</div>
                     </>
                   )}
                 </div>
