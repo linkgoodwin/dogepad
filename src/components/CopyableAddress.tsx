@@ -23,7 +23,7 @@ export default function CopyableAddress({
   className = '',
 }: CopyableAddressProps) {
   const [copied, setCopied] = useState(false)
-  const { t } = useT()
+  const t = useT()
 
   if (!address || typeof address !== 'string') return null
 
