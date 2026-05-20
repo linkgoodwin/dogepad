@@ -107,19 +107,19 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
           </div>
         </div>
         {isLaunched ? (
-          <span className="badge-gold">Launched</span>
+          <span className="badge-gold">{t('dao.launched')}</span>
         ) : (
-          <span className="badge-cyan">Voting</span>
+          <span className="badge-cyan">{t('dao.phase.voting')}</span>
         )}
       </div>
 
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="text-xs text-gray-400">Subscribed</p>
+          <p className="text-xs text-gray-400">{t('dao.subscribed')}</p>
           <p className="font-display font-bold text-white">{formatUsdc(committedBnb)} {nativeSymbol}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-400">Weight</p>
+          <p className="text-xs text-gray-400">{t('dao.weight')}</p>
           <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()}</p>
         </div>
       </div>
@@ -471,8 +471,8 @@ export default function Dashboard() {
         ) : (
           <div className="card-dark text-center py-16">
             <Rocket className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 text-lg font-display mb-2">No tokens yet</p>
-            <p className="text-gray-500 text-sm mb-6">Be the first to forge a new token on DogePad</p>
+            <p className="text-gray-400 text-lg font-display mb-2">{t('dashboard.noTokensYet')}</p>
+            <p className="text-gray-500 text-sm mb-6">{t('dashboard.beFirstForge')}</p>
             <Link to="/create" className="btn-primary inline-flex items-center gap-2">
               <Flame className="w-4 h-4" /> {t('home.submitToken')}
             </Link>

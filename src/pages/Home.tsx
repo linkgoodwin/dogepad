@@ -90,17 +90,17 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
             <span className="text-xs text-gray-500">{candidate.symbol}</span>
           </div>
           <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', isLaunched ? 'bg-doge-gold/10 text-doge-gold border border-doge-gold/20' : 'bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/20')}>
-            {isLaunched ? 'Launched' : 'Voting'}
+            {isLaunched ? t('dao.launched') : t('dao.phase.voting')}
           </span>
         </div>
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-500">Subscribed</p>
+          <p className="text-xs text-gray-500">{t('dao.subscribed')}</p>
           <p className="font-display font-bold text-white">{formatUsdc(Number(formatEther(candidate.totalSubBnb)))} {nativeSymbol}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-500">Weight</p>
+          <p className="text-xs text-gray-500">{t('dao.weight')}</p>
           <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()} {t('home.weightUnit')}</p>
         </div>
       </div>
@@ -430,7 +430,7 @@ export default function Home() {
                 <Flame className="w-7 h-7 text-doge-gold" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="badge-gold">Launchpad</span>
+                <span className="badge-gold">{t('home.launchpad')}</span>
                 <span className="badge-cyan">{t('home.badgeSubscribe')}</span>
               </div>
             </div>

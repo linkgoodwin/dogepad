@@ -359,7 +359,7 @@ export default function LendMarket() {
                       )}>
                         {token.dailyRate.toFixed(2)}%
                       </span>
-                      <span className="text-xs text-gray-500">/day</span>
+                      <span className="text-xs text-gray-500">{t('common.perDay')}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link
@@ -504,7 +504,7 @@ export default function LendMarket() {
                       )}>
                         {token.dailyRate.toFixed(2)}%
                       </span>
-                      <span className="text-xs text-gray-500">/day</span>
+                      <span className="text-xs text-gray-500">{t('common.perDay')}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link
@@ -550,7 +550,7 @@ export default function LendMarket() {
                 'font-display font-bold text-sm',
                 calculateExponentialRate(u) > 10 ? 'text-neon-red' : calculateExponentialRate(u) > 3 ? 'text-neon-yellow' : 'text-gray-300'
               )}>
-                {calculateExponentialRate(u).toFixed(2)}%/day
+                {calculateExponentialRate(u).toFixed(2)}%{t('common.perDay')}
               </p>
             </div>
           ))}

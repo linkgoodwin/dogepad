@@ -395,7 +395,7 @@ export default function LendDetail() {
                   <div className="bg-dark-700 rounded-lg p-3">
                     <p className="text-xs text-gray-400 mb-1">{t('lend.table.dailyRate')}</p>
                     <p className={cn('font-display font-bold text-lg', shortDailyRate > 10 ? 'text-neon-red' : 'text-neon-yellow')}>
-                      {shortDailyRate.toFixed(2)}% / day
+                      {shortDailyRate.toFixed(2)}% {t('common.perDay')}
                     </p>
                   </div>
                   {isConfirmed && (

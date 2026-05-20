@@ -463,9 +463,9 @@ export default function TokenDetail() {
           <div className="w-20 h-20 rounded-2xl bg-dark-700 flex items-center justify-center mb-6">
             <SearchX className="w-10 h-10 text-gray-500" />
           </div>
-          <h2 className="font-display font-bold text-2xl mb-2">Token Not Found</h2>
-          <p className="text-gray-400 mb-6">This token does not exist or has not been created yet.</p>
-          <Link to="/create" className="btn-primary">Create Token</Link>
+          <h2 className="font-display font-bold text-2xl mb-2">{t('tokenDetail.tokenNotFound')}</h2>
+          <p className="text-gray-400 mb-6">{t('tokenDetail.tokenNotFoundDesc')}</p>
+          <Link to="/create" className="btn-primary">{t('tokenDetail.createToken')}</Link>
         </div>
       </div>
     )
@@ -697,8 +697,8 @@ export default function TokenDetail() {
 
             {isListed ? (
               <div className="text-center py-6">
-                <p className="text-neon-green font-display font-semibold mb-2">✅ Listed on DEX</p>
-                <p className="text-gray-400 text-sm">This token is now trading on DEX. Use the DEX to trade.</p>
+                <p className="text-neon-green font-display font-semibold mb-2">{t('tokenDetail.listedOnDex')}</p>
+                <p className="text-gray-400 text-sm">{t('tokenDetail.listedOnDexDesc')}</p>
                 <a
                   href={getBscScanUrl(chainId, 'token', tokenAddress)}
                   target="_blank"
@@ -745,7 +745,7 @@ export default function TokenDetail() {
                 </div>
                 {!isConnected ? (
                   <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
-                    Connect Wallet
+                    {t('common.connect')}
                   </button>
                 ) : (
                   <button
@@ -753,7 +753,7 @@ export default function TokenDetail() {
                     onClick={handleBuy}
                     disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.buy')} ${tokenSymbol}`}
+                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
                   </button>
                 )}
               </div>
@@ -804,7 +804,7 @@ export default function TokenDetail() {
                 </div>
                 {!isConnected ? (
                   <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
-                    Connect Wallet
+                    {t('common.connect')}
                   </button>
                 ) : needsApproval ? (
                   <button
@@ -812,7 +812,7 @@ export default function TokenDetail() {
                     onClick={handleApprove}
                     disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `Approve ${tokenSymbol}`}
+                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : t('common.approve', { symbol: tokenSymbol })}
                   </button>
                 ) : (
                   <button
@@ -820,7 +820,7 @@ export default function TokenDetail() {
                     onClick={handleSell}
                     disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
                   >
-                    {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Confirming...' : `${t('tokenDetail.sell')} ${tokenSymbol}`}
+                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
                   </button>
                 )}
               </div>
@@ -829,12 +829,12 @@ export default function TokenDetail() {
             {writeError && (
               <div className="mt-3 flex items-start gap-2 text-neon-red text-xs bg-neon-red/10 rounded-lg p-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{writeError.message?.includes('User rejected') ? 'Transaction rejected' : writeError.message?.slice(0, 100) || 'Transaction failed'}</span>
+                <span>{writeError.message?.includes('User rejected') ? t('common.transactionRejected') : writeError.message?.slice(0, 100) || t('common.transactionFailed')}</span>
               </div>
             )}
             {isConfirmed && (
               <div className="mt-3 flex items-start gap-2 text-neon-green text-xs bg-neon-green/10 rounded-lg p-2">
-                <span>Transaction confirmed!</span>
+                <span>{t('common.transactionConfirmed')}</span>
                 {txHash && (
                   <a
                     href={getBscScanUrl(chainId, 'tx', txHash)}
@@ -842,7 +842,7 @@ export default function TokenDetail() {
                     rel="noopener noreferrer"
                     className="underline hover:no-underline"
                   >
-                    View
+                    {t('common.view')}
                   </a>
                 )}
               </div>

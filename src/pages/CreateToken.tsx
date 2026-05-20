@@ -92,7 +92,7 @@ export default function CreateToken() {
     try {
       const url = await uploadToIpfs(file)
       setAvatarUrl(url)
-    } catch (err: any) { setUploadError(err.message || 'Upload failed') }
+    } catch (err: any) { setUploadError(err.message || t('create.uploadFailed')) }
     finally { setUploading(false) }
   }
 
@@ -123,7 +123,7 @@ export default function CreateToken() {
         gas: 5_000_000n,
       } as any)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (msg.includes('User rejected') || msg.includes('denied') || msg.includes('cancelled')) {
         setTxError(t('create.userRejected'))
       } else {
@@ -357,7 +357,7 @@ export default function CreateToken() {
                 className="input-dark w-full text-center text-xs"
               />
               {uploadError && <p className="text-xs text-neon-red">{uploadError}</p>}
-              <p className="text-xs text-gray-500 text-center">Max 200KB · PNG/JPEG/GIF/WebP/SVG · Stored on IPFS</p>
+              <p className="text-xs text-gray-500 text-center">{t('create.maxFileSize')}</p>
             </div>
           </div>
 

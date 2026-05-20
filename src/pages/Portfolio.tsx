@@ -9,13 +9,13 @@ import { Link } from 'react-router-dom'
 import { useT } from '@/i18n/useT'
 import CopyableAddress from '@/components/CopyableAddress'
 
-const STATUS_MAP: Record<number, { label: string; color: string }> = {
-  0: { label: 'Active', color: 'text-neon-green' },
-  1: { label: 'Queued', color: 'text-doge-cyan' },
-  2: { label: 'Expired', color: 'text-gray-400' },
-  3: { label: 'Grace', color: 'text-neon-yellow' },
-  4: { label: 'Recyclable', color: 'text-neon-red' },
-  5: { label: 'Launched', color: 'text-doge-gold' },
+const STATUS_MAP: Record<number, { labelKey: string; color: string }> = {
+  0: { labelKey: 'dao.activeTab', color: 'text-neon-green' },
+  1: { labelKey: 'dao.queuedBadge', color: 'text-doge-cyan' },
+  2: { labelKey: 'dao.statusExpired', color: 'text-gray-400' },
+  3: { labelKey: 'dao.graceTab', color: 'text-neon-yellow' },
+  4: { labelKey: 'dao.statusRecyclable', color: 'text-neon-red' },
+  5: { labelKey: 'dao.launched', color: 'text-doge-gold' },
 }
 
 export default function Portfolio() {
@@ -319,8 +319,8 @@ export default function Portfolio() {
         </div>
         <div className="card-dark text-center py-16">
           <Wallet className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400 text-lg font-display mb-2">No holdings yet</p>
-          <p className="text-gray-500 text-sm mb-6">Connect your wallet and start trading to see your portfolio</p>
+          <p className="text-gray-400 text-lg font-display mb-2">{t('portfolio.noHoldingsYet')}</p>
+          <p className="text-gray-500 text-sm mb-6">{t('portfolio.connectWalletTrade')}</p>
           <Link to="/" className="btn-primary inline-block">{t('common.trade')}</Link>
         </div>
       </div>
@@ -347,7 +347,7 @@ export default function Portfolio() {
           <p className={cn('text-3xl font-display font-bold', totalEarnings >= 0 ? 'text-neon-green' : 'text-neon-red')}>
             {totalEarnings >= 0 ? '+' : ''}{formatUsdc(totalEarnings)} {nativeSymbol}
           </p>
-          <span className={cn('text-sm font-medium', totalEarnings >= 0 ? 'text-neon-green' : 'text-neon-red')}>Earnings</span>
+          <span className={cn('text-sm font-medium', totalEarnings >= 0 ? 'text-neon-green' : 'text-neon-red')}>{t('portfolio.earningsLabel')}</span>
         </div>
         <div className="card-dark">
           <p className="text-xs text-gray-400 mb-1">{t('portfolio.activePositions')}</p>
@@ -366,7 +366,7 @@ export default function Portfolio() {
           </h2>
           <div className="space-y-3">
             {mySubscriptions.map(s => {
-              const statusInfo = STATUS_MAP[s.candidateStatus] || { label: 'Unknown', color: 'text-gray-400' }
+              const statusInfo = STATUS_MAP[s.candidateStatus] || { labelKey: 'portfolio.unknown', color: 'text-gray-400' }
               const canClaim = s.wasLaunched && s.isActive && !s.hasClaimed && !s.hasRefunded
               const canRefund = !s.wasLaunched && s.isActive && !s.hasClaimed && !s.hasRefunded && (s.candidateStatus === 2 || s.candidateStatus === 3 || s.candidateStatus === 4)
               return (
@@ -381,7 +381,7 @@ export default function Portfolio() {
                           {s.candidateName} <span className="text-gray-400 text-sm">{s.candidateSymbol}</span>
                         </p>
                         <div className="flex items-center gap-2 text-xs">
-                          <span className={cn('font-medium', statusInfo.color)}>{statusInfo.label}</span>
+                          <span className={cn('font-medium', statusInfo.color)}>{t(statusInfo.labelKey)}</span>
                           {s.hasClaimed && <span className="text-neon-green">{t('portfolio.claimed')}</span>}
                           {s.hasRefunded && <span className="text-neon-yellow">{t('portfolio.refunded')}</span>}
                         </div>
@@ -446,7 +446,7 @@ export default function Portfolio() {
           <div className="space-y-3">
             {myCandidates.map(c => {
               const meta = parseMetadata(c.metadataURI)
-              const statusInfo = STATUS_MAP[c.status] || { label: 'Unknown', color: 'text-gray-400' }
+              const statusInfo = STATUS_MAP[c.status] || { labelKey: 'portfolio.unknown', color: 'text-gray-400' }
               const remaining = c.expireTime - Math.floor(Date.now() / 1000)
               return (
                 <div key={c.id} className="bg-dark-700 rounded-lg p-4">
@@ -462,7 +462,7 @@ export default function Portfolio() {
                       <div>
                         <p className="font-display font-semibold">{c.name} <span className="text-gray-400 text-sm">{c.symbol}</span></p>
                         <div className="flex items-center gap-2 text-xs">
-                          <span className={cn('font-medium', statusInfo.color)}>{statusInfo.label}</span>
+                          <span className={cn('font-medium', statusInfo.color)}>{t(statusInfo.labelKey)}</span>
                           {c.status === 0 && remaining > 0 && (
                             <span className="text-gray-500">
                               {t('portfolio.daysHoursUntilExpiry', { days: Math.floor(remaining / 86400), hours: Math.floor((remaining % 86400) / 3600) })}
@@ -594,13 +594,13 @@ export default function Portfolio() {
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-neon-purple/20 flex items-center justify-center text-sm font-bold text-neon-purple">B</div>
                   <div>
-                    <p className="font-display font-semibold">{nativeSymbol} Deposit</p>
-                    <p className="text-xs text-gray-400">LongPool</p>
+                    <p className="font-display font-semibold">{nativeSymbol} {t('portfolio.depositLabel')}</p>
+                    <p className="text-xs text-gray-400">{t('portfolio.longPoolLabel')}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="font-display font-bold">{formatUsdc(lendingDeposit)} {nativeSymbol}</p>
-                  <p className="text-xs text-neon-green">+{formatUsdc(pendingYield)} {nativeSymbol} pending</p>
+                  <p className="text-xs text-neon-green">+{formatUsdc(pendingYield)} {nativeSymbol} {t('portfolio.pendingLabel')}</p>
                 </div>
               </div>
             </div>
@@ -637,9 +637,9 @@ export default function Portfolio() {
             <p className="text-xl font-display font-bold text-neon-purple">{formatUsdc(pendingYield)} {nativeSymbol}</p>
           </div>
           <div className="bg-dark-700 rounded-lg p-4">
-            <p className="text-xs text-gray-400 mb-1">Subscriptions</p>
+            <p className="text-xs text-gray-400 mb-1">{t('portfolio.subscriptionsLabel')}</p>
             <p className="text-xl font-display font-bold text-doge-gold">{formatUsdc(totalSubBnbValue)} {nativeSymbol}</p>
-            <p className="text-xs text-gray-400 mt-1">{mySubscriptions.filter(s => s.isActive).length} active</p>
+            <p className="text-xs text-gray-400 mt-1">{mySubscriptions.filter(s => s.isActive).length} {t('portfolio.activeCount')}</p>
           </div>
         </div>
       </div>

@@ -68,18 +68,18 @@ interface Candidate {
 }
 
 const DURATION_TIERS = [
-  { value: 0, label: '3 Days', duration: '3d', fee: '3', feeBnb: 3 },
-  { value: 1, label: '7 Days', duration: '7d', fee: '5', feeBnb: 5 },
-  { value: 2, label: '30 Days', duration: '30d', fee: '10', feeBnb: 10 },
+  { value: 0, labelKey: 'create.tier3Days', duration: '3d', fee: '3', feeBnb: 3 },
+  { value: 1, labelKey: 'create.tier7Days', duration: '7d', fee: '5', feeBnb: 5 },
+  { value: 2, labelKey: 'create.tier30Days', duration: '30d', fee: '10', feeBnb: 10 },
 ]
 
-const STATUS_MAP: Record<number, string> = {
-  0: 'Active',
-  1: 'Queued',
-  2: 'Expired',
-  3: 'Grace',
-  4: 'Recyclable',
-  5: 'Launched',
+const STATUS_MAP: Record<number, { labelKey: string; color: string }> = {
+  0: { labelKey: 'dao.activeTab', color: 'text-neon-green' },
+  1: { labelKey: 'dao.queuedBadge', color: 'text-doge-cyan' },
+  2: { labelKey: 'dao.statusExpired', color: 'text-gray-400' },
+  3: { labelKey: 'dao.graceTab', color: 'text-neon-yellow' },
+  4: { labelKey: 'dao.statusRecyclable', color: 'text-neon-red' },
+  5: { labelKey: 'dao.launched', color: 'text-doge-gold' },
 }
 
 const STAKE_DURATIONS = [
@@ -176,7 +176,7 @@ function CandidateDetailCard({
 
   const formatCountdown = (timestamp: number) => {
     const diff = timestamp - Date.now() / 1000
-    if (diff <= 0) return 'Expired'
+    if (diff <= 0) return t('dao.statusExpired')
     const d = Math.floor(diff / 86400)
     const h = Math.floor((diff % 86400) / 3600)
     const m = Math.floor((diff % 3600) / 60)
@@ -333,22 +333,22 @@ function CandidateDetailCard({
         <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
           <p className="text-xs text-neon-yellow mb-2">{t('dao.graceOnlyCreator')}</p>
           <div className="flex gap-2">
-            {DURATION_TIERS.map((t) => (
+            {DURATION_TIERS.map((tier) => (
               <button
-                key={t.value}
+                key={tier.value}
                 className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-yellow hover:bg-dark-500 transition-colors border border-dark-500"
                 onClick={async (e) => {
                   e.stopPropagation()
                   try {
                     await doWrite({
                       functionName: 'renewCandidate',
-                      args: [BigInt(candidateId), BigInt(t.value), true, true, true],
-                      value: parseEther(t.feeBnb.toFixed(2)),
+                      args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
+                      value: parseEther(tier.feeBnb.toFixed(2)),
                     })
                   } catch {}
                 }}
               >
-                {t.label} Â· {t.fee} {nativeSymbol}
+                {t(tier.labelKey)} Â· {tier.fee} {nativeSymbol}
               </button>
             ))}
           </div>
@@ -359,22 +359,22 @@ function CandidateDetailCard({
         <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
           <p className="text-xs text-neon-red mb-2">{t('revival.anyoneClaim')}</p>
           <div className="flex gap-2">
-            {DURATION_TIERS.map((t) => (
+            {DURATION_TIERS.map((tier) => (
               <button
-                key={t.value}
+                key={tier.value}
                 className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-red hover:bg-dark-500 transition-colors border border-dark-500"
                 onClick={async (e) => {
                   e.stopPropagation()
                   try {
                     await doWrite({
                       functionName: 'claimRecycled',
-                      args: [BigInt(candidateId), BigInt(t.value), true, true, true],
-                      value: parseEther(t.feeBnb.toFixed(2)),
+                      args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
+                      value: parseEther(tier.feeBnb.toFixed(2)),
                     })
                   } catch {}
                 }}
               >
-                {t.label} Â· {t.fee} {nativeSymbol}
+                {t(tier.labelKey)} Â· {tier.fee} {nativeSymbol}
               </button>
             ))}
           </div>
@@ -795,7 +795,7 @@ export default function DaoVote() {
       setSubBnbAmount('')
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
@@ -838,7 +838,7 @@ export default function DaoVote() {
         refetchDogeAllowance()
       }, 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
@@ -856,7 +856,7 @@ export default function DaoVote() {
         refetchEffectiveRights()
       }, 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
@@ -871,7 +871,7 @@ export default function DaoVote() {
         refetchEffectiveRights()
       }, 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
@@ -891,7 +891,7 @@ export default function DaoVote() {
       setVoteRightsAmount('')
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
@@ -904,7 +904,7 @@ export default function DaoVote() {
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
       setLastAction(null)
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     }
   }
@@ -917,7 +917,7 @@ export default function DaoVote() {
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
       setLastAction(null)
-      const msg = err?.shortMessage || err?.message || 'Transaction failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     }
   }
@@ -937,7 +937,7 @@ export default function DaoVote() {
       })
       setTimeout(() => refetchDogeAllowance(), 2000)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Approve failed'
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     } finally {
       setIsApproving(false)
@@ -1008,7 +1008,7 @@ export default function DaoVote() {
           </span>
           <span className="badge-gold">
             <Flame className="w-3 h-3 mr-1" />
-            Queue: {queueLength} ({t('dao.top3PerDay')})
+            {t('dao.queueTab')}: {queueLength} ({t('dao.top3PerDay')})
           </span>
           <button onClick={handleRefresh} className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors">
             <RefreshCw className="w-4 h-4 text-gray-400" />
@@ -1326,10 +1326,10 @@ export default function DaoVote() {
                 </div>
 
                 <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                  <p>â€¢ {t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
-                  <p>â€¢ {t('dao.subscribeNoLimitHint')}</p>
-                  <p>â€¢ {t('dao.expiredRefundHint')}</p>
-                  <p>â€¢ {t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
+                  <p>â€?{t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
+                  <p>â€?{t('dao.subscribeNoLimitHint')}</p>
+                  <p>â€?{t('dao.expiredRefundHint')}</p>
+                  <p>â€?{t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
                 </div>
               </div>
             ) : (
@@ -1639,10 +1639,10 @@ export default function DaoVote() {
               )}
 
               <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                <p>â€¢ {t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
-                <p>â€¢ {t('dao.durationMultiplierHint')}</p>
-                <p>â€¢ {t('dao.rightsCapHint')}</p>
-                <p>â€¢ {t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
+                <p>â€?{t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
+                <p>â€?{t('dao.durationMultiplierHint')}</p>
+                <p>â€?{t('dao.rightsCapHint')}</p>
+                <p>â€?{t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
               </div>
             </div>
           </div>
