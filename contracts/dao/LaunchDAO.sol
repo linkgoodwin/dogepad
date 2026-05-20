@@ -39,6 +39,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant MAX_STAKE = 300 ether;
     uint256 public constant LAUNCH_WINDOW_HOUR = 4;
     uint256 public constant DOGE_BNB_RATE = 100;
+    uint256 public constant DAILY_QUEUE_LIMIT = 3;
 
     uint256 public constant RIGHTS_DENOMINATOR = 6e21;
     uint256 public constant DOGE_SCORE_MULTIPLIER = 3;
@@ -63,7 +64,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant SETTLE_REWARD = 10e18;
     uint256 public constant LAUNCH_REWARD = 20e18;
 
-    uint256 public constant TIER_1_DURATION = 1 days;
+    uint256 public constant TIER_1_DURATION = 3 days;
     uint256 public constant TIER_7_DURATION = 7 days;
     uint256 public constant TIER_30_DURATION = 30 days;
     uint256 public constant TIER_1_FEE = 3 ether;
@@ -71,7 +72,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant TIER_30_FEE = 10 ether;
 
     enum CandidateStatus { Active, Queued, Expired, GracePeriod, Recyclable, Launched }
-    enum DurationTier { Day1, Day7, Day30 }
+    enum DurationTier { Day3, Day7, Day30 }
     enum StakeDuration { Demand, Days30, Days90, Days180 }
 
     struct Candidate {
@@ -156,6 +157,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public currentDay;
     uint256 public lastLaunchDay;
     uint256 public maxLaunchsPerDay = 1;
+    uint256 public lastQueueDay;
     mapping(uint256 => uint256) public dayLaunchCount;
     mapping(uint256 => EpochInfo) public epochInfo;
 
@@ -171,6 +173,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     event CandidateRenewed(uint256 indexed candidateId, address indexed proposer, DurationTier tier);
     event CandidateRecycled(uint256 indexed candidateId, address indexed newProposer, DurationTier tier);
     event EpochSettled(uint256 indexed day, uint256 winningCandidateId);
+    event DailyEnqueue(uint256 indexed day, uint256 count);
     event TokenLaunched(uint256 indexed candidateId, address token, uint256 bnbUsed, uint256 tokensReceived, uint256 excessBnb);
     event RewardsDeposited(address indexed from, uint256 amount);
 
@@ -196,14 +199,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function getTierDuration(DurationTier tier) public pure returns (uint256) {
-        if (tier == DurationTier.Day1) return TIER_1_DURATION;
+        if (tier == DurationTier.Day3) return TIER_1_DURATION;
         if (tier == DurationTier.Day7) return TIER_7_DURATION;
         if (tier == DurationTier.Day30) return TIER_30_DURATION;
         revert InvalidDurationTier();
     }
 
     function getTierFee(DurationTier tier) public pure returns (uint256) {
-        if (tier == DurationTier.Day1) return TIER_1_FEE;
+        if (tier == DurationTier.Day3) return TIER_1_FEE;
         if (tier == DurationTier.Day7) return TIER_7_FEE;
         if (tier == DurationTier.Day30) return TIER_30_FEE;
         revert InvalidDurationTier();
@@ -256,10 +259,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.totalSubBnb += msg.value;
         c.totalWeight += weight;
         c.totalRightsVotes += weight;
-
-        if (c.totalSubBnb >= LAUNCH_THRESHOLD) {
-            _enqueueCandidate(candidateId);
-        }
 
         emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
     }
@@ -528,9 +527,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
 
         if (winningId != type(uint256).max && maxWeight > 0) {
-            if (queueHead >= launchQueueItems.length) {
-                _enqueueCandidate(winningId);
-            }
         }
 
         epoch.winningCandidateId = winningId;
@@ -548,17 +544,22 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     function launchToken() external nonReentrant {
         uint256 today = _today();
         require(dayLaunchCount[today] < maxLaunchsPerDay, "daily launch limit reached");
-        require(queueHead < launchQueueItems.length, "queue empty");
         require((block.timestamp % EPOCH_DURATION) / 1 hours >= LAUNCH_WINDOW_HOUR, "launch window not open");
 
-        lastLaunchDay = today;
-        dayLaunchCount[today]++;
+        _cleanupExpiredQueuedCandidates();
+
+        while (queueHead < launchQueueItems.length && candidates[launchQueueItems[queueHead]].status != CandidateStatus.Queued) {
+            queueHead++;
+        }
+
+        require(queueHead < launchQueueItems.length, "queue empty");
 
         uint256 bestIdx = queueHead;
         uint256 bestScore = queueScore[launchQueueItems[queueHead]];
         for (uint256 i = queueHead + 1; i < launchQueueItems.length; i++) {
-            if (queueScore[launchQueueItems[i]] > bestScore) {
-                bestScore = queueScore[launchQueueItems[i]];
+            uint256 cid = launchQueueItems[i];
+            if (candidates[cid].status == CandidateStatus.Queued && queueScore[cid] > bestScore) {
+                bestScore = queueScore[cid];
                 bestIdx = i;
             }
         }
@@ -571,6 +572,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         uint256 candidateId = launchQueueItems[queueHead];
         Candidate storage c = candidates[candidateId];
+
+        lastLaunchDay = today;
+        dayLaunchCount[today]++;
 
         address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
             c.name,
@@ -778,9 +782,75 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         emit CandidateQueued(candidateId);
     }
 
+    function _dailyEnqueueTopCandidates() internal {
+        if (lastQueueDay >= currentDay) return;
+        lastQueueDay = currentDay;
+
+        uint256 eligibleCount = 0;
+        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
+            uint256 cid = activeCandidateIds[i];
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubBnb >= LAUNCH_THRESHOLD) {
+                eligibleCount++;
+            }
+        }
+
+        if (eligibleCount == 0) {
+            emit DailyEnqueue(currentDay, 0);
+            return;
+        }
+
+        uint256[] memory eligibleIds = new uint256[](eligibleCount);
+        uint256[] memory scores = new uint256[](eligibleCount);
+        uint256 idx = 0;
+
+        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
+            uint256 cid = activeCandidateIds[i];
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubBnb >= LAUNCH_THRESHOLD) {
+                eligibleIds[idx] = cid;
+                scores[idx] = candidates[cid].totalSubBnb + candidates[cid].totalWeight * DOGE_SCORE_MULTIPLIER;
+                idx++;
+            }
+        }
+
+        uint256 toEnqueue = eligibleCount < DAILY_QUEUE_LIMIT ? eligibleCount : DAILY_QUEUE_LIMIT;
+        bool[] memory taken = new bool[](eligibleCount);
+        uint256 enqueuedCount = 0;
+
+        for (uint256 rank = 0; rank < toEnqueue; rank++) {
+            uint256 bestIdx = type(uint256).max;
+            uint256 bestScore = 0;
+            for (uint256 j = 0; j < eligibleCount; j++) {
+                if (!taken[j] && scores[j] > bestScore) {
+                    bestScore = scores[j];
+                    bestIdx = j;
+                }
+            }
+            if (bestIdx == type(uint256).max || bestScore == 0) break;
+
+            taken[bestIdx] = true;
+            _enqueueCandidate(eligibleIds[bestIdx]);
+            enqueuedCount++;
+        }
+
+        emit DailyEnqueue(currentDay, enqueuedCount);
+    }
+
+    function _cleanupExpiredQueuedCandidates() internal {
+        for (uint256 i = queueHead; i < launchQueueItems.length; i++) {
+            uint256 cid = launchQueueItems[i];
+            Candidate storage c = candidates[cid];
+            if (c.status == CandidateStatus.Queued && block.timestamp > c.expireTime) {
+                c.status = CandidateStatus.GracePeriod;
+            }
+        }
+    }
+
     function _updateCandidateStatus(uint256 candidateId) internal {
         Candidate storage c = candidates[candidateId];
         if (c.status == CandidateStatus.Active && block.timestamp > c.expireTime) {
+            c.status = CandidateStatus.GracePeriod;
+        }
+        if (c.status == CandidateStatus.Queued && block.timestamp > c.expireTime) {
             c.status = CandidateStatus.GracePeriod;
         }
         if (c.status == CandidateStatus.GracePeriod && block.timestamp > c.gracePeriodEnd) {
@@ -823,6 +893,10 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 iterations;
         while (block.timestamp >= _dayStart(currentDay + 1) && iterations < 7) {
             iterations++;
+
+            _dailyEnqueueTopCandidates();
+            _cleanupExpiredQueuedCandidates();
+
             EpochInfo storage epoch = epochInfo[currentDay];
             if (!epoch.isSettled) {
                 if (_hasActiveCandidates()) {

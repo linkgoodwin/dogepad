@@ -9,7 +9,7 @@ import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, isTestnet, getNetwor
 import { useTargetChainId } from '@/hooks/useNetwork'
 
 const DURATION_TIERS = [
-  { value: 0, label: '1 Day', feeBnb: 3, desc: 'Short — quick test' },
+  { value: 0, label: '3 Days', feeBnb: 3, desc: 'Short — quick test' },
   { value: 1, label: '7 Days', feeBnb: 5, desc: 'Standard — balanced' },
   { value: 2, label: '30 Days', feeBnb: 10, desc: 'Extended — max reach' },
 ]

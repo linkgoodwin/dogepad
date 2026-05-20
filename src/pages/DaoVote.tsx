@@ -68,7 +68,7 @@ interface Candidate {
 }
 
 const DURATION_TIERS = [
-  { value: 0, label: '1 Day', duration: '1d', fee: '3', feeBnb: 3 },
+  { value: 0, label: '3 Days', duration: '3d', fee: '3', feeBnb: 3 },
   { value: 1, label: '7 Days', duration: '7d', fee: '5', feeBnb: 5 },
   { value: 2, label: '30 Days', duration: '30d', fee: '10', feeBnb: 10 },
 ]
@@ -342,7 +342,7 @@ function CandidateDetailCard({
                   try {
                     await doWrite({
                       functionName: 'renewCandidate',
-                      args: [BigInt(candidateId), BigInt(t.value)],
+                      args: [BigInt(candidateId), BigInt(t.value), true, true, true],
                       value: parseEther(t.feeBnb.toFixed(2)),
                     })
                   } catch {}
@@ -368,7 +368,7 @@ function CandidateDetailCard({
                   try {
                     await doWrite({
                       functionName: 'claimRecycled',
-                      args: [BigInt(candidateId), BigInt(t.value)],
+                      args: [BigInt(candidateId), BigInt(t.value), true, true, true],
                       value: parseEther(t.feeBnb.toFixed(2)),
                     })
                   } catch {}
@@ -1008,7 +1008,7 @@ export default function DaoVote() {
           </span>
           <span className="badge-gold">
             <Flame className="w-3 h-3 mr-1" />
-            Queue: {queueLength}
+            Queue: {queueLength} (Top 3/day)
           </span>
           <button onClick={handleRefresh} className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors">
             <RefreshCw className="w-4 h-4 text-gray-400" />
@@ -1129,7 +1129,7 @@ export default function DaoVote() {
                     <Rocket className="w-8 h-8 text-gray-500" />
                   </div>
                   <p className="text-gray-400 mb-2">Launch queue is empty</p>
-                  <p className="text-xs text-gray-500">Winning candidates will appear here</p>
+                  <p className="text-xs text-gray-500">Top 3 candidates by weight enter queue daily at UTC 00:00</p>
                 </div>
               )
             )}
