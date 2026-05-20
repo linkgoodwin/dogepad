@@ -43,7 +43,7 @@ export default function Sidebar() {
             </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-sm text-doge-gold leading-tight">DogePad</span>
-              <span className="text-[10px] text-gray-500 leading-tight">Launchpad</span>
+              <span className="text-[10px] text-gray-500 leading-tight">{t('home.launchpad')}</span>
             </div>
           </Link>
           <button
@@ -85,7 +85,7 @@ export default function Sidebar() {
             {lang === 'zh' ? '中/EN' : 'EN/中'}
           </button>
           <div className="text-xs text-gray-500 text-center">
-            Powered by <span className="text-doge-gold">DogePad</span> Protocol
+            {t('common.poweredBy', { name: 'DogePad' })}
           </div>
         </div>
       </aside>

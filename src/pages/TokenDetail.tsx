@@ -67,6 +67,7 @@ export default function TokenDetail() {
   const { address } = useParams()
   const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
+  const [txError, setTxError] = useState('')
   const t = useT()
   const { address: userAddress, isConnected } = useAccount()
   const chainId = useTargetChainId()
@@ -383,6 +384,7 @@ export default function TokenDetail() {
   }, [holders])
 
   const handleBuy = useCallback(() => {
+    setTxError('')
     if (!buyAmount || !tokenAddress || estimatedTokens === BigInt(0)) return
     try {
       const bnbWei = parseEther(buyAmount)
@@ -396,13 +398,19 @@ export default function TokenDetail() {
         value: bnbWei,
         chainId,
         gas: 5_000_000n,
-      } as any).catch(() => {})
+      } as any).catch((err: any) => {
+        const msg = err?.shortMessage || err?.message || ''
+        if (!msg.includes('User rejected') && !msg.includes('denied')) {
+          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+        }
+      })
     } catch (e) {
       console.error('Buy failed', e)
     }
   }, [buyAmount, tokenAddress, estimatedTokens, slippage, writeContractAsync, bondingCurveAddress, chainId])
 
   const handleApprove = useCallback(() => {
+    setTxError('')
     if (!sellAmount || !tokenAddress) return
     try {
       const tokenWei = parseEther(sellAmount)
@@ -413,13 +421,19 @@ export default function TokenDetail() {
         args: [bondingCurveAddress, tokenWei],
         chainId,
         gas: 1_000_000n,
-      } as any).catch(() => {})
+      } as any).catch((err: any) => {
+        const msg = err?.shortMessage || err?.message || ''
+        if (!msg.includes('User rejected') && !msg.includes('denied')) {
+          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+        }
+      })
     } catch (e) {
       console.error('Approve failed', e)
     }
   }, [sellAmount, tokenAddress, bondingCurveAddress, writeContractAsync, chainId])
 
   const handleSell = useCallback(() => {
+    setTxError('')
     if (!sellAmount || !tokenAddress || estimatedBnb === BigInt(0)) return
     try {
       const tokenWei = parseEther(sellAmount)
@@ -432,7 +446,12 @@ export default function TokenDetail() {
         args: [tokenAddress, tokenWei, minBnbOut],
         chainId,
         gas: 5_000_000n,
-      } as any).catch(() => {})
+      } as any).catch((err: any) => {
+        const msg = err?.shortMessage || err?.message || ''
+        if (!msg.includes('User rejected') && !msg.includes('denied')) {
+          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+        }
+      })
     } catch (e) {
       console.error('Sell failed', e)
     }
@@ -823,6 +842,12 @@ export default function TokenDetail() {
                     {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
                   </button>
                 )}
+              </div>
+            )}
+
+            {txError && (
+              <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
+                <p className="text-xs text-neon-red">{txError}</p>
               </div>
             )}
 

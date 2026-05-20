@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { Flame, Info, Globe, Twitter, MessageCircle, Users, Upload, Clock, CheckCircle, Loader2, AlertTriangle, Wallet, X, Wifi } from 'lucide-react'
@@ -135,14 +135,21 @@ export default function CreateToken() {
   const handleCloseConfirm = () => {
     if (isWriting || isConfirming) return
     setShowConfirm(false)
-    if (isConfirmed) {
-      setName(''); setSymbol(''); setAvatarUrl(''); setWebsite('')
-      setTwitter(''); setTelegram(''); setDiscord('')
-      setAboutCoin(''); setDescription('')
-      setSelectedTier(1)
-    }
     setTxError('')
   }
+
+  const resetForm = () => {
+    setName(''); setSymbol(''); setAvatarUrl(''); setWebsite('')
+    setTwitter(''); setTelegram(''); setDiscord('')
+    setAboutCoin(''); setDescription('')
+    setSelectedTier(1)
+  }
+
+  useEffect(() => {
+    if (isConfirmed) {
+      resetForm()
+    }
+  }, [isConfirmed])
 
   const isSubmitting = isWriting || isConfirming
 

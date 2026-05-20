@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Copy, Check, ExternalLink } from 'lucide-react'
 import { getBscScanUrl } from '../config/contracts'
+import { useT } from '@/i18n/useT'
 
 interface CopyableAddressProps {
   address: string
@@ -22,6 +23,7 @@ export default function CopyableAddress({
   className = '',
 }: CopyableAddressProps) {
   const [copied, setCopied] = useState(false)
+  const { t } = useT()
 
   if (!address || typeof address !== 'string') return null
 
@@ -46,7 +48,7 @@ export default function CopyableAddress({
       <button
         onClick={handleCopy}
         className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"
-        title="Copy address"
+        title={t('common.copyAddress')}
       >
         {copied ? (
           <Check className="w-3 h-3 text-emerald-400" />
@@ -60,7 +62,7 @@ export default function CopyableAddress({
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 text-gray-500 hover:text-neon-green transition-colors"
-          title="View on explorer"
+          title={t('common.viewOnExplorer')}
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="w-3 h-3" />

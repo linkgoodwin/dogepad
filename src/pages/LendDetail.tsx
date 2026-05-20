@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Info, SearchX, Loader2 } from 'lucide-react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
-import { LONG_POOL_ABI, SHORT_POOL_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LONG_POOL_ABI, SHORT_POOL_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { calculateExponentialRate } from '@/data/poolData'
 import { cn, formatUsdc, formatTokenAmount } from '@/lib/utils'
@@ -25,6 +25,7 @@ export default function LendDetail() {
 
   const longPoolAddress = getContractAddress(chainId, 'longPool')
   const shortPoolAddress = getContractAddress(chainId, 'shortPool')
+  const bondingCurveAddress = getContractAddress(chainId, 'bondingCurve')
   const longPoolReady = !isZeroAddress(longPoolAddress)
   const shortPoolReady = !isZeroAddress(shortPoolAddress)
 
@@ -34,6 +35,7 @@ export default function LendDetail() {
   const [borrowAmount, setBorrowAmount] = useState('')
   const [collateralAmount, setCollateralAmount] = useState('')
   const [shortTokenAmount, setShortTokenAmount] = useState('')
+  const [txError, setTxError] = useState('')
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
@@ -155,6 +157,17 @@ export default function LendDetail() {
     query: { enabled: shortPoolReady && !!userAddress && !!tokenAddr },
   })
 
+  const { data: tokenPriceData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getBuyPrice',
+    args: tokenAddr ? [tokenAddr, parseEther('1')] : undefined,
+    chainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !!tokenAddr },
+  })
+
+  const tokenPriceInNative = tokenPriceData != null ? Number(formatEther(tokenPriceData as bigint)) : 0
+
   const totalDeposits = tokenDepositsData != null ? Number(formatEther(tokenDepositsData as bigint)) : 0
   const longUtilization = longUtilData != null ? Number(longUtilData as bigint) / 1e16 : 0
   const longDailyRate = longDailyRateData != null ? Number(longDailyRateData as bigint) / 1e16 : 0
@@ -196,6 +209,7 @@ export default function LendDetail() {
     : '0'
 
   const handleDeposit = () => {
+    setTxError('')
     if (!depositAmount || Number(depositAmount) <= 0 || !longPoolReady || !tokenAddr) return
     writeContractAsync({
       address: longPoolAddress,
@@ -204,10 +218,16 @@ export default function LendDetail() {
       args: [tokenAddr],
       value: parseEther(depositAmount),
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleWithdraw = () => {
+    setTxError('')
     if (!withdrawAmount || Number(withdrawAmount) <= 0 || !longPoolReady || !tokenAddr) return
     writeContractAsync({
       address: longPoolAddress,
@@ -215,10 +235,16 @@ export default function LendDetail() {
       functionName: 'withdraw',
       args: [tokenAddr, parseEther(withdrawAmount)],
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleClaimYield = () => {
+    setTxError('')
     if (!longPoolReady || !tokenAddr) return
     writeContractAsync({
       address: longPoolAddress,
@@ -226,13 +252,19 @@ export default function LendDetail() {
       functionName: 'claimYield',
       args: [tokenAddr],
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleShortBorrow = () => {
+    setTxError('')
     if (!shortTokenAmount || Number(shortTokenAmount) <= 0 || !shortPoolReady || !tokenAddr) return
     const tokenAmount = parseEther(shortTokenAmount)
-    const price = 1
+    const price = tokenPriceInNative > 0 ? tokenPriceInNative : 1
     const requiredCollateral = Number(shortTokenAmount) * price * 1.5
     const collateral = parseEther(String(Math.ceil(requiredCollateral * 1.01)))
     writeContractAsync({
@@ -242,10 +274,16 @@ export default function LendDetail() {
       args: [tokenAddr, tokenAmount],
       value: collateral,
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleShortRepay = () => {
+    setTxError('')
     if (!shortPoolReady || !tokenAddr || !hasShortPosition) return
     writeContractAsync({
       address: shortPoolAddress,
@@ -253,7 +291,12 @@ export default function LendDetail() {
       functionName: 'repay',
       args: [tokenAddr, shortPosition![1]],
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   if (!isShortMode && !isLongMode) {
@@ -717,7 +760,7 @@ export default function LendDetail() {
                   <div className="progress-bar">
                     <div
                       className={cn('h-full rounded-full transition-all duration-500', healthBg)}
-                      style={{ width: `${Math.min(healthFactor / 3 * 100, 100)}%` }}
+                      style={{ width: `${healthFactor === Infinity ? 100 : Math.min(healthFactor / 3 * 100, 100)}%` }}
                     />
                   </div>
                   <div className="flex justify-between mt-1 text-xs text-gray-500">

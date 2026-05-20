@@ -52,11 +52,11 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
       metadataURI: d.metadataURI ?? d[3] ?? '',
       totalWeight: d.totalWeight ?? d[4] ?? 0n,
       totalSubBnb: d.totalSubBnb ?? d[5] ?? 0n,
-      submitTime: d.submitTime ?? d[6] ?? 0n,
-      expireTime: d.expireTime ?? d[8] ?? 0n,
-      status: Number(d.status ?? d[10] ?? 0),
-      wasLaunched: d.wasLaunched ?? d[11] ?? false,
-      launchedToken: d.launchedToken ?? d[12] ?? '',
+      submitTime: d.submitTime ?? d[8] ?? 0n,
+      expireTime: d.expireTime ?? d[10] ?? 0n,
+      status: Number(d.status ?? d[12] ?? 0),
+      wasLaunched: d.wasLaunched ?? d[13] ?? false,
+      launchedToken: d.launchedToken ?? d[14] ?? '',
     }
   }, [data, candidateId])
 

@@ -101,7 +101,7 @@ export default function WalletButton() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="font-display font-bold text-xl text-white">{t('common.connect')}</h3>
-                  <p className="text-xs text-gray-500 mt-1">Choose your wallet to connect</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('common.chooseWallet')}</p>
                 </div>
                 <button
                   className="w-8 h-8 rounded-lg bg-dark-700 border border-dark-500/50 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-400 transition-all"
@@ -131,7 +131,7 @@ export default function WalletButton() {
                           {connector.name}
                         </span>
                         {connector.id === 'metamask' && (
-                          <span className="block text-[10px] text-gray-500">Popular</span>
+                          <span className="block text-[10px] text-gray-500">{t('common.popular')}</span>
                         )}
                       </div>
                       {isConnecting ? (
@@ -146,8 +146,7 @@ export default function WalletButton() {
 
               <div className="mt-5 pt-4 border-t border-dark-500/30">
                 <p className="text-[11px] text-gray-600 text-center leading-relaxed">
-                  By connecting, you agree to the Terms of Service<br />
-                  and acknowledge the risks of DeFi protocols
+                  {t('common.termsAndRisks')}
                 </p>
               </div>
             </div>
@@ -165,7 +164,7 @@ export default function WalletButton() {
           className="flex items-center gap-1.5 bg-neon-red/10 border border-neon-red/30 rounded-xl px-3 py-2 hover:border-neon-red/60 transition-all"
         >
           <AlertTriangle className="w-3.5 h-3.5 text-neon-red" />
-          <span className="text-xs font-semibold text-neon-red">Wrong Network</span>
+          <span className="text-xs font-semibold text-neon-red">{t('common.wrongNetwork')}</span>
         </button>
       ) : (
         <div className={cn(
@@ -202,9 +201,9 @@ export default function WalletButton() {
               className="flex items-center gap-1 text-xs text-gray-500 hover:text-doge-gold transition-colors"
             >
               {copied ? (
-                <><Check className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400">Copied</span></>
+                <><Check className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400">{t('common.copied')}</span></>
               ) : (
-                <><Copy className="w-3.5 h-3.5" /><span>Copy</span></>
+                <><Copy className="w-3.5 h-3.5" /><span>{t('common.copy')}</span></>
               )}
             </button>
           </div>
@@ -230,7 +229,7 @@ export default function WalletButton() {
             }}
           >
             <Globe className="w-4 h-4" />
-            Fix RPC Node
+            {t('common.fixRpcNode')}
           </button>
 
           <button

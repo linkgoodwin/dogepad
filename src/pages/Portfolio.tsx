@@ -189,6 +189,7 @@ export default function Portfolio() {
   }, [subscriptionsData, parsedCandidates])
 
   const [now, setNow] = useState(Math.floor(Date.now() / 1000))
+  const [txError, setTxError] = useState('')
   useEffect(() => {
     const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
     return () => clearInterval(timer)
@@ -275,6 +276,7 @@ export default function Portfolio() {
   const hasPositions = totalValue > 0 || parsedStakePositions.length > 0 || myCandidates.length > 0 || mySubscriptions.length > 0
 
   const handleClaimSubscription = (candidateId: number) => {
+    setTxError('')
     writeContractAsync({
       address: daoAddress,
       abi: LAUNCH_DAO_ABI,
@@ -282,10 +284,16 @@ export default function Portfolio() {
       args: [BigInt(candidateId)],
       chainId,
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleRefundSubscription = (candidateId: number) => {
+    setTxError('')
     writeContractAsync({
       address: daoAddress,
       abi: LAUNCH_DAO_ABI,
@@ -293,10 +301,16 @@ export default function Portfolio() {
       args: [BigInt(candidateId)],
       chainId,
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   const handleUnstakePosition = (positionId: number) => {
+    setTxError('')
     writeContractAsync({
       address: daoAddress,
       abi: LAUNCH_DAO_ABI,
@@ -304,7 +318,12 @@ export default function Portfolio() {
       args: [BigInt(positionId)],
       chainId,
       gas: 5_000_000n,
-    } as any).catch(() => {})
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
   }
 
   if (!isConnected) {
@@ -336,6 +355,12 @@ export default function Portfolio() {
         </h1>
         <p className="text-gray-400">{t('portfolio.subtitle')}</p>
       </div>
+
+      {txError && (
+        <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
+          <p className="text-xs text-neon-red">{txError}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card-dark">

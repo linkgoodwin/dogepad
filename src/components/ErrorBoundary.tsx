@@ -1,4 +1,6 @@
 import React from 'react';
+import { t as translate, type TranslationKey } from '../i18n/translations';
+import { useI18n } from '../stores/i18nStore';
 
 interface Props {
   children: React.ReactNode;
@@ -27,10 +29,12 @@ class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       const msg = this.state.error?.message || 'Unknown error';
       const stack = this.state.error?.stack || '';
+      const lang = useI18n.getState().lang;
+      const t = (key: TranslationKey) => translate(key, lang);
       return (
         <div className="min-h-screen bg-dark-950 flex items-center justify-center p-4">
           <div className="text-center max-w-lg">
-            <h2 className="text-2xl text-white mb-4">Something went wrong</h2>
+            <h2 className="text-2xl text-white mb-4">{t('common.somethingWentWrong')}</h2>
             <div className="bg-dark-800 rounded-lg p-4 mb-4 text-left">
               <p className="text-neon-red text-sm font-mono break-all mb-2">{msg}</p>
               {stack && (
@@ -42,7 +46,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                 className="px-4 py-2 bg-doge-gold text-black rounded-lg font-bold"
                 onClick={() => window.location.href = '/dogepad/'}
               >
-                Back to Home
+                {t('common.back')}
               </button>
               <button
                 className="px-4 py-2 bg-dark-700 text-white rounded-lg border border-dark-500"
@@ -51,7 +55,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                   window.location.reload();
                 }}
               >
-                Reload
+                {t('common.reload')}
               </button>
             </div>
           </div>

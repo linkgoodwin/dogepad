@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
+import { useT } from '@/i18n/useT'
 
 interface Token {
   name: string
@@ -23,6 +24,7 @@ interface TokenCardProps {
 export default function TokenCard({ token }: TokenCardProps) {
   const chainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(chainId)
+  const t = useT()
   return (
     <Link to={`/token/${token.address}`} className="block">
       <div className="card-dark cursor-pointer">
@@ -45,17 +47,17 @@ export default function TokenCard({ token }: TokenCardProps) {
           {token.isListedOnDex ? (
             <span className="badge-gold">DEX</span>
           ) : (
-            <span className="badge-cyan">Bonding</span>
+            <span className="badge-cyan">{t('common.bonding')}</span>
           )}
         </div>
 
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-xs text-gray-400">Price</p>
+            <p className="text-xs text-gray-400">{t('tokenDetail.price')}</p>
             <p className="font-display font-bold text-white">{token.priceBnb} {nativeSymbol}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-400">24h</p>
+            <p className="text-xs text-gray-400">{t('common.hours24h')}</p>
             <span
               className={cn(
                 'font-display font-semibold',
@@ -68,7 +70,7 @@ export default function TokenCard({ token }: TokenCardProps) {
         </div>
 
         <div className="mb-1 flex items-center justify-between text-xs text-gray-400">
-          <span>Progress to DEX</span>
+          <span>{t('common.progressToDex')}</span>
           <span>{token.progress.toFixed(1)}%</span>
         </div>
         <div className="progress-bar">

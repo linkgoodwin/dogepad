@@ -218,7 +218,7 @@ function CandidateDetailCard({
     >
       {rank === 0 && variant === 'active' && (
         <div className="absolute top-2 right-2">
-          <span className="badge-gold text-[10px]">Leading</span>
+          <span className="badge-gold text-[10px]">{t('dao.leading')}</span>
         </div>
       )}
       {variant === 'queued' && (
@@ -267,7 +267,7 @@ function CandidateDetailCard({
                 <div className="font-display font-bold text-sm text-doge-cyan">
                   {formatUsdc(Number(formatEther(candidate.totalSubDoge)))} DOGE
                 </div>
-                <div className="text-xs text-gray-500">DOGE Sub</div>
+                <div className="text-xs text-gray-500">{t('dao.dogeSub')}</div>
               </div>
             )}
             <div>
@@ -291,22 +291,22 @@ function CandidateDetailCard({
           {(meta.website || meta.twitter || meta.telegram || meta.discord) && (
             <div className="flex items-center gap-2 mt-2">
               {meta.website && (
-                <a href={sanitizeHref(meta.website)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-gold transition-colors" title="Website" onClick={(e) => e.stopPropagation()}>
+                <a href={sanitizeHref(meta.website)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-gold transition-colors" title={t('common.website')} onClick={(e) => e.stopPropagation()}>
                   <Globe className="w-3.5 h-3.5" />
                 </a>
               )}
               {meta.twitter && (
-                <a href={sanitizeHref(/^(https?:\/\/|twitter\.com|x\.com)/i.test(meta.twitter) ? meta.twitter : `https://twitter.com/${meta.twitter}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title="Twitter" onClick={(e) => e.stopPropagation()}>
+                <a href={sanitizeHref(/^(https?:\/\/|twitter\.com|x\.com)/i.test(meta.twitter) ? meta.twitter : `https://twitter.com/${meta.twitter}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title={t('tokenDetail.twitter')} onClick={(e) => e.stopPropagation()}>
                   <Twitter className="w-3.5 h-3.5" />
                 </a>
               )}
               {meta.telegram && (
-                <a href={sanitizeHref(/^(https?:\/\/|t\.me)/i.test(meta.telegram) ? meta.telegram : `https://t.me/${meta.telegram}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title="Telegram" onClick={(e) => e.stopPropagation()}>
+                <a href={sanitizeHref(/^(https?:\/\/|t\.me)/i.test(meta.telegram) ? meta.telegram : `https://t.me/${meta.telegram}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-cyan transition-colors" title={t('tokenDetail.telegram')} onClick={(e) => e.stopPropagation()}>
                   <MessageCircle className="w-3.5 h-3.5" />
                 </a>
               )}
               {meta.discord && (
-                <a href={sanitizeHref(/^(https?:\/\/|discord\.gg|discord\.com)/i.test(meta.discord) ? meta.discord : `https://discord.gg/${meta.discord}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-violet transition-colors" title="Discord" onClick={(e) => e.stopPropagation()}>
+                <a href={sanitizeHref(/^(https?:\/\/|discord\.gg|discord\.com)/i.test(meta.discord) ? meta.discord : `https://discord.gg/${meta.discord}`)} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-doge-violet transition-colors" title={t('tokenDetail.discord')} onClick={(e) => e.stopPropagation()}>
                   <UsersRound className="w-3.5 h-3.5" />
                 </a>
               )}
@@ -752,30 +752,8 @@ export default function DaoVote() {
     } catch (err: any) {
       const msg = String(err?.shortMessage || err?.message || '')
       const isRateLimit = msg.includes('rate limit') || msg.includes('rate limited') || msg.includes('Requested resource not available')
-      if (!isRateLimit) throw err
-
-      const result = await fixWalletNetwork(targetChainId)
-      if (result === 'success') {
-        await new Promise(r => setTimeout(r, 1500))
-        try {
-          const hash = await writeContractAsync({
-            address: daoAddress,
-            abi: LAUNCH_DAO_ABI,
-            functionName: params.functionName,
-            args: params.args,
-            value: params.value,
-            gas: params.gas ?? BSC_GAS_CAP,
-          })
-          return hash
-        } catch (retryErr: any) {
-          const retryMsg = String(retryErr?.shortMessage || retryErr?.message || '')
-          if (!retryMsg.includes('rate limit') && !retryMsg.includes('rate limited') && !retryMsg.includes('Requested resource')) {
-            throw retryErr
-          }
-        }
-      }
-
-      throw new Error('RPC_LIMITED')
+      if (isRateLimit) throw new Error('RPC_LIMITED')
+      throw err
     }
   }
 
@@ -1326,10 +1304,10 @@ export default function DaoVote() {
                 </div>
 
                 <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                  <p>â€?{t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
-                  <p>â€?{t('dao.subscribeNoLimitHint')}</p>
-                  <p>â€?{t('dao.expiredRefundHint')}</p>
-                  <p>â€?{t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
+                  <p>ï¿½?{t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
+                  <p>ï¿½?{t('dao.subscribeNoLimitHint')}</p>
+                  <p>ï¿½?{t('dao.expiredRefundHint')}</p>
+                  <p>ï¿½?{t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
                 </div>
               </div>
             ) : (
@@ -1639,10 +1617,10 @@ export default function DaoVote() {
               )}
 
               <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                <p>â€?{t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
-                <p>â€?{t('dao.durationMultiplierHint')}</p>
-                <p>â€?{t('dao.rightsCapHint')}</p>
-                <p>â€?{t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
+                <p>ï¿½?{t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
+                <p>ï¿½?{t('dao.durationMultiplierHint')}</p>
+                <p>ï¿½?{t('dao.rightsCapHint')}</p>
+                <p>ï¿½?{t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
               </div>
             </div>
           </div>

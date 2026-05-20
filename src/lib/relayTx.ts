@@ -12,6 +12,14 @@ const RELAY_RPCS: Record<number, string[]> = {
     'https://bsc-dataseed1.binance.org/',
     'https://bsc-dataseed.binance.org/',
   ],
+  10143: [
+    'https://testnet-rpc.monad.xyz',
+    'https://rpc.ankr.com/monad_testnet',
+  ],
+  5042002: [
+    'https://rpc.testnet.arc.network',
+    'https://arc-testnet.drpc.org',
+  ],
 }
 
 async function rpcCall(url: string, method: string, params: unknown[]): Promise<unknown> {
@@ -26,7 +34,8 @@ async function rpcCall(url: string, method: string, params: unknown[]): Promise<
 }
 
 async function findWorkingRpc(chainId: number): Promise<string> {
-  const urls = RELAY_RPCS[chainId] || RELAY_RPCS[97]
+  const urls = RELAY_RPCS[chainId]
+  if (!urls) throw new Error(`No relay RPC configured for chain ${chainId}`)
   for (const url of urls) {
     try {
       await rpcCall(url, 'eth_blockNumber', [])
@@ -90,5 +99,7 @@ export async function relayWriteContract(params: {
 }
 
 export function getRelayRpcUrl(chainId: number): string {
-  return (RELAY_RPCS[chainId] || RELAY_RPCS[97])[0]
+  const urls = RELAY_RPCS[chainId]
+  if (!urls) throw new Error(`No relay RPC configured for chain ${chainId}`)
+  return urls[0]
 }
