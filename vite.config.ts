@@ -12,6 +12,9 @@ export default defineConfig({
   },
   build: {
     sourcemap: 'hidden',
+    rollupOptions: {
+      external: ['@reown/appkit/core'],
+    },
   },
   plugins: [
     react({
