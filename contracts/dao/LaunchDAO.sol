@@ -155,6 +155,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     uint256 public currentDay;
     uint256 public lastLaunchDay;
+    uint256 public maxLaunchsPerDay = 1;
+    mapping(uint256 => uint256) public dayLaunchCount;
     mapping(uint256 => EpochInfo) public epochInfo;
 
     event Subscribed(address indexed user, uint256 indexed candidateId, uint256 bnbAmount, uint256 dogeAmount, uint256 weight);
@@ -544,11 +546,13 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function launchToken() external nonReentrant {
-        require(_today() > lastLaunchDay, "already launched today");
+        uint256 today = _today();
+        require(dayLaunchCount[today] < maxLaunchsPerDay, "daily launch limit reached");
         require(queueHead < launchQueueItems.length, "queue empty");
         require((block.timestamp % EPOCH_DURATION) / 1 hours >= LAUNCH_WINDOW_HOUR, "launch window not open");
 
-        lastLaunchDay = _today();
+        lastLaunchDay = today;
+        dayLaunchCount[today]++;
 
         uint256 bestIdx = queueHead;
         uint256 bestScore = queueScore[launchQueueItems[queueHead]];
@@ -1069,6 +1073,11 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function setFeeDistributor(address _feeDistributor) external onlyOwner {
         feeDistributor = _feeDistributor;
+    }
+
+    function setMaxLaunchsPerDay(uint256 _max) external onlyOwner {
+        require(_max >= 1 && _max <= 50, "invalid max launchs per day");
+        maxLaunchsPerDay = _max;
     }
 
     function setDogeToken(address _dogeToken) external onlyOwner {

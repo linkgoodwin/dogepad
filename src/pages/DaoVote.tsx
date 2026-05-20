@@ -494,6 +494,28 @@ export default function DaoVote() {
     query: { enabled: contractReady, refetchInterval: 10000 },
   })
 
+  const { data: maxLaunchsPerDayData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'maxLaunchsPerDay',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const todayDay = Math.floor(Date.now() / 86400000)
+  const { data: todayLaunchCountData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'dayLaunchCount',
+    args: [BigInt(todayDay)],
+    chainId: targetChainId,
+    query: { enabled: contractReady, refetchInterval: 15000 },
+  })
+
+  const maxLaunchsPerDay = Number(maxLaunchsPerDayData ?? 1)
+  const todayLaunchCount = Number(todayLaunchCountData ?? 0)
+  const canLaunchToday = todayLaunchCount < maxLaunchsPerDay
+
   const { data: totalStakedBnbData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -1209,7 +1231,7 @@ export default function DaoVote() {
                   )}
                 </div>
               )}
-              {queueLength > 0 && !launchDone && isLaunchWindowOpen ? (
+              {queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
                 <button
                   className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleLaunchToken}
@@ -1221,20 +1243,20 @@ export default function DaoVote() {
                     <Rocket className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
                   )}
                   <div className="text-sm font-bold text-neon-green">Launch Token</div>
-                  <div className="text-xs text-neon-green/70">+20 DOGE reward</div>
+                  <div className="text-xs text-neon-green/70">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
                 </button>
-              ) : queueLength > 0 && !launchDone && !isLaunchWindowOpen ? (
+              ) : queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
                 <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700">
                   <Clock className="w-5 h-5 mx-auto mb-2 text-gray-500" />
                   <div className="text-sm font-bold text-gray-400">{t('dao.launchWindowClosed')}</div>
                   <div className="text-xs text-gray-500">{t('dao.opensAt')} 04:00 UTC</div>
                 </div>
               ) : (
-                <div className={cn('text-center p-3 rounded-lg border', launchDone && queueLength > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
-                  {launchDone && queueLength > 0 ? (
+                <div className={cn('text-center p-3 rounded-lg border', !canLaunchToday && queueLength > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
+                  {!canLaunchToday && queueLength > 0 ? (
                     <>
                       <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
-                      <div className="text-sm font-bold text-emerald-400">Launched</div>
+                      <div className="text-sm font-bold text-emerald-400">{maxLaunchsPerDay}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
                       <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
                     </>
                   ) : (
