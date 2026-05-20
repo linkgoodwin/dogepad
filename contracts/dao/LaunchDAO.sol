@@ -37,6 +37,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant MIN_SUBSCRIBE_BNB = 1 ether;
     uint256 public constant MIN_STAKE = 1e17;
     uint256 public constant MAX_STAKE = 300 ether;
+    uint256 public constant LAUNCH_WINDOW_HOUR = 4;
     uint256 public constant DOGE_BNB_RATE = 100;
 
     uint256 public constant RIGHTS_DENOMINATOR = 6e21;
@@ -545,6 +546,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     function launchToken() external nonReentrant {
         require(_today() > lastLaunchDay, "already launched today");
         require(queueHead < launchQueueItems.length, "queue empty");
+        require((block.timestamp % EPOCH_DURATION) / 1 hours >= LAUNCH_WINDOW_HOUR, "launch window not open");
 
         lastLaunchDay = _today();
 

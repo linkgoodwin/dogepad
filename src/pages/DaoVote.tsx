@@ -409,6 +409,24 @@ export default function DaoVote() {
 
   const getUtcDay = () => new Date().toISOString().slice(0, 10)
 
+  const isLaunchWindowOpen = (() => {
+    const utcHour = new Date().getUTCHours()
+    return utcHour >= 4
+  })()
+  const nextLaunchWindowTime = (() => {
+    const now = new Date()
+    const utcHour = now.getUTCHours()
+    if (utcHour < 4) {
+      const next = new Date(now)
+      next.setUTCHours(4, 0, 0, 0)
+      return next
+    }
+    const next = new Date(now)
+    next.setUTCDate(next.getUTCDate() + 1)
+    next.setUTCHours(4, 0, 0, 0)
+    return next
+  })()
+
   const isSettledToday = (() => {
     try { return localStorage.getItem('dogepad-settle-day') === getUtcDay() } catch { return false }
   })()
@@ -1191,7 +1209,7 @@ export default function DaoVote() {
                   )}
                 </div>
               )}
-              {queueLength > 0 && !launchDone ? (
+              {queueLength > 0 && !launchDone && isLaunchWindowOpen ? (
                 <button
                   className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
                   onClick={handleLaunchToken}
@@ -1205,6 +1223,12 @@ export default function DaoVote() {
                   <div className="text-sm font-bold text-neon-green">Launch Token</div>
                   <div className="text-xs text-neon-green/70">+20 DOGE reward</div>
                 </button>
+              ) : queueLength > 0 && !launchDone && !isLaunchWindowOpen ? (
+                <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700">
+                  <Clock className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                  <div className="text-sm font-bold text-gray-400">{t('dao.launchWindowClosed')}</div>
+                  <div className="text-xs text-gray-500">{t('dao.opensAt')} 04:00 UTC</div>
+                </div>
               ) : (
                 <div className={cn('text-center p-3 rounded-lg border', launchDone && queueLength > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
                   {launchDone && queueLength > 0 ? (
