@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <script>
+    (function(){
+      var redirect = sessionStorage.getItem('dogepad-redirect');
+      if (redirect) {
+        sessionStorage.removeItem('dogepad-redirect');
+        window.history.replaceState(null, null, redirect);
+      }
+    })();
+    </script>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/dogepad/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DogePad - 金狗发射台 · dogepad.online</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/dogepad/assets/index-63h0IWi-.js"></script>
+    <link rel="stylesheet" crossorigin href="/dogepad/assets/index-D9tahhO4.css">
+  </head>
+  <body class="bg-dark-950 text-white">
+    <div id="root"></div>
+  </body>
+</html>
