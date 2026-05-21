@@ -5,7 +5,7 @@ import { Vote, Clock, Flame, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkle
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import type { TokenMeta } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
-import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LAUNCH_DAO_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { fixWalletNetwork } from '@/config/wagmi'
 import CopyableAddress from '@/components/CopyableAddress'
@@ -608,6 +608,18 @@ export default function DaoVote() {
     query: { enabled: contractReady },
   })
 
+  const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
+  const { data: bondingCurveLaunchDaoData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'launchDao',
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) },
+  })
+  const launchDaoMismatch = !isZeroAddress(daoAddress) &&
+    bondingCurveLaunchDaoData != null &&
+    String(bondingCurveLaunchDaoData).toLowerCase() !== daoAddress.toLowerCase()
+
   const { data: stakePositionsData, refetch: refetchPositions } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -965,6 +977,20 @@ export default function DaoVote() {
     return (
       <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
         <p className="text-xs text-neon-red break-all">{txError}</p>
+      </div>
+    )
+  }
+
+  const renderConfigWarning = () => {
+    if (!launchDaoMismatch) return null
+    return (
+      <div className="bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-3 space-y-1">
+        <p className="text-xs text-neon-yellow font-bold">{t('dao.configWarning')}</p>
+        <p className="text-xs text-neon-yellow/80">{t('dao.launchDaoMismatch')}</p>
+        <p className="text-xs text-gray-400 mt-1">
+          BondingCurve.launchDao = {String(bondingCurveLaunchDaoData).slice(0, 10)}...
+          &nbsp;≠ LaunchDAO = {daoAddress.slice(0, 10)}...
+        </p>
       </div>
     )
   }
@@ -1647,6 +1673,7 @@ export default function DaoVote() {
         </div>
       </div>
 
+      {renderConfigWarning()}
       {renderTxError()}
     </div>
   )

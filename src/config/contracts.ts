@@ -433,6 +433,20 @@ export const LAUNCH_DAO_ABI = [
 
 export const BONDING_CURVE_ABI = [
   {
+    inputs: [],
+    name: 'launchDao',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_launchDao', type: 'address' }],
+    name: 'setLaunchDao',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [
       { internalType: 'address', name: 'token', type: 'address' },
       { internalType: 'uint256', name: 'minTokensOut', type: 'uint256' },
