@@ -185,11 +185,16 @@ export default function TokenDetail() {
     }
   }, [buyAmount])
 
+  const buyBnbAmountAfterFee = useMemo(() => {
+    const feeBps = BigInt(100)
+    return (buyBnbAmount * (BigInt(10000) - feeBps)) / BigInt(10000)
+  }, [buyBnbAmount])
+
   const { data: buyPriceData, refetch: refetchBuyPrice } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'getBuyPrice',
-    args: [tokenAddress, buyBnbAmount],
+    args: [tokenAddress, buyBnbAmountAfterFee],
     chainId,
     query: { enabled: contractReady },
   })
@@ -254,11 +259,17 @@ export default function TokenDetail() {
   const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20000
   const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
+  const oneUsdcAfterFee = useMemo(() => {
+    const oneUsdc = parseEther('1')
+    const feeBps = BigInt(100)
+    return (oneUsdc * (BigInt(10000) - feeBps)) / BigInt(10000)
+  }, [])
+
   const { data: basePriceData } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'getBuyPrice',
-    args: [tokenAddress, parseEther('1')],
+    args: [tokenAddress, oneUsdcAfterFee],
     chainId,
     query: { enabled: contractReady },
   })
