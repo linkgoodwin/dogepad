@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Info, SearchX, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Info, SearchX, Loader2, Swords, Search } from 'lucide-react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
 import { LONG_POOL_ABI, SHORT_POOL_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
@@ -36,6 +36,7 @@ export default function LendDetail() {
   const [collateralAmount, setCollateralAmount] = useState('')
   const [shortTokenAmount, setShortTokenAmount] = useState('')
   const [txError, setTxError] = useState('')
+  const [searchAddress, setSearchAddress] = useState('')
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
@@ -157,6 +158,43 @@ export default function LendDetail() {
     query: { enabled: shortPoolReady && !!userAddress && !!tokenAddr },
   })
 
+  const searchAddr = searchAddress as `0x${string}` | undefined
+  const { data: searchedShortPositionData } = useReadContract({
+    address: shortPoolAddress,
+    abi: SHORT_POOL_ABI,
+    functionName: 'positions',
+    args: searchAddr && tokenAddr ? [searchAddr, tokenAddr] : undefined,
+    chainId,
+    query: { enabled: shortPoolReady && !!searchAddr && !!tokenAddr },
+  })
+
+  const { data: searchedShortHealthData } = useReadContract({
+    address: shortPoolAddress,
+    abi: SHORT_POOL_ABI,
+    functionName: 'getHealthFactor',
+    args: searchAddr && tokenAddr ? [searchAddr, tokenAddr] : undefined,
+    chainId,
+    query: { enabled: shortPoolReady && !!searchAddr && !!tokenAddr },
+  })
+
+  const { data: searchedLongBorrowData } = useReadContract({
+    address: longPoolAddress,
+    abi: LONG_POOL_ABI,
+    functionName: 'borrows',
+    args: searchAddr && tokenAddr ? [searchAddr, tokenAddr] : undefined,
+    chainId,
+    query: { enabled: longPoolReady && !!searchAddr && !!tokenAddr },
+  })
+
+  const { data: searchedLongHealthData } = useReadContract({
+    address: longPoolAddress,
+    abi: LONG_POOL_ABI,
+    functionName: 'getHealthFactor',
+    args: searchAddr && tokenAddr ? [searchAddr, tokenAddr] : undefined,
+    chainId,
+    query: { enabled: longPoolReady && !!searchAddr && !!tokenAddr },
+  })
+
   const { data: tokenPriceData } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
@@ -193,6 +231,21 @@ export default function LendDetail() {
   const shortCollateral = shortPosition ? Number(formatEther(shortPosition[0])) : 0
   const shortBorrowedTokens = shortPosition ? Number(formatEther(shortPosition[1])) : 0
   const shortHealth = shortHealthData != null ? Number(formatEther(shortHealthData as bigint)) : 0
+
+  const searchedShortPosition = searchedShortPositionData as [bigint, bigint, bigint, boolean] | undefined
+  const hasSearchedShortPosition = searchedShortPosition ? searchedShortPosition[3] : false
+  const searchedShortCollateral = searchedShortPosition ? Number(formatEther(searchedShortPosition[0])) : 0
+  const searchedShortBorrowedTokens = searchedShortPosition ? Number(formatEther(searchedShortPosition[1])) : 0
+  const searchedShortHealth = searchedShortHealthData != null ? Number(formatEther(searchedShortHealthData as bigint)) : 0
+
+  const searchedLongBorrow = searchedLongBorrowData as [bigint, bigint, bigint] | undefined
+  const hasSearchedLongBorrow = searchedLongBorrow ? searchedLongBorrow[0] > 0n : false
+  const searchedLongBorrowAmount = searchedLongBorrow ? Number(formatEther(searchedLongBorrow[1])) : 0
+  const searchedLongCollateral = searchedLongBorrow ? Number(formatEther(searchedLongBorrow[0])) : 0
+  const searchedLongHealth = searchedLongHealthData != null ? Number(formatEther(searchedLongHealthData as bigint)) : 0
+
+  const canLiquidateSearchedShort = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedShortPosition && searchedShortHealth < 1e18
+  const canLiquidateSearchedLong = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedLongBorrow && searchedLongHealth < 1e18
 
   const healthFactor = useMemo(() => {
     if (!collateralAmount || !borrowAmount) return 0
@@ -291,6 +344,43 @@ export default function LendDetail() {
       abi: SHORT_POOL_ABI,
       functionName: 'repay',
       args: [tokenAddr, shortPosition![1]],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
+  const handleLiquidateShort = () => {
+    setTxError('')
+    if (!shortPoolReady || !tokenAddr || !searchAddr) return
+    writeContractAsync({
+      address: shortPoolAddress,
+      abi: SHORT_POOL_ABI,
+      functionName: 'liquidate',
+      args: [searchAddr, tokenAddr],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
+  const handleLiquidateLong = () => {
+    setTxError('')
+    if (!longPoolReady || !tokenAddr || !searchAddr) return
+    const repayAmount = searchedLongBorrow ? searchedLongBorrow[1] : 0n
+    const requiredCollateral = parseFloat(String(searchedLongBorrowAmount)) * 1.1
+    writeContractAsync({
+      address: longPoolAddress,
+      abi: LONG_POOL_ABI,
+      functionName: 'liquidate',
+      args: [tokenAddr, searchAddr],
+      value: parseEther(String(requiredCollateral)),
       gas: 5_000_000n,
     } as any).catch((err: any) => {
       const msg = err?.shortMessage || err?.message || ''
@@ -410,6 +500,65 @@ export default function LendDetail() {
                 <p>{t('lendDetail.shortRule2')}</p>
                 <p>{t('lendDetail.shortRule3')}</p>
                 <p>{t('lendDetail.shortRule4')}</p>
+              </div>
+            </div>
+
+            <div className="card-dark border border-neon-purple/30">
+              <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+                <Swords className="w-4 h-4 text-neon-purple" />
+                {t('lendDetail.liquidate')} {t('lendDetail.positionLiquidatable')}
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.searchAddress')}</label>
+                  <input
+                    type="text"
+                    className="input-dark w-full"
+                    placeholder="0x..."
+                    value={searchAddress}
+                    onChange={(e) => setSearchAddress(e.target.value)}
+                  />
+                </div>
+
+                {searchAddr && (
+                  <div className="bg-dark-700 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-400">{t('lendDetail.shortCollateral')}</p>
+                      <p className="font-display font-bold text-neon-green">{formatUsdc(searchedShortCollateral)} {nativeSymbol}</p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-400">{t('lendDetail.shortBorrowedTokens')}</p>
+                      <p className="font-display font-bold text-neon-red">{formatTokenAmount(searchedShortBorrowedTokens)}</p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-400">{t('lendDetail.healthFactor')}</p>
+                      <p className={cn('font-display font-bold', searchedShortHealth > 2e18 ? 'text-neon-green' : searchedShortHealth > 1e18 ? 'text-neon-yellow' : 'text-neon-red')}>
+                        {searchedShortHealth > 1e18 ? (searchedShortHealth / 1e18).toFixed(2) : searchedShortHealth > 0 ? (searchedShortHealth / 1e18).toFixed(4) : '—'}
+                      </p>
+                    </div>
+
+                    {searchAddr?.toLowerCase() === userAddress?.toLowerCase() && (
+                      <div className="bg-neon-red/10 border border-neon-red/30 rounded-lg p-3 text-sm text-neon-red">
+                        {t('lendDetail.cannotSelfLiquidate')}
+                      </div>
+                    )}
+
+                    {hasSearchedShortPosition && searchedShortHealth < 1e18 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
+                      <button
+                        className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                        style={{ background: '#dc2626' }}
+                        onClick={handleLiquidateShort}
+                        disabled={isWritePending || isConfirming}
+                      >
+                        {isWritePending || isConfirming ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                        ) : (
+                          <><Swords className="w-4 h-4" /> {t('lendDetail.liquidatePosition')}</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -618,6 +767,65 @@ export default function LendDetail() {
                 <p className="text-gray-400 text-xs">{t('lendDetail.at95Util')}</p>
                 <p className="font-display font-semibold text-neon-red">{calculateExponentialRate(95).toFixed(2)}%</p>
               </div>
+            </div>
+          </div>
+
+          <div className="card-dark border border-neon-purple/30">
+            <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+              <Swords className="w-4 h-4 text-neon-purple" />
+              {t('lendDetail.liquidate')} {t('lendDetail.positionLiquidatable')}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.searchAddress')}</label>
+                <input
+                  type="text"
+                  className="input-dark w-full"
+                  placeholder="0x..."
+                  value={searchAddress}
+                  onChange={(e) => setSearchAddress(e.target.value)}
+                />
+              </div>
+
+              {searchAddr && (
+                <div className="bg-dark-700 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-400">{t('lendDetail.collateralAmount')}</p>
+                    <p className="font-display font-bold text-neon-green">{formatUsdc(searchedLongCollateral)} {nativeSymbol}</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-400">{t('lendDetail.borrowed')}</p>
+                    <p className="font-display font-bold text-neon-purple">{formatUsdc(searchedLongBorrowAmount)} {nativeSymbol}</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-400">{t('lendDetail.healthFactor')}</p>
+                    <p className={cn('font-display font-bold', searchedLongHealth > 2 ? 'text-neon-green' : searchedLongHealth > 1.5 ? 'text-neon-yellow' : 'text-neon-red')}>
+                      {searchedLongHealth > 0 ? searchedLongHealth.toFixed(2) : '—'}
+                    </p>
+                  </div>
+
+                  {searchAddr?.toLowerCase() === userAddress?.toLowerCase() && (
+                    <div className="bg-neon-red/10 border border-neon-red/30 rounded-lg p-3 text-sm text-neon-red">
+                      {t('lendDetail.cannotSelfLiquidate')}
+                    </div>
+                  )}
+
+                  {hasSearchedLongBorrow && searchedLongHealth < 1e18 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
+                    <button
+                      className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                      style={{ background: '#dc2626' }}
+                      onClick={handleLiquidateLong}
+                      disabled={isWritePending || isConfirming}
+                    >
+                      {isWritePending || isConfirming ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                      ) : (
+                        <><Swords className="w-4 h-4" /> {t('lendDetail.liquidatePosition')} ({t('lendDetail.liquidationReward')} 8%)</>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

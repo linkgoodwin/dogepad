@@ -30,100 +30,106 @@ interface IBurnable {
 contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
     struct UserInfo {
-        uint256 stakedFair;
+        uint256 stakedDoge;
         uint256 rewardDebt;
         uint256 pendingRewards;
         uint256 stakeTimestamp;
     }
 
-    IERC20 public fairToken;
+    IERC20 public dogeToken;
     address public dexRouter;
     address public wrappedNative;
     address public buyAndBurnEngine;
+    address public longPool;
 
-    uint256 public totalStakedFair;
+    uint256 public totalStakedDoge;
     uint256 public accRewardPerShare;
-    uint256 public dividendRatio = 70e16;
-    uint256 public burnRatio = 30e16;
+    uint256 public dividendRatio = 30e16;
+    uint256 public burnRatio = 20e16;
+    uint256 public lendingPoolRatio = 50e16;
 
     uint256 public totalDistributed;
     uint256 public totalBurned;
+    uint256 public totalLent;
 
     uint256 public constant MIN_DISTRIBUTION = 0.01 ether;
 
     mapping(address => UserInfo) public users;
     uint256 public minStakeDuration = 7 days;
 
-    event FairStaked(address indexed user, uint256 amount);
-    event FairUnstaked(address indexed user, uint256 amount);
+    event DogeStaked(address indexed user, uint256 amount);
+    event DogeUnstaked(address indexed user, uint256 amount);
     event DividendClaimed(address indexed user, uint256 amount);
-    event FeesReceived(uint256 bnbAmount);
-    event FairBurned(uint256 bnbUsed, uint256 fairBurned);
+    event FeesReceived(uint256 usdcAmount);
+    event DogeBurned(uint256 usdcUsed, uint256 dogeBurned);
+    event LendingPoolFunded(uint256 usdcAmount);
 
     constructor(
-        address _fairToken,
+        address _dogeToken,
         address _dexRouter,
         address _buyAndBurnEngine,
-        address _wrappedNative
+        address _wrappedNative,
+        address _longPool
     ) Ownable(msg.sender) {
-        fairToken = IERC20(_fairToken);
+        dogeToken = IERC20(_dogeToken);
         dexRouter = _dexRouter;
         wrappedNative = _wrappedNative;
         buyAndBurnEngine = _buyAndBurnEngine;
+        longPool = _longPool;
     }
 
-    function stakeFair(uint256 amount) external nonReentrant whenNotPaused {
+    function stakeDoge(uint256 amount, uint256 duration) external nonReentrant whenNotPaused {
         require(amount > 0, "zero amount");
         UserInfo storage user = users[msg.sender];
 
-        if (user.stakedFair > 0) {
-            uint256 pending = (user.stakedFair * accRewardPerShare / 1e18) - user.rewardDebt;
+        if (user.stakedDoge > 0) {
+            uint256 pending = (user.stakedDoge * accRewardPerShare / 1e18) - user.rewardDebt;
             if (pending > 0) {
                 user.pendingRewards += pending;
             }
         }
 
-        fairToken.safeTransferFrom(msg.sender, address(this), amount);
-        user.stakedFair += amount;
-        user.rewardDebt = user.stakedFair * accRewardPerShare / 1e18;
-        totalStakedFair += amount;
+        dogeToken.safeTransferFrom(msg.sender, address(this), amount);
+        user.stakedDoge += amount;
+        user.rewardDebt = user.stakedDoge * accRewardPerShare / 1e18;
+        totalStakedDoge += amount;
         user.stakeTimestamp = block.timestamp;
 
-        emit FairStaked(msg.sender, amount);
+        emit DogeStaked(msg.sender, amount);
     }
 
-    function unstakeFair(uint256 amount) external nonReentrant whenNotPaused {
+    function unstakeDoge(uint256 amount) external nonReentrant whenNotPaused {
         require(amount > 0, "zero amount");
         UserInfo storage user = users[msg.sender];
-        require(user.stakedFair >= amount, "insufficient stake");
+        require(user.stakedDoge >= amount, "insufficient stake");
         require(block.timestamp >= user.stakeTimestamp + minStakeDuration, "stake locked");
 
-        uint256 pending = (user.stakedFair * accRewardPerShare / 1e18) - user.rewardDebt;
+        uint256 pending = (user.stakedDoge * accRewardPerShare / 1e18) - user.rewardDebt;
         if (pending > 0) {
             user.pendingRewards += pending;
         }
 
-        user.stakedFair -= amount;
-        user.rewardDebt = user.stakedFair * accRewardPerShare / 1e18;
-        totalStakedFair -= amount;
+        user.stakedDoge -= amount;
+        user.rewardDebt = user.stakedDoge * accRewardPerShare / 1e18;
+        totalStakedDoge -= amount;
 
-        if (user.stakedFair == 0) {
+        if (user.stakedDoge == 0) {
             user.stakeTimestamp = 0;
         }
 
-        fairToken.safeTransfer(msg.sender, amount);
+        dogeToken.safeTransfer(msg.sender, amount);
 
-        emit FairUnstaked(msg.sender, amount);
+        emit DogeUnstaked(msg.sender, amount);
     }
 
     function claimDividend() external nonReentrant whenNotPaused {
         UserInfo storage user = users[msg.sender];
 
-        uint256 pending = (user.stakedFair * accRewardPerShare / 1e18) - user.rewardDebt;
+        uint256 pending = (user.stakedDoge * accRewardPerShare / 1e18) - user.rewardDebt;
         uint256 totalClaim = user.pendingRewards + pending;
 
         user.pendingRewards = 0;
-        user.rewardDebt = user.stakedFair * accRewardPerShare / 1e18;
+        user.rewardDebt = user.stakedDoge * accRewardPerShare / 1e18;
 
         if (totalClaim > 0) {
             totalDistributed += totalClaim;
@@ -134,46 +140,41 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
         emit DividendClaimed(msg.sender, totalClaim);
     }
 
-    function distributeFees() external payable nonReentrant whenNotPaused {
-        require(msg.value >= MIN_DISTRIBUTION, "below min distribution");
-
-        uint256 burnAmount = (msg.value * burnRatio) / 1e18;
-        uint256 dividendAmount = msg.value - burnAmount;
-
-        if (burnAmount > 0 && buyAndBurnEngine != address(0)) {
-            (bool sent,) = payable(buyAndBurnEngine).call{value: burnAmount}("");
-            require(sent, "burn transfer failed");
-        }
-
-        if (dividendAmount > 0 && totalStakedFair > 0) {
-            accRewardPerShare += (dividendAmount * 1e18) / totalStakedFair;
-        }
-
-        emit FeesReceived(msg.value);
-    }
-
     function pendingDividend(address user_) external view returns (uint256) {
         UserInfo storage user = users[user_];
-        uint256 pending = (user.stakedFair * accRewardPerShare / 1e18) - user.rewardDebt;
+        uint256 pending = (user.stakedDoge * accRewardPerShare / 1e18) - user.rewardDebt;
         return user.pendingRewards + pending;
     }
 
-    function getStakedFair(address user_) external view returns (uint256) {
-        return users[user_].stakedFair;
+    function getStakedDoge(address user_) external view returns (uint256) {
+        return users[user_].stakedDoge;
     }
 
     function setDividendRatio(uint256 _dividendRatio) external onlyOwner {
         require(_dividendRatio <= 1e18, "too high");
         dividendRatio = _dividendRatio;
-        burnRatio = 1e18 - _dividendRatio;
+    }
+
+    function setBurnRatio(uint256 _burnRatio) external onlyOwner {
+        require(_burnRatio <= 1e18, "too high");
+        burnRatio = _burnRatio;
+    }
+
+    function setLendingPoolRatio(uint256 _lendingPoolRatio) external onlyOwner {
+        require(_lendingPoolRatio <= 1e18, "too high");
+        lendingPoolRatio = _lendingPoolRatio;
     }
 
     function setBuyAndBurnEngine(address _engine) external onlyOwner {
         buyAndBurnEngine = _engine;
     }
 
-    function setFairToken(address _fairToken) external onlyOwner {
-        fairToken = IERC20(_fairToken);
+    function setDogeToken(address _dogeToken) external onlyOwner {
+        dogeToken = IERC20(_dogeToken);
+    }
+
+    function setLongPool(address _longPool) external onlyOwner {
+        longPool = _longPool;
     }
 
     function pause() external onlyOwner {
@@ -188,5 +189,39 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
         minStakeDuration = _duration;
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (msg.value >= MIN_DISTRIBUTION) {
+            _distribute(msg.value);
+        }
+    }
+
+    function _distribute(uint256 amount) internal {
+        uint256 dividendAmount = (amount * dividendRatio) / 1e18;
+        uint256 burnAmount = (amount * burnRatio) / 1e18;
+        uint256 lendingPoolAmount = (amount * lendingPoolRatio) / 1e18;
+
+        if (dividendAmount > 0 && totalStakedDoge > 0) {
+            accRewardPerShare += (dividendAmount * 1e18) / totalStakedDoge;
+        }
+
+        if (burnAmount > 0 && buyAndBurnEngine != address(0)) {
+            (bool sent,) = payable(buyAndBurnEngine).call{value: burnAmount}("");
+            require(sent, "burn transfer failed");
+            totalBurned += burnAmount;
+        }
+
+        if (lendingPoolAmount > 0 && longPool != address(0)) {
+            (bool sent,) = payable(longPool).call{value: lendingPoolAmount}("");
+            require(sent, "lending pool transfer failed");
+            totalLent += lendingPoolAmount;
+            emit LendingPoolFunded(lendingPoolAmount);
+        }
+
+        emit FeesReceived(amount);
+    }
+
+    function distributeFees() external payable nonReentrant whenNotPaused {
+        require(msg.value >= MIN_DISTRIBUTION, "below min distribution");
+        _distribute(msg.value);
+    }
 }

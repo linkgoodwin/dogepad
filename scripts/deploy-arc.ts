@@ -105,14 +105,14 @@ async function main() {
 
   const burnEngine = await deploy("BuyAndBurnEngine", DEX_ROUTER, deployerAddress);
 
-  console.log("\n--- Phase 4: FeeDistributor ---");
-
-  const feeDist = await deploy("FeeDistributor", ethers.constants.AddressZero, DEX_ROUTER, burnEngine.address);
-
-  console.log("\n--- Phase 5: Pools ---");
+  console.log("\n--- Phase 4: Pools ---");
 
   const longPool = await deploy("LongPool", expRateModel.address, linRateModel.address, priceOracle.address);
   const shortPool = await deploy("ShortPool", expRateModel.address, linRateModel.address, priceOracle.address, burnEngine.address, longPool.address, deployerAddress);
+
+  console.log("\n--- Phase 5: FeeDistributor ---");
+
+  const feeDist = await deploy("FeeDistributor", ethers.constants.AddressZero, DEX_ROUTER, burnEngine.address, ethers.constants.AddressZero, longPool.address);
 
   await tx("BondingCurve.setPools", () => bondingCurve.setPools(longPool.address, shortPool.address, txOverrides));
   await tx("BondingCurve.setBuyAndBurnEngine", () => bondingCurve.setBuyAndBurnEngine(burnEngine.address, txOverrides));
