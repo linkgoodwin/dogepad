@@ -32,7 +32,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     uint256 public constant EPOCH_DURATION = 1 days;
     uint256 public constant RIGHTS_CYCLE = 8 hours;
-    uint256 public constant LAUNCH_THRESHOLD = 20000 ether;
+    uint256 public constant LAUNCH_THRESHOLD = 20 ether;
     uint256 public constant FIXED_TOTAL_SUPPLY = 1_000_000_000e18;
     uint256 public constant MIN_SUBSCRIBE_BNB = 1 ether;
     uint256 public constant MIN_STAKE = 1e17;
@@ -578,7 +578,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
             c.name,
-            string(abi.encodePacked(c.symbol, "doge")),
+            c.symbol,
             FIXED_TOTAL_SUPPLY,
             c.metadataURI,
             address(this),

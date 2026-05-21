@@ -477,7 +477,7 @@ export default function LendMarket() {
                         </div>
                         <div>
                           <p className="font-display font-semibold text-white text-sm">{token.name}</p>
-                          <p className="text-xs text-gray-500">{token.symbol}doge</p>
+                          <p className="text-xs text-gray-500">{token.symbol}</p>
                         </div>
                       </div>
                     </td>

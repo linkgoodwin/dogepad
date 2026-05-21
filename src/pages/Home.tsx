@@ -469,7 +469,7 @@ export default function Home() {
                 <p className="text-xs text-gray-500">{t('home.heroStat2')}</p>
               </div>
               <div>
-                <p className="text-2xl font-display font-bold text-neon-green">20000</p>
+                <p className="text-2xl font-display font-bold text-neon-green">20</p>
                 <p className="text-xs text-gray-500">{t('home.heroStat3')}</p>
               </div>
             </div>

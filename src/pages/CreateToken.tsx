@@ -379,10 +379,6 @@ export default function CreateToken() {
                 <span className="text-doge-gold font-semibold">1,000,000,000</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">{t('create.suffix')}</span>
-                <span className="text-doge-gold font-semibold">doge <span className="text-gray-500 text-xs font-normal">(auto)</span></span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-gray-400">{t('create.durationFee')}</span>
                 <span className="text-doge-gold font-semibold">{selectedTierInfo.feeBnb.toFixed(2)} {nativeSymbol}</span>
               </div>

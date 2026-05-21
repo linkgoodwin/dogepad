@@ -256,7 +256,7 @@ export default function TokenDetail() {
   }, [sellPriceData])
 
   const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveBnb)) : 0
-  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20000
+  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20
   const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
   const oneUsdcAfterFee = useMemo(() => {
@@ -561,7 +561,7 @@ export default function TokenDetail() {
             <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.dexProgress')}</h3>
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-400 text-sm">{t('tokenDetail.reserve')}</span>
-              <span className="font-display font-semibold">{formatUsdc(reserveBnb)} / 20000 {nativeSymbol}</span>
+              <span className="font-display font-semibold">{formatUsdc(reserveBnb)} / {formatUsdc(dexThreshold)} {nativeSymbol}</span>
             </div>
             <div className="w-full h-4 bg-dark-700 rounded-full overflow-hidden flex">
               {(() => {

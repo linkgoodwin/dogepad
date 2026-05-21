@@ -147,7 +147,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     address public priceOracle;
     address public creatorRewardManager;
     uint256 public creationFee = 0.1 ether;
-    uint256 public defaultDexThreshold = 20000 ether;
+    uint256 public defaultDexThreshold = 20 ether;
     bool public daoOnlyLaunch = false;
 
     uint256 public lpBnbRatio = 70;

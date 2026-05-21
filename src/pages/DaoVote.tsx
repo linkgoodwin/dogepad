@@ -1319,7 +1319,7 @@ export default function DaoVote() {
                       type="number"
                       value={subBnbAmount}
                       onChange={(e) => setSubBnbAmount(e.target.value)}
-                      placeholder="1 - 20000"
+                      placeholder="1 - 20"
                       className="input-dark w-full pr-14"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">{nativeSymbol}</span>
