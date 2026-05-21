@@ -166,7 +166,8 @@ export default function LendDetail() {
     query: { enabled: !isZeroAddress(bondingCurveAddress) && !!tokenAddr },
   })
 
-  const tokenPriceInNative = tokenPriceData != null ? Number(formatEther(tokenPriceData as bigint)) : 0
+  const tokensPerNative = tokenPriceData != null ? Number(formatEther(tokenPriceData as bigint)) : 0
+  const pricePerTokenInNative = tokensPerNative > 0 ? 1 / tokensPerNative : 0
 
   const totalDeposits = tokenDepositsData != null ? Number(formatEther(tokenDepositsData as bigint)) : 0
   const longUtilization = longUtilData != null ? Number(longUtilData as bigint) / 1e16 : 0
@@ -264,7 +265,7 @@ export default function LendDetail() {
     setTxError('')
     if (!shortTokenAmount || Number(shortTokenAmount) <= 0 || !shortPoolReady || !tokenAddr) return
     const tokenAmount = parseEther(shortTokenAmount)
-    const price = tokenPriceInNative > 0 ? tokenPriceInNative : 1
+    const price = pricePerTokenInNative > 0 ? pricePerTokenInNative : 1
     const requiredCollateral = Number(shortTokenAmount) * price * 1.5
     const collateral = parseEther(String(Math.ceil(requiredCollateral * 1.01)))
     writeContractAsync({
@@ -431,7 +432,7 @@ export default function LendDetail() {
                   <div className="bg-dark-700 rounded-lg p-3">
                     <p className="text-xs text-gray-400 mb-1">{t('lendDetail.requiredCollateral')}</p>
                     <p className="font-display font-bold text-lg">
-                      {shortTokenAmount ? (parseFloat(shortTokenAmount) * 1.5).toFixed(2) : '0.00'} {nativeSymbol}
+                      {shortTokenAmount ? (parseFloat(shortTokenAmount) * (pricePerTokenInNative > 0 ? pricePerTokenInNative : 1) * 1.5).toFixed(4) : '0.00'} {nativeSymbol}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">{t('lendDetail.collateralRatio150')}</p>
                   </div>

@@ -108,6 +108,7 @@ function CandidateDetailCard({
   daoAddress,
   abi,
   doWrite,
+  onError,
 }: {
   candidateId: number
   isSelected: boolean
@@ -117,6 +118,7 @@ function CandidateDetailCard({
   daoAddress: `0x${string}`
   abi: typeof LAUNCH_DAO_ABI
   doWrite: (params: { functionName: string; args: readonly unknown[]; value?: bigint; gas?: bigint }) => Promise<`0x${string}`>
+  onError?: (msg: string) => void
 }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
@@ -345,7 +347,14 @@ function CandidateDetailCard({
                       args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
                       value: parseEther(tier.feeBnb.toFixed(2)),
                     })
-                  } catch {}
+                  } catch (err: any) {
+                    const msg = err?.shortMessage || err?.message || ''
+                    if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
+                      onError?.(msg.slice(0, 150))
+                    } else if (msg === 'RPC_LIMITED') {
+                      onError?.('RPC_LIMITED')
+                    }
+                  }
                 }}
               >
                 {t(tier.labelKey)} · {tier.fee} {nativeSymbol}
@@ -371,7 +380,14 @@ function CandidateDetailCard({
                       args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
                       value: parseEther(tier.feeBnb.toFixed(2)),
                     })
-                  } catch {}
+                  } catch (err: any) {
+                    const msg = err?.shortMessage || err?.message || ''
+                    if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
+                      onError?.(msg.slice(0, 150))
+                    } else if (msg === 'RPC_LIMITED') {
+                      onError?.('RPC_LIMITED')
+                    }
+                  }
                 }}
               >
                 {t(tier.labelKey)} · {tier.fee} {nativeSymbol}
@@ -1066,6 +1082,7 @@ export default function DaoVote() {
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
+                      onError={(msg) => setTxError(msg)}
                     />
                   ))}
                 </div>
@@ -1098,6 +1115,7 @@ export default function DaoVote() {
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
+                      onError={(msg) => setTxError(msg)}
                     />
                   ))}
                 </div>
@@ -1130,6 +1148,7 @@ export default function DaoVote() {
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
+                      onError={(msg) => setTxError(msg)}
                     />
                   ))}
                 </div>
@@ -1161,6 +1180,7 @@ export default function DaoVote() {
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
+                      onError={(msg) => setTxError(msg)}
                     />
                   ))}
                 </div>
