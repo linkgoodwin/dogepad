@@ -1,13 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
-import { TrendingUp, BarChart3, Flame, Rocket, Loader2, ArrowRight, Clock, FlameKindling, Zap } from 'lucide-react'
+import { TrendingUp, BarChart3, Flame, Rocket, Loader2, Clock, Zap, ArrowRight } from 'lucide-react'
 import StatCard from '@/components/StatCard'
-import CopyableAddress from '@/components/CopyableAddress'
 import { LAUNCH_DAO_ABI, BONDING_CURVE_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
-import { parseMetadata, sanitizeHref, cn, formatUsdc, formatTokenAmount } from '@/lib/utils'
+import { parseMetadata, sanitizeHref, cn, formatUsdc } from '@/lib/utils'
 import type { TokenMeta } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
 
@@ -27,7 +26,7 @@ interface CandidateInfo {
   durationTier: number
 }
 
-function CandidateCard({ candidateId, compact }: { candidateId: number; compact?: boolean }) {
+function CandidateCard({ candidateId }: { candidateId: number }) {
   const t = useT()
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
@@ -66,8 +65,8 @@ function CandidateCard({ candidateId, compact }: { candidateId: number; compact?
 
   if (isLoading) {
     return (
-      <div className="card-dark flex items-center justify-center py-8">
-        <Loader2 className="w-5 h-5 text-doge-gold animate-spin" />
+      <div className="card-dark flex items-center justify-center py-5">
+        <Loader2 className="w-4 h-4 text-doge-gold animate-spin" />
       </div>
     )
   }
@@ -75,104 +74,39 @@ function CandidateCard({ candidateId, compact }: { candidateId: number; compact?
   if (!candidate) return null
 
   const committedBnb = Number(formatEther(candidate.totalSubBnb))
-  const isLaunched = candidate.wasLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`)
   const timeAgo = candidate.submitTime > 0n
     ? Math.max(0, Math.floor((Date.now() / 1000 - Number(candidate.submitTime)) / 3600))
     : 0
   const timeLabel = timeAgo < 1 ? t('dashboard.justNow') : timeAgo < 24 ? `${timeAgo}h` : `${Math.floor(timeAgo / 24)}d`
 
-  if (compact) {
-    return (
-      <Link to={isLaunched ? `/token/${candidate.launchedToken}` : `/dao`} className="block">
-        <div className="card-dark group hover:border-doge-gold/30 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden shrink-0">
-              {meta.image ? (
-                <img src={sanitizeHref(meta.image)} alt={candidate.name} className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const f = (e.target as HTMLImageElement).nextElementSibling as HTMLElement; if (f) f.classList.remove('hidden') }} />
-              ) : null}
-              <div className={cn('w-9 h-9 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold text-doge-gold text-sm', meta.image ? 'hidden' : '')}>
-                {candidate.name ? candidate.name.charAt(0).toUpperCase() : '#'}
-              </div>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-semibold text-white text-sm truncate">{candidate.name}</span>
-                <span className="text-[10px] text-gray-500">{candidate.symbol}</span>
-              </div>
-              <p className="text-xs text-gray-400">{formatUsdc(committedBnb)} {nativeSymbol}</p>
-            </div>
-            <div className="text-right shrink-0">
-              {isLaunched ? (
-                <span className="badge-gold text-[10px]">{t('dao.launched')}</span>
-              ) : (
-                <span className="badge-cyan text-[10px]">{t('dao.phase.voting')}</span>
-              )}
+  return (
+    <Link to="/dao" className="block">
+      <div className="card-dark group hover:border-doge-gold/30 transition-all py-3 px-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden shrink-0">
+            {meta.image ? (
+              <img src={sanitizeHref(meta.image)} alt={candidate.name} className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const f = (e.target as HTMLImageElement).nextElementSibling as HTMLElement; if (f) f.classList.remove('hidden') }} />
+            ) : null}
+            <div className={cn('w-8 h-8 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold text-doge-gold text-xs', meta.image ? 'hidden' : '')}>
+              {candidate.name ? candidate.name.charAt(0).toUpperCase() : '#'}
             </div>
           </div>
-        </div>
-      </Link>
-    )
-  }
-
-  const cardContent = (
-    <div className="card-dark group hover:border-doge-gold/30 transition-all">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden shrink-0">
-          {meta.image ? (
-            <img src={sanitizeHref(meta.image)} alt={candidate.name} className="w-full h-full object-cover"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const f = (e.target as HTMLImageElement).nextElementSibling as HTMLElement; if (f) f.classList.remove('hidden') }} />
-          ) : null}
-          <div className={cn('w-10 h-10 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold text-doge-gold', meta.image ? 'hidden' : '')}>
-            {candidate.name ? candidate.name.charAt(0).toUpperCase() : '#'}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-display font-semibold text-white text-sm truncate">{candidate.name}</span>
+              <span className="text-[10px] text-gray-500">{candidate.symbol}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">{formatUsdc(committedBnb)} {nativeSymbol}</span>
+              <span className="text-[10px] text-gray-600">{timeLabel}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-display font-semibold text-white truncate">{candidate.name}</span>
-            <span className="text-xs text-gray-400">{candidate.symbol}</span>
-          </div>
-          <span className="text-[10px] text-gray-500">{timeLabel}</span>
-        </div>
-        {isLaunched ? (
-          <span className="badge-gold">{t('dao.launched')}</span>
-        ) : (
-          <span className="badge-cyan">{t('dao.phase.voting')}</span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="text-xs text-gray-400">{t('dao.subscribed')}</p>
-          <p className="font-display font-bold text-white">{formatUsdc(committedBnb)} {nativeSymbol}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-400">{t('dao.weight')}</p>
-          <p className="font-display font-semibold text-doge-gold">{Number(candidate.totalWeight).toLocaleString()}</p>
+          <span className="badge-cyan text-[10px] shrink-0">{t('dao.phase.voting')}</span>
         </div>
       </div>
-
-      {isLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
-        <div className="pt-3 border-t border-dark-500/20" onClick={(e) => e.stopPropagation()}>
-          <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
-          <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
-        </div>
-      )}
-
-      {!isLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
-        <div className="pt-3 border-t border-dark-500/20">
-          <p className="text-[10px] text-gray-500 mb-1">{t('dao.proposer')}</p>
-          <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
-        </div>
-      )}
-    </div>
+    </Link>
   )
-
-  if (isLaunched) {
-    return <Link to={`/token/${candidate.launchedToken}`} className="block">{cardContent}</Link>
-  }
-
-  return cardContent
 }
 
 const ERC20_ABI = [
@@ -192,7 +126,7 @@ const ERC20_ABI = [
   },
 ] as const
 
-function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
+function TokenCard({ tokenAddress, isListed }: { tokenAddress: string; isListed: boolean }) {
   const t = useT()
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
@@ -224,15 +158,6 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
     query: { enabled: isEnabled },
   })
 
-  const { data: listedData } = useReadContract({
-    address: bondingCurveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'isListed',
-    args: [tokenAddress as `0x${string}`],
-    chainId: targetChainId,
-    query: { enabled: isEnabled },
-  })
-
   const tokenInfo = useMemo(() => {
     if (!data) return null
     const d = data as any
@@ -247,46 +172,39 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   const name = String(erc20Name ?? '')
   const symbol = String(erc20Symbol ?? '')
   const reserve = tokenInfo ? Number(formatEther(tokenInfo.reserveBnb)) : 0
-  const isListed = listedData ? Boolean(listedData) : tokenInfo?.isListedOnDex ?? false
 
   if (isLoading || !tokenInfo) {
     return (
-      <div className="bg-dark-800/50 border border-dark-500/20 rounded-xl p-5 flex items-center justify-center h-40">
-        <Loader2 className="w-5 h-5 text-neon-green animate-spin" />
+      <div className="card-dark flex items-center justify-center py-5">
+        <Loader2 className="w-4 h-4 text-neon-green animate-spin" />
       </div>
     )
   }
 
+  const accentColor = isListed ? 'text-doge-violet' : 'text-neon-green'
+  const borderColor = isListed ? 'border-doge-violet/20 hover:border-doge-violet/40' : 'border-neon-green/20 hover:border-neon-green/40'
+  const badgeColor = isListed ? 'bg-doge-violet/10 text-doge-violet border-doge-violet/20' : 'bg-neon-green/10 text-neon-green border-neon-green/20'
+  const badgeText = isListed ? 'DEX' : t('home.internalTrade')
+
   return (
     <Link to={`/token/${tokenAddress}`} className="block">
-      <div className="group bg-dark-800/60 border border-neon-green/20 rounded-xl p-5 transition-all duration-300 hover:border-neon-green/40 hover:bg-dark-800/80">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-11 h-11 rounded-full bg-neon-green/10 flex items-center justify-center shrink-0 border border-neon-green/30">
-            <span className="font-display font-bold text-neon-green text-lg">
+      <div className={cn('card-dark group transition-all py-3 px-3 border', borderColor)}>
+        <div className="flex items-center gap-2.5">
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0 border', isListed ? 'bg-doge-violet/10 border-doge-violet/30' : 'bg-neon-green/10 border-neon-green/30')}>
+            <span className={cn('font-display font-bold text-xs', accentColor)}>
               {name ? name.charAt(0).toUpperCase() : '#'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-display font-semibold text-white truncate">{name}</span>
-              <span className="text-xs text-gray-500">{symbol}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-display font-semibold text-white text-sm truncate">{name}</span>
+              <span className="text-[10px] text-gray-500">{symbol}</span>
             </div>
-            <span className={cn(
-              'text-[10px] px-2 py-0.5 rounded-full font-medium',
-              isListed
-                ? 'bg-doge-violet/10 text-doge-violet border border-doge-violet/20'
-                : 'bg-neon-green/10 text-neon-green border border-neon-green/20'
-            )}>
-              {isListed ? 'DEX' : t('home.internalTrade')}
-            </span>
+            <span className="text-xs text-gray-400">{formatUsdc(reserve)} {nativeSymbol}</span>
           </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500">{t('home.reserve')}</p>
-            <p className="font-display font-bold text-white">{formatUsdc(reserve)} {nativeSymbol}</p>
-          </div>
-          <BarChart3 className="w-5 h-5 text-neon-green/50 group-hover:text-neon-green transition-colors" />
+          <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium border shrink-0', badgeColor)}>
+            {badgeText}
+          </span>
         </div>
       </div>
     </Link>
@@ -349,12 +267,8 @@ export default function Dashboard() {
     }))
   }, [activeData])
 
-  const hotCandidates = useMemo(() => {
-    return [...parsedCandidates].sort((a, b) => b.committedBnb - a.committedBnb).slice(0, 6)
-  }, [parsedCandidates])
-
   const newCandidates = useMemo(() => {
-    return [...parsedCandidates].reverse().slice(0, 6)
+    return [...parsedCandidates].reverse().slice(0, 10)
   }, [parsedCandidates])
 
   const totalStaked = totalStakedData ? Number(formatEther(totalStakedData as bigint)) : 0
@@ -379,21 +293,61 @@ export default function Dashboard() {
 
   const launchedTokens = useMemo(() => {
     if (!allCandidatesData) return []
-    const tokens: string[] = []
+    const tokens: { address: string; submitTime: number }[] = []
     allCandidatesData.forEach((result) => {
       if (result.status !== 'success' || !result.result) return
       const raw = result.result as any
       const wasLaunched = Boolean(raw.wasLaunched ?? raw[13] ?? false)
       const launchedToken = String(raw.launchedToken ?? raw[14] ?? '')
+      const submitTime = Number(raw.submitTime ?? raw[8] ?? 0n)
       if (wasLaunched && !isZeroAddress(launchedToken as `0x${string}`)) {
-        tokens.push(launchedToken)
+        tokens.push({ address: launchedToken, submitTime })
       }
     })
-    return tokens
+    return tokens.sort((a, b) => b.submitTime - a.submitTime)
   }, [allCandidatesData])
 
-  const votingCount = parsedCandidates.length
+  const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
+
+  const listedQueries = useMemo(() => {
+    if (!launchedTokens.length || isZeroAddress(bondingCurveAddress)) return []
+    return launchedTokens.map((t) => ({
+      address: bondingCurveAddress as `0x${string}`,
+      abi: BONDING_CURVE_ABI,
+      functionName: 'isListed' as const,
+      args: [t.address as `0x${string}`],
+      chainId: targetChainId,
+    }))
+  }, [launchedTokens, bondingCurveAddress, targetChainId])
+
+  const { data: listedResults } = useReadContracts({
+    contracts: listedQueries,
+    query: { enabled: listedQueries.length > 0 },
+  })
+
+  const internalTokens = useMemo(() => {
+    if (!listedResults) return launchedTokens.map((t) => t.address)
+    return launchedTokens.filter((_, i) => {
+      if (listedResults[i]?.status !== 'success') return true
+      return !Boolean(listedResults[i].result)
+    }).map((t) => t.address)
+  }, [launchedTokens, listedResults])
+
+  const externalTokens = useMemo(() => {
+    if (!listedResults) return []
+    return launchedTokens.filter((_, i) => {
+      if (listedResults[i]?.status !== 'success') return false
+      return Boolean(listedResults[i].result)
+    }).map((t) => t.address)
+  }, [launchedTokens, listedResults])
+
   const launchedCount = launchedTokens.length
+
+  const EmptyColumn = () => (
+    <div className="card-dark text-center py-10">
+      <p className="text-gray-500 text-sm">{t('dashboard.noTokens')}</p>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -404,82 +358,66 @@ export default function Dashboard() {
         <StatCard title={t('dashboard.launchedDex')} value={String(launchedCount)} icon={<Rocket className="w-5 h-5 text-neon-green" />} />
       </section>
 
-      {newCandidates.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-display font-bold flex items-center gap-2">
-              <Clock className="w-5 h-5 text-doge-cyan" />
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-display font-bold flex items-center gap-2">
+              <Clock className="w-4 h-4 text-doge-cyan" />
               {t('dashboard.latestForge')}
             </h2>
-            <Link to="/dao" className="text-sm text-doge-gold hover:text-doge-gold-light flex items-center gap-1">
-              {t('common.viewAll')} <ArrowRight className="w-4 h-4" />
+            <Link to="/dao" className="text-xs text-doge-gold hover:text-doge-gold-light flex items-center gap-0.5">
+              {t('dashboard.subscribeStake')} <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {newCandidates.map((c) => (
-              <CandidateCard key={c.id} candidateId={c.id} />
-            ))}
+          <div className="flex flex-col gap-2 flex-1">
+            {newCandidates.length > 0 ? (
+              newCandidates.map((c) => (
+                <CandidateCard key={c.id} candidateId={c.id} />
+              ))
+            ) : (
+              <EmptyColumn />
+            )}
           </div>
-        </section>
-      )}
+        </div>
 
-      {hotCandidates.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-display font-bold flex items-center gap-2">
-              <FlameKindling className="w-5 h-5 text-orange-500" />
-              {t('dashboard.hotForge')}
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-display font-bold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-neon-green" />
+              {t('dashboard.internalMarket')}
             </h2>
-            <Link to="/dao" className="text-sm text-doge-gold hover:text-doge-gold-light flex items-center gap-1">
-              {t('common.viewAll')} <ArrowRight className="w-4 h-4" />
-            </Link>
+            <span className="text-xs text-gray-500">{t('dashboard.trade')}</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {hotCandidates.map((c) => (
-              <CandidateCard key={c.id} candidateId={c.id} />
-            ))}
+          <div className="flex flex-col gap-2 flex-1">
+            {internalTokens.length > 0 ? (
+              internalTokens.map((addr) => (
+                <TokenCard key={addr} tokenAddress={addr} isListed={false} />
+              ))
+            ) : (
+              <EmptyColumn />
+            )}
           </div>
-        </section>
-      )}
+        </div>
 
-      {votingCount > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-display font-bold flex items-center gap-2">
-              <Zap className="w-5 h-5 text-doge-gold" />
-              {t('dashboard.votingNow')}
-              <span className="text-sm font-normal text-gray-400">({votingCount})</span>
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-display font-bold flex items-center gap-2">
+              <Rocket className="w-4 h-4 text-doge-violet" />
+              {t('dashboard.externalMarket')}
             </h2>
-            <Link to="/dao" className="text-sm text-doge-gold hover:text-doge-gold-light flex items-center gap-1">
-              {t('dashboard.goVote')} <ArrowRight className="w-4 h-4" />
-            </Link>
+            <span className="text-xs text-gray-500">{t('dashboard.trade')}</span>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-4 flex-nowrap">
-            {parsedCandidates.slice(0, 8).map((c) => (
-              <div key={c.id} className="min-w-[260px] max-w-[300px]">
-                <CandidateCard candidateId={c.id} compact />
-              </div>
-            ))}
+          <div className="flex flex-col gap-2 flex-1">
+            {externalTokens.length > 0 ? (
+              externalTokens.map((addr) => (
+                <TokenCard key={addr} tokenAddress={addr} isListed={true} />
+              ))
+            ) : (
+              <EmptyColumn />
+            )}
           </div>
-        </section>
-      )}
-
-      {launchedTokens.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-display font-bold flex items-center gap-2">
-              <Rocket className="w-5 h-5 text-neon-green" />
-              {t('dashboard.launchedDex')}
-              <span className="text-sm font-normal text-gray-400">({launchedCount})</span>
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {launchedTokens.map((addr) => (
-              <LaunchedTokenCard key={addr} tokenAddress={addr} />
-            ))}
-          </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       {parsedCandidates.length === 0 && launchedTokens.length === 0 && !loadingActive && (
         <div className="card-dark text-center py-16">
