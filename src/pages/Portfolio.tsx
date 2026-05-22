@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect } from 'react'
 import { Wallet, ArrowRight, Landmark, Coins, Sparkles, Loader2, HandCoins, RotateCcw, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther } from 'viem'
-import { LAUNCH_DAO_ABI, LONG_POOL_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LAUNCH_DAO_ABI, LONG_POOL_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
-import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
+import { cn, parseMetadata, sanitizeHref, formatUsdc, formatTokenAmount } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 import { useT } from '@/i18n/useT'
 import CopyableAddress from '@/components/CopyableAddress'
@@ -26,8 +26,10 @@ export default function Portfolio() {
 
   const daoAddress = getContractAddress(chainId, 'launchDAO')
   const longPoolAddress = getContractAddress(chainId, 'longPool')
+  const feeDistributorAddress = getContractAddress(chainId, 'feeDistributor')
   const daoReady = !isZeroAddress(daoAddress)
   const longPoolReady = !isZeroAddress(longPoolAddress)
+  const feeReady = !isZeroAddress(feeDistributorAddress)
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
@@ -246,28 +248,50 @@ export default function Portfolio() {
   const pendingRights = pendingRightsData ? Number(pendingRightsData as bigint) : 0
   const totalEffectiveRights = totalEffectiveRightsData ? Number(totalEffectiveRightsData as bigint) : 0
 
-  const { data: depositData } = useReadContract({
+  const NATIVE_TOKEN_ADDR = '0x0000000000000000000000000000000000000000' as `0x${string}`
+
+  const { data: userDepositData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'deposits',
-    args: undefined,
+    args: userAddress ? [NATIVE_TOKEN_ADDR, userAddress] : undefined,
     chainId,
-    query: { enabled: false },
+    query: { enabled: longPoolReady && !!userAddress },
   })
 
-  const { data: pendingYieldData } = useReadContract({
+  const { data: userYieldData } = useReadContract({
     address: longPoolAddress,
     abi: LONG_POOL_ABI,
     functionName: 'pendingYield',
-    args: undefined,
+    args: userAddress ? [NATIVE_TOKEN_ADDR, userAddress] : undefined,
     chainId,
-    query: { enabled: false },
+    query: { enabled: longPoolReady && !!userAddress },
   })
 
-  const lendingDeposit = 0
+  const { data: feeStakedDogeData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'getStakedDoge',
+    args: userAddress ? [userAddress] : undefined,
+    chainId,
+    query: { enabled: feeReady && !!userAddress },
+  })
+
+  const { data: feePendingDivData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'pendingDividend',
+    args: userAddress ? [userAddress] : undefined,
+    chainId,
+    query: { enabled: feeReady && !!userAddress },
+  })
+
+  const lendingDeposit = userDepositData ? Number(formatEther((userDepositData as [bigint, bigint, bigint])[0])) : 0
+  const pendingYield = userYieldData ? Number(formatEther(userYieldData as bigint)) : 0
   const lendingYieldEarned = 0
   const lendingYieldClaimed = 0
-  const pendingYield = 0
+  const feeStakedDoge = feeStakedDogeData ? Number(formatEther(feeStakedDogeData as bigint)) : 0
+  const feePendingDividend = feePendingDivData ? Number(formatEther(feePendingDivData as bigint)) : 0
 
   const totalStakingBnb = parsedStakePositions.filter(p => p.tokenSymbol === nativeSymbol && !p.isWithdrawn).reduce((sum, p) => sum + p.amount, 0)
   const totalSubBnbValue = mySubscriptions.reduce((sum, s) => sum + s.bnbAmount, 0)
@@ -377,7 +401,7 @@ export default function Portfolio() {
         <div className="card-dark">
           <p className="text-xs text-gray-400 mb-1">{t('portfolio.activePositions')}</p>
           <p className="text-3xl font-display font-bold text-white">
-            {parsedStakePositions.filter(p => !p.isWithdrawn).length + (lendingDeposit > 0 ? 1 : 0) + myCandidates.length + mySubscriptions.filter(s => s.isActive && !s.hasClaimed && !s.hasRefunded).length}
+            {parsedStakePositions.filter(p => !p.isWithdrawn).length + (lendingDeposit > 0 ? 1 : 0) + (feeStakedDoge > 0 ? 1 : 0) + myCandidates.length + mySubscriptions.filter(s => s.isActive && !s.hasClaimed && !s.hasRefunded).length}
           </p>
           <p className="text-sm text-gray-400 mt-1">{t('portfolio.tokensHeld')}</p>
         </div>
@@ -612,23 +636,44 @@ export default function Portfolio() {
           <Landmark className="w-5 h-5 text-neon-purple" />
           {t('portfolio.lendingPositions')}
         </h2>
-        {lendingDeposit > 0 ? (
+        {lendingDeposit > 0 || feeStakedDoge > 0 ? (
           <div className="space-y-3">
-            <div className="bg-dark-700 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-neon-purple/20 flex items-center justify-center text-sm font-bold text-neon-purple">B</div>
-                  <div>
-                    <p className="font-display font-semibold">{nativeSymbol} {t('portfolio.depositLabel')}</p>
-                    <p className="text-xs text-gray-400">{t('portfolio.longPoolLabel')}</p>
+            {lendingDeposit > 0 && (
+              <div className="bg-dark-700 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-neon-purple/20 flex items-center justify-center text-sm font-bold text-neon-purple">B</div>
+                    <div>
+                      <p className="font-display font-semibold">{nativeSymbol} {t('portfolio.depositLabel')}</p>
+                      <p className="text-xs text-gray-400">{t('portfolio.longPoolLabel')}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display font-bold">{formatUsdc(lendingDeposit)} {nativeSymbol}</p>
+                    <p className="text-xs text-neon-green">+{formatUsdc(pendingYield)} {nativeSymbol} {t('portfolio.pendingLabel')}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-display font-bold">{formatUsdc(lendingDeposit)} {nativeSymbol}</p>
-                  <p className="text-xs text-neon-green">+{formatUsdc(pendingYield)} {nativeSymbol} {t('portfolio.pendingLabel')}</p>
+              </div>
+            )}
+            {feeStakedDoge > 0 && (
+              <div className="bg-dark-700 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-doge-cyan/20 flex items-center justify-center text-sm font-bold text-doge-cyan">D</div>
+                    <div>
+                      <p className="font-display font-semibold">DOGE {t('fee.stakedDoge')}</p>
+                      <p className="text-xs text-gray-400">{t('fee.dividendPool')}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display font-bold text-doge-cyan">{formatTokenAmount(feeStakedDoge)} DOGE</p>
+                    {feePendingDividend > 0 && (
+                      <p className="text-xs text-neon-green">+{formatUsdc(feePendingDividend)} {nativeSymbol} {t('fee.pendingDividend')}</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <Link to="/lend" className="inline-flex items-center gap-1 text-neon-green text-sm hover:underline">
               {t('common.detail')} <ArrowRight className="w-3 h-3" />
             </Link>

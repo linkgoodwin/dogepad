@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Landmark, Flame, AlertTriangle, ArrowRight } from 'lucide-react'
+import { Landmark, Flame, AlertTriangle, ArrowRight, Coins } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
-import { LONG_POOL_ABI, SHORT_POOL_ABI, LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LONG_POOL_ABI, SHORT_POOL_ABI, LAUNCH_DAO_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { calculateExponentialRate, rateCurveData } from '@/data/poolData'
 import { cn, formatUsdc, formatTokenAmount } from '@/lib/utils'
@@ -42,6 +42,37 @@ export default function LendMarket() {
   const longPoolReady = !isZeroAddress(longPoolAddress)
   const shortPoolReady = !isZeroAddress(shortPoolAddress)
   const daoReady = !isZeroAddress(daoAddress)
+
+  const feeDistributorAddress = getContractAddress(chainId, 'feeDistributor')
+  const feeReady = !isZeroAddress(feeDistributorAddress)
+
+  const { data: feeTotalStakedData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'totalStakedDoge',
+    chainId,
+    query: { enabled: feeReady },
+  })
+
+  const { data: feeTotalDistributedData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'totalDistributed',
+    chainId,
+    query: { enabled: feeReady },
+  })
+
+  const { data: feeTotalBurnedData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'totalBurned',
+    chainId,
+    query: { enabled: feeReady },
+  })
+
+  const feeTotalStaked = feeTotalStakedData ? Number(formatEther(feeTotalStakedData as bigint)) : 0
+  const feeTotalDistributed = feeTotalDistributedData ? Number(formatEther(feeTotalDistributedData as bigint)) : 0
+  const feeTotalBurned = feeTotalBurnedData ? Number(formatEther(feeTotalBurnedData as bigint)) : 0
 
   const { data: candidateCountData } = useReadContract({
     address: daoAddress,
@@ -286,12 +317,12 @@ export default function LendMarket() {
           <p className="text-2xl font-display font-bold text-neon-red">{shortPoolTokens.length}</p>
           <span className="text-xs text-gray-400">{t('lend.shortMarketsDesc')}</span>
         </div>
-        <div className="card-dark border-orange-500/20">
+        <div className="card-dark border-doge-gold/20">
           <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-            <Flame className="w-3 h-3 text-orange-500" /> {t('lend.burnEngine')}
+            <Coins className="w-3 h-3 text-doge-gold" /> {t('fee.dividendPool')}
           </p>
-          <p className="text-2xl font-display font-bold text-orange-500">—</p>
-          <span className="text-xs text-gray-400">{t('lend.requiresBuyAndBurn')}</span>
+          <p className="text-2xl font-display font-bold text-doge-gold">{formatTokenAmount(feeTotalStaked)}</p>
+          <span className="text-xs text-gray-400">DOGE {t('fee.stakedDoge')} · 30% {t('fee.dividendRatio')}</span>
         </div>
       </div>
 
@@ -445,6 +476,37 @@ export default function LendMarket() {
             <p className="text-xs text-gray-400 mt-1">
               {t('lend.rateWarningDesc')}
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-dark border-doge-gold/10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display font-semibold text-lg flex items-center gap-2">
+            <Coins className="w-5 h-5 text-doge-gold" />
+            {t('fee.dividendPool')}
+          </h2>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-dark-700 rounded-lg p-3">
+            <p className="text-xs text-gray-400">{t('fee.totalStaked')}</p>
+            <p className="font-display font-bold text-lg text-doge-gold">{formatTokenAmount(feeTotalStaked)} DOGE</p>
+          </div>
+          <div className="bg-dark-700 rounded-lg p-3">
+            <p className="text-xs text-gray-400">{t('fee.totalDistributed')}</p>
+            <p className="font-display font-bold text-lg text-neon-green">{formatUsdc(feeTotalDistributed)} {nativeSymbol}</p>
+          </div>
+          <div className="bg-dark-700 rounded-lg p-3">
+            <p className="text-xs text-gray-400">{t('fee.totalBurned')}</p>
+            <p className="font-display font-bold text-lg text-orange-500">{formatUsdc(feeTotalBurned)} {nativeSymbol}</p>
+          </div>
+        </div>
+        <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3">
+          <p className="text-xs text-doge-gold font-medium">{t('fee.stakeDogeToEarn')}</p>
+          <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-gray-400">
+            <span>30% → {t('fee.stakedDoge')}</span>
+            <span>20% → {t('lend.burnEngine')}</span>
+            <span>50% → {t('lend.longPool')}</span>
           </div>
         </div>
       </div>

@@ -71,6 +71,7 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
         address _wrappedNative,
         address _longPool
     ) Ownable(msg.sender) {
+        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
         dogeToken = IERC20(_dogeToken);
         dexRouter = _dexRouter;
         wrappedNative = _wrappedNative;
@@ -153,16 +154,19 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     function setDividendRatio(uint256 _dividendRatio) external onlyOwner {
         require(_dividendRatio <= 1e18, "too high");
         dividendRatio = _dividendRatio;
+        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
     function setBurnRatio(uint256 _burnRatio) external onlyOwner {
         require(_burnRatio <= 1e18, "too high");
         burnRatio = _burnRatio;
+        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
     function setLendingPoolRatio(uint256 _lendingPoolRatio) external onlyOwner {
         require(_lendingPoolRatio <= 1e18, "too high");
         lendingPoolRatio = _lendingPoolRatio;
+        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
     function setBuyAndBurnEngine(address _engine) external onlyOwner {

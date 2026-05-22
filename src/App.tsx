@@ -16,6 +16,7 @@ const LendDetail = lazy(() => import("@/pages/LendDetail"))
 const Portfolio = lazy(() => import("@/pages/Portfolio"))
 const HowToPlay = lazy(() => import("@/pages/HowToPlay"))
 const Revival = lazy(() => import("@/pages/Revival"))
+const NotFound = lazy(() => import("@/pages/NotFound"))
 
 function DocumentTitle() {
   const { lang } = useI18n()
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/guide" element={<HowToPlay />} />
           <Route path="/revival" element={<Revival />} />
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
       </Suspense>
       </ErrorBoundary>

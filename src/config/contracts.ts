@@ -668,6 +668,122 @@ export const LONG_POOL_ABI = [
   },
 ] as const
 
+export const FEE_DISTRIBUTOR_ABI = [
+  {
+    inputs: [
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+      { internalType: 'uint256', name: 'duration', type: 'uint256' },
+    ],
+    name: 'stakeDoge',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'amount', type: 'uint256' }],
+    name: 'unstakeDoge',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'claimDividend',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user_', type: 'address' }],
+    name: 'pendingDividend',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user_', type: 'address' }],
+    name: 'getStakedDoge',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalStakedDoge',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalDistributed',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalBurned',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalLent',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'dividendRatio',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'burnRatio',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'lendingPoolRatio',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'dogeToken',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'minStakeDuration',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'users',
+    outputs: [
+      { internalType: 'uint256', name: 'stakedDoge', type: 'uint256' },
+      { internalType: 'uint256', name: 'rewardDebt', type: 'uint256' },
+      { internalType: 'uint256', name: 'pendingRewards', type: 'uint256' },
+      { internalType: 'uint256', name: 'stakeTimestamp', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
 export const SHORT_POOL_ABI = [
   {
     inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
@@ -752,6 +868,16 @@ export const SHORT_POOL_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  {
+    inputs: [
+      { internalType: 'address', name: 'borrower', type: 'address' },
+      { internalType: 'address', name: 'token', type: 'address' },
+    ],
+    name: 'liquidate',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
 ] as const
 
 const BSC_MAINNET = 56
@@ -819,13 +945,13 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     factory: resolveAddr('VITE_MONAD_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x3fa820C7b7f2337E572f77D5381Bc3a5A3AaD0C3'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0xFc6da38B132b48d8FCe1502C3868d389BeC71cBe'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x4819808056bcB9E42fF3c52f4ee07D988d03E383'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x8a26D257fdbb71ab2D3A567E26aB6F6c7C46f0EA'),
     longPool: resolveAddr('VITE_ARC_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62'),
     shortPool: resolveAddr('VITE_ARC_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x6Bcb9A91c9328307868B268c9b7207f293b086DA'),
     buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0xBfEa6640F909D086363B679768F8DCDbb73A2625'),
     priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0x5EC74d4Bf19fd1482c942CF2Ac8757E09E8b79b5'),
-    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x7D4041397748F334Ed35077a2D89dB73f7D2D093'),
+    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x2f7CC6b01DA6662d99971A7B96a54A22a705a982'),
     creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0x4AE1d700eE004f6A19e5fb6B3B0ADE04470bFeBb'),
     factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x506957C3c82D449a6FF8Ec4EF23296F49Ca87436'),
   },

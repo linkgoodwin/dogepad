@@ -1,9 +1,39 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Info, SearchX, Loader2, Swords, Search } from 'lucide-react'
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Info, SearchX, Loader2, Swords, Search, Coins } from 'lucide-react'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
-import { LONG_POOL_ABI, SHORT_POOL_ABI, BONDING_CURVE_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LONG_POOL_ABI, SHORT_POOL_ABI, BONDING_CURVE_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+
+const ERC20_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'spender', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'spender', type: 'address' },
+    ],
+    name: 'allowance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { calculateExponentialRate } from '@/data/poolData'
 import { cn, formatUsdc, formatTokenAmount } from '@/lib/utils'
@@ -26,8 +56,10 @@ export default function LendDetail() {
   const longPoolAddress = getContractAddress(chainId, 'longPool')
   const shortPoolAddress = getContractAddress(chainId, 'shortPool')
   const bondingCurveAddress = getContractAddress(chainId, 'bondingCurve')
+  const feeDistributorAddress = getContractAddress(chainId, 'feeDistributor')
   const longPoolReady = !isZeroAddress(longPoolAddress)
   const shortPoolReady = !isZeroAddress(shortPoolAddress)
+  const feeReady = !isZeroAddress(feeDistributorAddress)
 
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'borrow'>('deposit')
   const [depositAmount, setDepositAmount] = useState('')
@@ -37,9 +69,44 @@ export default function LendDetail() {
   const [shortTokenAmount, setShortTokenAmount] = useState('')
   const [txError, setTxError] = useState('')
   const [searchAddress, setSearchAddress] = useState('')
+  const [feeTab, setFeeTab] = useState<'stake' | 'unstake'>('stake')
+  const [feeStakeAmount, setFeeStakeAmount] = useState('')
+  const [feeUnstakeAmount, setFeeUnstakeAmount] = useState('')
+  const [needsBorrowApprove, setNeedsBorrowApprove] = useState(false)
+  const [needsShortApprove, setNeedsShortApprove] = useState(false)
+  const [needsFeeApprove, setNeedsFeeApprove] = useState(false)
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+
+  const { data: nativeBalance } = useBalance({ address: userAddress, chainId })
+  const nativeBalanceNum = nativeBalance ? Number(nativeBalance.formatted) : 0
+
+  const { data: borrowAllowanceData } = useReadContract({
+    address: tokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: userAddress && longPoolReady ? [userAddress, longPoolAddress] : undefined,
+    chainId,
+    query: { enabled: !!tokenAddr && !isZeroAddress(tokenAddr!) && !!userAddress && longPoolReady },
+  })
+
+  const { data: shortAllowanceData } = useReadContract({
+    address: tokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: userAddress && shortPoolReady ? [userAddress, shortPoolAddress] : undefined,
+    chainId,
+    query: { enabled: !!tokenAddr && !isZeroAddress(tokenAddr!) && !!userAddress && shortPoolReady },
+  })
+
+  const { data: feeDogeTokenData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'dogeToken',
+    chainId,
+    query: { enabled: feeReady },
+  })
 
   const { data: tokenDepositsData } = useReadContract({
     address: longPoolAddress,
@@ -204,6 +271,40 @@ export default function LendDetail() {
     query: { enabled: !isZeroAddress(bondingCurveAddress) && !!tokenAddr },
   })
 
+  const { data: feeTotalStakedData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'totalStakedDoge',
+    chainId,
+    query: { enabled: feeReady },
+  })
+
+  const { data: feeUserData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'users',
+    args: userAddress ? [userAddress] : undefined,
+    chainId,
+    query: { enabled: feeReady && !!userAddress },
+  })
+
+  const { data: feePendingDividendData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'pendingDividend',
+    args: userAddress ? [userAddress] : undefined,
+    chainId,
+    query: { enabled: feeReady && !!userAddress },
+  })
+
+  const { data: feeMinDurationData } = useReadContract({
+    address: feeDistributorAddress,
+    abi: FEE_DISTRIBUTOR_ABI,
+    functionName: 'minStakeDuration',
+    chainId,
+    query: { enabled: feeReady },
+  })
+
   const tokensPerNative = tokenPriceData != null ? Number(formatEther(tokenPriceData as bigint)) : 0
   const pricePerTokenInNative = tokensPerNative > 0 ? 1 / tokensPerNative : 0
 
@@ -244,8 +345,66 @@ export default function LendDetail() {
   const searchedLongCollateral = searchedLongBorrow ? Number(formatEther(searchedLongBorrow[0])) : 0
   const searchedLongHealth = searchedLongHealthData != null ? Number(formatEther(searchedLongHealthData as bigint)) : 0
 
-  const canLiquidateSearchedShort = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedShortPosition && searchedShortHealth < 1e18
-  const canLiquidateSearchedLong = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedLongBorrow && searchedLongHealth < 1e18
+  const canLiquidateSearchedShort = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedShortPosition && searchedShortHealth < 1
+  const canLiquidateSearchedLong = searchAddr && userAddress && searchAddr.toLowerCase() !== userAddress.toLowerCase() && hasSearchedLongBorrow && searchedLongHealth < 1
+
+  const feeDogeTokenAddr = (feeDogeTokenData as `0x${string}` | undefined) ?? undefined
+  const feeDogeReady = !!feeDogeTokenAddr && !isZeroAddress(feeDogeTokenAddr)
+  const feeTotalStaked = feeTotalStakedData ? Number(formatEther(feeTotalStakedData as bigint)) : 0
+  const feeUserStaked = feeUserData ? Number(formatEther((feeUserData as [bigint, bigint, bigint, bigint])[0])) : 0
+  const feePendingDividend = feePendingDividendData ? Number(formatEther(feePendingDividendData as bigint)) : 0
+  const feeMinDurationDays = feeMinDurationData ? Number(feeMinDurationData as bigint) / 86400 : 7
+
+  const handleFeeStake = () => {
+    setTxError('')
+    if (!feeStakeAmount || Number(feeStakeAmount) <= 0 || !feeReady || !feeDogeReady) return
+    writeContractAsync({
+      address: feeDistributorAddress,
+      abi: FEE_DISTRIBUTOR_ABI,
+      functionName: 'stakeDoge',
+      args: [parseEther(feeStakeAmount), 0n],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
+  const handleFeeUnstake = () => {
+    setTxError('')
+    if (!feeUnstakeAmount || Number(feeUnstakeAmount) <= 0 || !feeReady) return
+    writeContractAsync({
+      address: feeDistributorAddress,
+      abi: FEE_DISTRIBUTOR_ABI,
+      functionName: 'unstakeDoge',
+      args: [parseEther(feeUnstakeAmount)],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
+  const handleFeeClaimDividend = () => {
+    setTxError('')
+    if (!feeReady) return
+    writeContractAsync({
+      address: feeDistributorAddress,
+      abi: FEE_DISTRIBUTOR_ABI,
+      functionName: 'claimDividend',
+      args: [],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
 
   const healthFactor = useMemo(() => {
     if (!collateralAmount || !borrowAmount) return 0
@@ -254,6 +413,46 @@ export default function LendDetail() {
     if (borrowValue === 0) return Infinity
     return collateralValue / borrowValue
   }, [collateralAmount, borrowAmount])
+
+  const handleBorrowApprove = () => {
+    setTxError('')
+    if (!tokenAddr || !longPoolReady || !collateralAmount) return
+    writeContractAsync({
+      address: tokenAddr,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [longPoolAddress, parseEther(collateralAmount)],
+      gas: 500_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
+  const handleBorrow = () => {
+    setTxError('')
+    if (!collateralAmount || !borrowAmount || !tokenAddr || !longPoolReady) return
+    if (Number(collateralAmount) <= 0 || Number(borrowAmount) <= 0) return
+    const allowance = borrowAllowanceData as bigint | undefined
+    if (allowance === undefined || allowance < parseEther(collateralAmount)) {
+      setNeedsBorrowApprove(true)
+      return
+    }
+    writeContractAsync({
+      address: longPoolAddress,
+      abi: LONG_POOL_ABI,
+      functionName: 'borrow',
+      args: [tokenAddr, parseEther(collateralAmount), parseEther(borrowAmount)],
+      gas: 5_000_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
 
   const healthColor = healthFactor >= 2 ? 'text-neon-green' : healthFactor >= 1.5 ? 'text-neon-yellow' : 'text-neon-red'
   const healthBg = healthFactor >= 2 ? 'bg-neon-green' : healthFactor >= 1.5 ? 'bg-neon-yellow' : 'bg-neon-red'
@@ -336,9 +535,31 @@ export default function LendDetail() {
     })
   }
 
+  const handleShortRepayApprove = () => {
+    setTxError('')
+    if (!shortPoolReady || !tokenAddr || !hasShortPosition) return
+    writeContractAsync({
+      address: tokenAddr,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [shortPoolAddress, shortPosition![1]],
+      gas: 500_000n,
+    } as any).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
   const handleShortRepay = () => {
     setTxError('')
     if (!shortPoolReady || !tokenAddr || !hasShortPosition) return
+    const allowance = shortAllowanceData as bigint | undefined
+    if (allowance === undefined || allowance < shortPosition![1]) {
+      setNeedsShortApprove(true)
+      return
+    }
     writeContractAsync({
       address: shortPoolAddress,
       abi: SHORT_POOL_ABI,
@@ -482,8 +703,8 @@ export default function LendDetail() {
                   </div>
                   <div className="bg-dark-700 rounded-lg p-3">
                     <p className="text-xs text-gray-400">{t('lendDetail.healthFactor')}</p>
-                    <p className={cn('font-display font-bold', shortHealth > 2e18 ? 'text-neon-green' : shortHealth > 1e18 ? 'text-neon-yellow' : 'text-neon-red')}>
-                      {shortHealth > 1e18 ? (shortHealth / 1e18).toFixed(2) : shortHealth > 0 ? (shortHealth / 1e18).toFixed(4) : '—'}
+                    <p className={cn('font-display font-bold', shortHealth > 2 ? 'text-neon-green' : shortHealth > 1 ? 'text-neon-yellow' : 'text-neon-red')}>
+                      {shortHealth > 1 ? shortHealth.toFixed(2) : shortHealth > 0 ? shortHealth.toFixed(4) : '—'}
                     </p>
                   </div>
                 </div>
@@ -532,8 +753,8 @@ export default function LendDetail() {
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-400">{t('lendDetail.healthFactor')}</p>
-                      <p className={cn('font-display font-bold', searchedShortHealth > 2e18 ? 'text-neon-green' : searchedShortHealth > 1e18 ? 'text-neon-yellow' : 'text-neon-red')}>
-                        {searchedShortHealth > 1e18 ? (searchedShortHealth / 1e18).toFixed(2) : searchedShortHealth > 0 ? (searchedShortHealth / 1e18).toFixed(4) : '—'}
+                      <p className={cn('font-display font-bold', searchedShortHealth > 2 ? 'text-neon-green' : searchedShortHealth > 1 ? 'text-neon-yellow' : 'text-neon-red')}>
+                        {searchedShortHealth > 1 ? searchedShortHealth.toFixed(2) : searchedShortHealth > 0 ? searchedShortHealth.toFixed(4) : '—'}
                       </p>
                     </div>
 
@@ -543,7 +764,7 @@ export default function LendDetail() {
                       </div>
                     )}
 
-                    {hasSearchedShortPosition && searchedShortHealth < 1e18 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
+                    {hasSearchedShortPosition && searchedShortHealth < 1 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
                       <button
                         className="btn-primary w-full text-center flex items-center justify-center gap-2"
                         style={{ background: '#dc2626' }}
@@ -619,17 +840,32 @@ export default function LendDetail() {
                     <p className="text-xs text-gray-400 mb-1">{t('lendDetail.shortCollateral')}</p>
                     <p className="font-display font-bold">{formatUsdc(shortCollateral)} {nativeSymbol}</p>
                   </div>
-                  <button
-                    className="btn-primary w-full text-center flex items-center justify-center gap-2"
-                    onClick={handleShortRepay}
-                    disabled={isWritePending || isConfirming}
-                  >
-                    {isWritePending || isConfirming ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
-                    ) : (
-                      <><ArrowDownToLine className="w-4 h-4" /> {t('lendDetail.closeShort')}</>
-                    )}
-                  </button>
+                  {needsShortApprove ? (
+                    <button
+                      className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                      style={{ background: '#f59e0b' }}
+                      onClick={handleShortRepayApprove}
+                      disabled={isWritePending || isConfirming}
+                    >
+                      {isWritePending || isConfirming ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                      ) : (
+                        <>{t('common.approve', { symbol: 'Token' })}</>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                      onClick={handleShortRepay}
+                      disabled={isWritePending || isConfirming}
+                    >
+                      {isWritePending || isConfirming ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                      ) : (
+                        <><ArrowDownToLine className="w-4 h-4" /> {t('lendDetail.closeShort')}</>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -770,6 +1006,131 @@ export default function LendDetail() {
             </div>
           </div>
 
+          {feeReady && feeDogeReady && (
+            <div className="card-dark border border-doge-gold/30">
+              <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+                <Coins className="w-4 h-4 text-doge-gold" />
+                {t('fee.dividendPool')}
+              </h3>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{t('fee.totalStaked')}</p>
+                  <p className="font-display font-bold text-doge-gold">{formatTokenAmount(feeTotalStaked)} DOGE</p>
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{t('fee.stakedDoge')}</p>
+                  <p className="font-display font-bold text-doge-gold">{formatTokenAmount(feeUserStaked)} DOGE</p>
+                </div>
+                <div className="bg-dark-700 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{t('fee.pendingDividend')}</p>
+                  <p className="font-display font-bold text-neon-green">{formatUsdc(feePendingDividend)} {nativeSymbol}</p>
+                </div>
+              </div>
+
+              {isConnected && (
+                <div className="space-y-4">
+                  <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
+                    <button
+                      className={cn(
+                        'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
+                        feeTab === 'stake' ? 'bg-doge-gold text-dark-900' : 'text-gray-400 hover:text-white'
+                      )}
+                      onClick={() => setFeeTab('stake')}
+                    >
+                      {t('fee.stakeDoge')}
+                    </button>
+                    <button
+                      className={cn(
+                        'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
+                        feeTab === 'unstake' ? 'bg-neon-yellow text-dark-900' : 'text-gray-400 hover:text-white'
+                      )}
+                      onClick={() => setFeeTab('unstake')}
+                    >
+                      {t('fee.unstakeDoge')}
+                    </button>
+                  </div>
+
+                  {feeTab === 'stake' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-gray-400 mb-1 block">{t('fee.stakeAmount')} (DOGE)</label>
+                        <input
+                          type="number"
+                          className="input-dark w-full"
+                          placeholder="0.0"
+                          value={feeStakeAmount}
+                          onChange={(e) => setFeeStakeAmount(e.target.value)}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">{t('fee.minStakeDuration')}: {feeMinDurationDays} {t('dao.daysUnit')}</p>
+                      <button
+                        className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                        style={{ background: '#eab308' }}
+                        onClick={handleFeeStake}
+                        disabled={isWritePending || isConfirming || !feeStakeAmount || Number(feeStakeAmount) <= 0}
+                      >
+                        {isWritePending || isConfirming ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                        ) : (
+                          <><Coins className="w-4 h-4" /> {t('fee.stakeDoge')}</>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-gray-400 mb-1 block">{t('fee.unstakeAmount')} (DOGE)</label>
+                        <input
+                          type="number"
+                          className="input-dark w-full"
+                          placeholder="0.0"
+                          value={feeUnstakeAmount}
+                          onChange={(e) => setFeeUnstakeAmount(e.target.value)}
+                        />
+                        {feeUserStaked > 0 && (
+                          <button
+                            className="text-xs text-doge-gold hover:underline mt-1"
+                            onClick={() => setFeeUnstakeAmount(String(feeUserStaked))}
+                          >
+                            Max: {formatTokenAmount(feeUserStaked)}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">{t('fee.minStakeDuration')}: {feeMinDurationDays} {t('dao.daysUnit')}</p>
+                      <button
+                        className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                        style={{ background: '#eab308' }}
+                        onClick={handleFeeUnstake}
+                        disabled={isWritePending || isConfirming || !feeUnstakeAmount || Number(feeUnstakeAmount) <= 0 || Number(feeUnstakeAmount) > feeUserStaked}
+                      >
+                        {isWritePending || isConfirming ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                        ) : (
+                          <>{t('fee.unstakeDoge')}</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {feePendingDividend > 0 && (
+                    <button
+                      className="w-full py-2.5 rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-display font-bold text-sm flex items-center justify-center gap-2"
+                      onClick={handleFeeClaimDividend}
+                      disabled={isWritePending || isConfirming}
+                    >
+                      {isWritePending || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      {t('fee.claimDividend')} ({formatUsdc(feePendingDividend)} {nativeSymbol})
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-3 bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 text-xs text-gray-400">
+                <p>{t('fee.stakeDogeDesc')}</p>
+              </div>
+            </div>
+          )}
+
           <div className="card-dark border border-neon-purple/30">
             <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
               <Swords className="w-4 h-4 text-neon-purple" />
@@ -810,7 +1171,7 @@ export default function LendDetail() {
                     </div>
                   )}
 
-                  {hasSearchedLongBorrow && searchedLongHealth < 1e18 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
+                  {hasSearchedLongBorrow && searchedLongHealth < 1 && searchAddr?.toLowerCase() !== userAddress?.toLowerCase() && (
                     <button
                       className="btn-primary w-full text-center flex items-center justify-center gap-2"
                       style={{ background: '#dc2626' }}
@@ -865,7 +1226,10 @@ export default function LendDetail() {
             {activeTab === 'deposit' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.depositAmount')} ({nativeSymbol})</label>
+                  <label className="text-sm text-gray-400 mb-1 flex items-center justify-between">
+                    <span>{t('lendDetail.depositAmount')} ({nativeSymbol})</span>
+                    <span className="text-xs text-gray-500">{t('lendDetail.balance')}: {nativeBalanceNum.toFixed(4)} {nativeSymbol}</span>
+                  </label>
                   <input
                     type="number"
                     className="input-dark w-full"
@@ -932,11 +1296,6 @@ export default function LendDetail() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="bg-dark-700 rounded-lg p-6 text-center">
-                  <ArrowUpFromLine className="w-8 h-8 text-gray-500 mx-auto mb-3" />
-                  <p className="font-display font-semibold text-gray-400 mb-1">{t('lendDetail.comingSoon')}</p>
-                  <p className="text-xs text-gray-500">{t('lendDetail.comingSoonDesc')}</p>
-                </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">{t('lendDetail.collateralAmount')}</label>
                   <input
@@ -945,7 +1304,6 @@ export default function LendDetail() {
                     placeholder="0.0"
                     value={collateralAmount}
                     onChange={(e) => setCollateralAmount(e.target.value)}
-                    disabled
                   />
                 </div>
                 <div>
@@ -956,7 +1314,6 @@ export default function LendDetail() {
                     placeholder="0.0"
                     value={borrowAmount}
                     onChange={(e) => setBorrowAmount(e.target.value)}
-                    disabled
                   />
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3">
@@ -992,9 +1349,33 @@ export default function LendDetail() {
                   <p className="font-display font-bold text-lg text-neon-purple">{borrowAPY.toFixed(2)}%</p>
                   <p className="text-xs text-gray-400 mt-1">{t('lendDetail.maxLtv')}</p>
                 </div>
-                <button className="btn-primary w-full text-center flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" style={{ background: '#8b5cf6' }} disabled>
-                  <ArrowUpFromLine className="w-4 h-4" /> {t('lendDetail.borrow')} {nativeSymbol}
-                </button>
+                {needsBorrowApprove ? (
+                  <button
+                    className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                    style={{ background: '#f59e0b' }}
+                    onClick={handleBorrowApprove}
+                    disabled={isWritePending || isConfirming || !collateralAmount || Number(collateralAmount) <= 0}
+                  >
+                    {isWritePending || isConfirming ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                    ) : (
+                      <>{t('common.approve', { symbol: 'Token' })}</>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                    style={{ background: '#8b5cf6' }}
+                    onClick={handleBorrow}
+                    disabled={isWritePending || isConfirming || !collateralAmount || !borrowAmount || Number(collateralAmount) <= 0 || Number(borrowAmount) <= 0 || healthFactor < 1}
+                  >
+                    {isWritePending || isConfirming ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                    ) : (
+                      <><ArrowUpFromLine className="w-4 h-4" /> {t('lendDetail.borrow')} {nativeSymbol}</>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>
