@@ -57,7 +57,7 @@ export default function Sidebar() {
           <div className="px-4 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
             {t('nav.sectionLaunch')}
           </div>
-          {navItems.slice(0, 2).map((item) => {
+          {navItems.slice(0, 3).map((item) => {
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path))
             return (
