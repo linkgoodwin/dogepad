@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Flame, Rocket, PlusCircle, Landmark, Wallet, BookOpen, X } from 'lucide-react'
+import { Flame, Rocket, PlusCircle, Vote, Landmark, Wallet, BookOpen, X } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n/useT'
 import { useI18n } from '@/stores/i18nStore'
@@ -14,6 +14,7 @@ export default function Sidebar() {
   const navItems = [
     { label: t('nav.launch'), icon: Rocket, path: '/launch' },
     { label: t('nav.submitToken'), icon: PlusCircle, path: '/create' },
+    { label: t('nav.subscribeStake'), icon: Vote, path: '/dao' },
     { label: t('nav.lending'), icon: Landmark, path: '/lend' },
     { label: t('nav.portfolio'), icon: Wallet, path: '/portfolio' },
     { label: t('nav.howToPlay'), icon: BookOpen, path: '/guide' },
@@ -80,7 +81,7 @@ export default function Sidebar() {
           <div className="px-4 py-1.5 mt-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
             {t('nav.sectionFinance')}
           </div>
-          {navItems.slice(2, 4).map((item) => {
+          {navItems.slice(3, 5).map((item) => {
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path))
             return (
@@ -104,7 +105,7 @@ export default function Sidebar() {
           <div className="px-4 py-1.5 mt-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
             {t('nav.sectionOther')}
           </div>
-          {navItems.slice(4).map((item) => {
+          {navItems.slice(5).map((item) => {
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path))
             return (

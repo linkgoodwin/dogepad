@@ -6,6 +6,7 @@ type TranslationKey = keyof typeof zhTranslations
 export const zhTranslations: TranslationKeys = {
   'nav.launch': '发射广场',
   'nav.submitToken': '提交代币',
+  'nav.subscribeStake': '认购质押',
   'nav.lending': '借贷池',
   'nav.portfolio': '我的资产',
   'nav.howToPlay': '玩法指南',
@@ -758,6 +759,7 @@ export const zhTranslations: TranslationKeys = {
 export const enTranslations: TranslationKeys = {
   'nav.launch': 'Launch',
   'nav.submitToken': 'Submit Token',
+  'nav.subscribeStake': 'Subscribe & Stake',
   'nav.lending': 'Lending Pool',
   'nav.portfolio': 'Portfolio',
   'nav.howToPlay': 'How to Play',
