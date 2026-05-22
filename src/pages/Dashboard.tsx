@@ -81,29 +81,24 @@ function CandidateCard({ candidateId }: { candidateId: number }) {
 
   return (
     <Link to="/dao" className="block">
-      <div className="card-dark group hover:border-doge-gold/30 transition-all py-3 px-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden shrink-0">
-            {meta.image ? (
-              <img src={sanitizeHref(meta.image)} alt={candidate.name} className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const f = (e.target as HTMLImageElement).nextElementSibling as HTMLElement; if (f) f.classList.remove('hidden') }} />
-            ) : null}
-            <div className={cn('w-8 h-8 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold text-doge-gold text-xs', meta.image ? 'hidden' : '')}>
-              {candidate.name ? candidate.name.charAt(0).toUpperCase() : '#'}
-            </div>
+      <div className="card-dark group hover:border-doge-gold/30 transition-all h-12 flex items-center px-3">
+        <div className="w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center overflow-hidden shrink-0">
+          {meta.image ? (
+            <img src={sanitizeHref(meta.image)} alt={candidate.name} className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; const f = (e.target as HTMLImageElement).nextElementSibling as HTMLElement; if (f) f.classList.remove('hidden') }} />
+          ) : null}
+          <div className={cn('w-7 h-7 rounded-full bg-dark-600 flex items-center justify-center font-display font-bold text-doge-gold text-[10px]', meta.image ? 'hidden' : '')}>
+            {candidate.name ? candidate.name.charAt(0).toUpperCase() : '#'}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display font-semibold text-white text-sm truncate">{candidate.name}</span>
-              <span className="text-[10px] text-gray-500">{candidate.symbol}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">{formatUsdc(committedBnb)} {nativeSymbol}</span>
-              <span className="text-[10px] text-gray-600">{timeLabel}</span>
-            </div>
-          </div>
-          <span className="badge-cyan text-[10px] shrink-0">{t('dao.phase.voting')}</span>
         </div>
+        <div className="flex-1 min-w-0 ml-2">
+          <div className="flex items-center gap-1.5">
+            <span className="font-display font-semibold text-white text-sm truncate">{candidate.name}</span>
+            <span className="text-[10px] text-gray-500">{candidate.symbol}</span>
+          </div>
+        </div>
+        <span className="text-xs text-gray-400 mr-2">{formatUsdc(committedBnb)} {nativeSymbol}</span>
+        <span className="badge-cyan text-[10px] shrink-0">{t('dao.phase.voting')}</span>
       </div>
     </Link>
   )
@@ -188,24 +183,22 @@ function TokenCard({ tokenAddress, isListed }: { tokenAddress: string; isListed:
 
   return (
     <Link to={`/token/${tokenAddress}`} className="block">
-      <div className={cn('card-dark group transition-all py-3 px-3 border', borderColor)}>
-        <div className="flex items-center gap-2.5">
-          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0 border', isListed ? 'bg-doge-violet/10 border-doge-violet/30' : 'bg-neon-green/10 border-neon-green/30')}>
-            <span className={cn('font-display font-bold text-xs', accentColor)}>
-              {name ? name.charAt(0).toUpperCase() : '#'}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display font-semibold text-white text-sm truncate">{name}</span>
-              <span className="text-[10px] text-gray-500">{symbol}</span>
-            </div>
-            <span className="text-xs text-gray-400">{formatUsdc(reserve)} {nativeSymbol}</span>
-          </div>
-          <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium border shrink-0', badgeColor)}>
-            {badgeText}
+      <div className={cn('card-dark group transition-all h-12 flex items-center px-3 border', borderColor)}>
+        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0 border', isListed ? 'bg-doge-violet/10 border-doge-violet/30' : 'bg-neon-green/10 border-neon-green/30')}>
+          <span className={cn('font-display font-bold text-[10px]', accentColor)}>
+            {name ? name.charAt(0).toUpperCase() : '#'}
           </span>
         </div>
+        <div className="flex-1 min-w-0 ml-2">
+          <div className="flex items-center gap-1.5">
+            <span className="font-display font-semibold text-white text-sm truncate">{name}</span>
+            <span className="text-[10px] text-gray-500">{symbol}</span>
+          </div>
+        </div>
+        <span className="text-xs text-gray-400 mr-2">{formatUsdc(reserve)} {nativeSymbol}</span>
+        <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium border shrink-0', badgeColor)}>
+          {badgeText}
+        </span>
       </div>
     </Link>
   )
