@@ -1,5 +1,5 @@
 import { Outlet, Link } from 'react-router-dom'
-import { Flame, LayoutDashboard } from 'lucide-react'
+import { Flame, Rocket } from 'lucide-react'
 import WalletButton from '@/components/WalletButton'
 import { useT } from '@/i18n/useT'
 
@@ -18,11 +18,11 @@ export default function LandingLayout() {
         <div className="flex items-center gap-4">
           <WalletButton />
           <Link
-            to="/dashboard"
+            to="/launch"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-doge-gold/10 text-doge-gold border border-doge-gold/20 font-display font-semibold text-sm hover:bg-doge-gold/20 hover:border-doge-gold/40 transition-all duration-200"
           >
-            <LayoutDashboard className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('nav.dashboard')}</span>
+            <Rocket className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('nav.launch')}</span>
           </Link>
         </div>
       </header>

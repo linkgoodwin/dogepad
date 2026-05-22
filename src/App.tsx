@@ -15,7 +15,6 @@ const LendMarket = lazy(() => import("@/pages/LendMarket"))
 const LendDetail = lazy(() => import("@/pages/LendDetail"))
 const Portfolio = lazy(() => import("@/pages/Portfolio"))
 const HowToPlay = lazy(() => import("@/pages/HowToPlay"))
-const Revival = lazy(() => import("@/pages/Revival"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
 
 function DocumentTitle() {
@@ -46,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
         </Route>
         <Route element={<Layout />}>
+          <Route path="/launch" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dao" element={<DaoVote />} />
           <Route path="/create" element={<CreateToken />} />
@@ -55,7 +55,6 @@ export default function App() {
           <Route path="/lend/:mode/:tokenAddress" element={<LendDetail />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/guide" element={<HowToPlay />} />
-          <Route path="/revival" element={<Revival />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

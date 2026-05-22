@@ -4,13 +4,14 @@ type TranslationKeys = Record<string, string>
 type TranslationKey = keyof typeof zhTranslations
 
 export const zhTranslations: TranslationKeys = {
-  'nav.dashboard': '仪表盘',
-  'nav.daoVote': 'DAO 投票',
-  'nav.submitToken': '提交候选币',
-  'nav.lending': '借贷市场',
+  'nav.launch': '发射广场',
+  'nav.submitToken': '提交代币',
+  'nav.lending': '借贷池',
   'nav.portfolio': '我的资产',
-  'nav.revival': '重铸炉',
   'nav.howToPlay': '玩法指南',
+  'nav.sectionLaunch': '发射台',
+  'nav.sectionFinance': '金融',
+  'nav.sectionOther': '其他',
 
   'common.connect': '连接钱包',
   'common.disconnect': '断开连接',
@@ -750,13 +751,14 @@ export const zhTranslations: TranslationKeys = {
 }
 
 export const enTranslations: TranslationKeys = {
-  'nav.dashboard': 'Dashboard',
-  'nav.daoVote': 'DAO Vote',
+  'nav.launch': 'Launch',
   'nav.submitToken': 'Submit Token',
-  'nav.lending': 'Lending',
+  'nav.lending': 'Lending Pool',
   'nav.portfolio': 'Portfolio',
-  'nav.revival': 'Forge Revival',
   'nav.howToPlay': 'How to Play',
+  'nav.sectionLaunch': 'LAUNCH',
+  'nav.sectionFinance': 'FINANCE',
+  'nav.sectionOther': 'OTHER',
 
   'common.connect': 'Connect Wallet',
   'common.disconnect': 'Disconnect',

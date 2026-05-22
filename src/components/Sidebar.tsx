@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Flame, LayoutDashboard, Vote, PlusCircle, Landmark, Wallet, BookOpen, X, RotateCcw } from 'lucide-react'
+import { Flame, Rocket, PlusCircle, Landmark, Wallet, BookOpen, X } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n/useT'
 import { useI18n } from '@/stores/i18nStore'
@@ -12,12 +12,10 @@ export default function Sidebar() {
   const { lang, toggleLang } = useI18n()
 
   const navItems = [
-    { label: t('nav.dashboard'), icon: LayoutDashboard, path: '/dashboard' },
-    { label: t('nav.daoVote'), icon: Vote, path: '/dao' },
+    { label: t('nav.launch'), icon: Rocket, path: '/launch' },
     { label: t('nav.submitToken'), icon: PlusCircle, path: '/create' },
     { label: t('nav.lending'), icon: Landmark, path: '/lend' },
     { label: t('nav.portfolio'), icon: Wallet, path: '/portfolio' },
-    { label: t('nav.revival'), icon: RotateCcw, path: '/revival' },
     { label: t('nav.howToPlay'), icon: BookOpen, path: '/guide' },
   ]
 
@@ -55,7 +53,58 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 py-4 px-2 space-y-1">
-          {navItems.map((item) => {
+          <div className="px-4 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            {t('nav.sectionLaunch')}
+          </div>
+          {navItems.slice(0, 2).map((item) => {
+            const isActive = location.pathname === item.path ||
+              (item.path !== '/' && location.pathname.startsWith(item.path))
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => sidebarOpen && toggleSidebar()}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  isActive
+                    ? 'bg-doge-gold/10 text-doge-gold border-l-2 border-doge-gold'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-700 border-l-2 border-transparent'
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </Link>
+            )
+          })}
+
+          <div className="px-4 py-1.5 mt-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            {t('nav.sectionFinance')}
+          </div>
+          {navItems.slice(2, 4).map((item) => {
+            const isActive = location.pathname === item.path ||
+              (item.path !== '/' && location.pathname.startsWith(item.path))
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => sidebarOpen && toggleSidebar()}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  isActive
+                    ? 'bg-doge-gold/10 text-doge-gold border-l-2 border-doge-gold'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-700 border-l-2 border-transparent'
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </Link>
+            )
+          })}
+
+          <div className="px-4 py-1.5 mt-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            {t('nav.sectionOther')}
+          </div>
+          {navItems.slice(4).map((item) => {
             const isActive = location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path))
             return (
