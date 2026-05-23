@@ -694,6 +694,26 @@ export default function DaoVote() {
     query: { enabled: dogeTokenReady && !!address },
   })
 
+  const { data: selectedCandidateData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'candidates',
+    args: selectedCandidate !== null ? [BigInt(selectedCandidate)] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && selectedCandidate !== null },
+  })
+
+  const selectedCandidateInfo = useMemo(() => {
+    if (!selectedCandidateData) return null
+    const d = selectedCandidateData as any
+    return {
+      expireTime: Number(d.expireTime ?? d[10] ?? 0n),
+      status: Number(d.status ?? d[12] ?? 0),
+      totalSubBnb: BigInt(d.totalSubBnb ?? d[5] ?? 0n),
+      proposer: String(d.proposer ?? d[0] ?? ''),
+    }
+  }, [selectedCandidateData])
+
   const parseIds = (data: unknown): number[] => {
     if (!data) return []
     const d = data as any
@@ -777,6 +797,17 @@ export default function DaoVote() {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
     return `${h}h ${m}m`
+  }
+
+  const formatCountdown = (timestamp: number) => {
+    const diff = timestamp - Date.now() / 1000
+    if (diff <= 0) return t('dao.statusExpired')
+    const d = Math.floor(diff / 86400)
+    const h = Math.floor((diff % 86400) / 3600)
+    const m = Math.floor((diff % 3600) / 60)
+    if (d > 0) return `${d}d ${h}h`
+    if (h > 0) return `${h}h ${m}m`
+    return `${m}m`
   }
 
   const formatDate = (timestamp: number) => {
@@ -1261,36 +1292,89 @@ export default function DaoVote() {
           <div className="card-dark">
             <h3 className="font-display font-bold text-lg mb-4">{t('dao.epochTimeline')}</h3>
             <div className="grid grid-cols-2 gap-3">
-              {epochTimeRemaining === 0 && !settleDone ? (
-                <button
-                  className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
-                  onClick={handleSettleEpoch}
-                  disabled={isWriting || isConfirming}
-                >
-                  {isWriting || isConfirming ? (
-                    <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
-                  ) : (
-                    <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
-                  )}
-                  <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
-                  <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
-                </button>
-              ) : (
-                <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : settleDone ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
-                  {settleDone && epochTimeRemaining === 0 ? (
-                    <>
+              {selectedCandidate !== null && selectedCandidateInfo ? (
+                <>
+                  {selectedCandidateInfo.status === 0 && selectedCandidateInfo.expireTime > 0 && (selectedCandidateInfo.expireTime * 1000) > Date.now() ? (
+                    <div className="text-center p-3 rounded-lg border border-doge-gold/30 bg-doge-gold/5">
+                      <Timer className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-sm font-bold text-doge-gold">
+                        {formatCountdown(selectedCandidateInfo.expireTime)}
+                      </div>
+                      <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
+                    </div>
+                  ) : selectedCandidateInfo.status === 0 && epochTimeRemaining === 0 && !settleDone ? (
+                    <button
+                      className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
+                      onClick={handleSettleEpoch}
+                      disabled={isWriting || isConfirming}
+                    >
+                      {isWriting || isConfirming ? (
+                        <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
+                      ) : (
+                        <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                      )}
+                      <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
+                      <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
+                    </button>
+                  ) : selectedCandidateInfo.status === 0 && settleDone ? (
+                    <div className="text-center p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
                       <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
                       <div className="text-sm font-bold text-emerald-400">{t('dao.settleDone')}</div>
                       <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
-                    </>
+                    </div>
+                  ) : selectedCandidateInfo.status === 1 ? (
+                    <div className="text-center p-3 rounded-lg border border-doge-cyan/30 bg-doge-cyan/5">
+                      <Rocket className="w-5 h-5 mx-auto mb-2 text-doge-cyan" />
+                      <div className="text-sm font-bold text-doge-cyan">{t('dao.queuedBadge')}</div>
+                      <div className="text-xs text-gray-400">{t('dao.inQueue')}</div>
+                    </div>
+                  ) : selectedCandidateInfo.status === 5 ? (
+                    <div className="text-center p-3 rounded-lg border border-doge-gold/30 bg-doge-gold/5">
+                      <Check className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-sm font-bold text-doge-gold">{t('dao.launched')}</div>
+                    </div>
                   ) : (
-                    <>
-                      <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
-                      <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
+                    <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700">
+                      <Vote className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                      <div className="text-sm font-bold text-gray-400">{formatTime(epochTimeRemaining)}</div>
                       <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
-                    </>
+                    </div>
                   )}
-                </div>
+                </>
+              ) : (
+                <>
+                  {epochTimeRemaining === 0 && !settleDone ? (
+                    <button
+                      className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
+                      onClick={handleSettleEpoch}
+                      disabled={isWriting || isConfirming}
+                    >
+                      {isWriting || isConfirming ? (
+                        <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
+                      ) : (
+                        <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                      )}
+                      <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
+                      <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
+                    </button>
+                  ) : (
+                    <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : settleDone ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
+                      {settleDone && epochTimeRemaining === 0 ? (
+                        <>
+                          <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
+                          <div className="text-sm font-bold text-emerald-400">{t('dao.settleDone')}</div>
+                          <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
+                        </>
+                      ) : (
+                        <>
+                          <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
+                          <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
+                          <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
               {queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
                 <button
