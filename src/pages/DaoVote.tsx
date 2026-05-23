@@ -259,6 +259,10 @@ function CandidateDetailCard({
             )}
           </div>
 
+          {meta.description && (
+            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{meta.description}</p>
+          )}
+
           <div className="flex items-center gap-3 mt-2">
             <div>
               <div className={cn('font-display font-bold text-sm', accentColor)}>
@@ -1430,7 +1434,14 @@ export default function DaoVote() {
               <div className="space-y-4">
                 <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3">
                   <p className="text-xs text-doge-gold font-medium">{t('dao.selectedCandidate', { id: selectedCandidate + 1 })}</p>
-                  <p className="text-xs text-gray-400 mt-1">{t('dao.subscribeHint')}</p>
+                  {selectedCandidateInfo && (() => {
+                    const selMeta = parseMetadata(String((selectedCandidateData as any)?.metadataURI ?? (selectedCandidateData as any)?.[3] ?? ''))
+                    return selMeta.description ? (
+                      <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">{selMeta.description}</p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-1">{t('dao.subscribeHint')}</p>
+                    )
+                  })()}
                 </div>
 
                 <div>
