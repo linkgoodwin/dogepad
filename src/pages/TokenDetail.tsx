@@ -1466,6 +1466,30 @@ export default function TokenDetail() {
               )}
             </div>
           </div>
+
+          {isListed && (
+            <div className="card-dark">
+              <h3 className="font-display font-semibold mb-3">{t('tokenDetail.longShort')}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <Link
+                  to={`/lend/long/${tokenAddress}`}
+                  className="bg-neon-green/5 border border-neon-green/20 rounded-xl p-4 text-center hover:bg-neon-green/10 transition-all group"
+                >
+                  <TrendingUp className="w-6 h-6 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                  <div className="font-display font-bold text-neon-green text-sm">{t('tokenDetail.goLong')}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{t('tokenDetail.goLongDesc')}</div>
+                </Link>
+                <Link
+                  to={`/lend/short/${tokenAddress}`}
+                  className="bg-neon-red/5 border border-neon-red/20 rounded-xl p-4 text-center hover:bg-neon-red/10 transition-all group"
+                >
+                  <ArrowRightLeft className="w-6 h-6 mx-auto mb-2 text-neon-red group-hover:scale-110 transition-transform" />
+                  <div className="font-display font-bold text-neon-red text-sm">{t('tokenDetail.goShort')}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{t('tokenDetail.goShortDesc')}</div>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
