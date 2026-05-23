@@ -274,7 +274,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         if (info.isListedOnDex && info.reserveUsdc == 0) revert AlreadyListed();
         if (msg.value == 0) revert ZeroUsdc();
 
-        uint256 fee = (msg.value * FEE_BPS) / 10000;
+        uint256 fee = 0;
+        if (msg.sender != launchDao) {
+            fee = (msg.value * FEE_BPS) / 10000;
+        }
         uint256 usdcAfterFee = msg.value - fee;
 
         uint256 tokensToBuy = _calculateBuyAmount(token, usdcAfterFee);

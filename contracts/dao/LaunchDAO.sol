@@ -20,6 +20,8 @@ interface IBondingCurveLaunch {
     ) external returns (address);
 
     function buy(address token, uint256 minTokensOut, address recipient) external payable;
+
+    function listOnDex(address token) external;
 }
 
 interface IBondingCurveTokenExclude {
@@ -631,6 +633,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.status = CandidateStatus.Launched;
         c.launchedToken = token;
         c.launchedTokenSupply = tokensReceived;
+
+        try IBondingCurveLaunch(bondingCurve).listOnDex(token) {} catch {}
 
         queueHead++;
 
