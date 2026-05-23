@@ -113,6 +113,7 @@ async function main() {
   await sendTx(dexLister, "setPools", [EXISTING.longPool, EXISTING.shortPool], "DexLister.setPools");
   await sendTx(dexLister, "setBuyAndBurnEngine", [EXISTING.buyAndBurnEngine], "DexLister.setBuyAndBurnEngine");
   await sendTx(dexLister, "setCreatorRewardManager", [EXISTING.creatorRewardManager], "DexLister.setCreatorRewardManager");
+  await sendTx(dexLister, "setBondingCurve", [bondingCurve.address], "DexLister.setBondingCurve");
 
   console.log("\n--- Phase 6: Wire LaunchDAO ---");
   await sendTx(launchDao, "setFeeDistributor", [EXISTING.feeDistributor], "LaunchDAO.setFeeDistributor");
@@ -128,7 +129,7 @@ async function main() {
 
   const burnArtifact = getArtifact("BuyAndBurnEngine");
   const burnEngine = new ethers.Contract(EXISTING.buyAndBurnEngine, burnArtifact.abi, w);
-  await sendTx(burnEngine, "setBondingCurve", [bondingCurve.address], "BuyAndBurnEngine.setBondingCurve");
+  try { await sendTx(burnEngine, "setKeeper", [bondingCurve.address], "BuyAndBurnEngine.setKeeper"); } catch(e) { console.log("  Skipped BuyAndBurnEngine.setKeeper:", e.message.slice(0,80)); }
 
   const priceOracleArtifact = getArtifact("PriceOracle");
   const priceOracle = new ethers.Contract(EXISTING.priceOracle, priceOracleArtifact.abi, w);

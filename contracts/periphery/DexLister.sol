@@ -79,6 +79,7 @@ contract DexLister is Ownable {
     address public feeDistributor;
     address public buyAndBurnEngine;
     address public creatorRewardManager;
+    address public bondingCurve;
 
     uint256 public constant BASE_TAX_SHARE_BPS = 5000;
     uint256 public constant BASE_LP_SHARE_BPS = 1000;
@@ -129,6 +130,10 @@ contract DexLister is Ownable {
         creatorRewardManager = _manager;
     }
 
+    function setBondingCurve(address _bondingCurve) external onlyOwner {
+        bondingCurve = _bondingCurve;
+    }
+
     function setRatios(
         uint256 _lpUsdc,
         uint256 _long,
@@ -147,7 +152,8 @@ contract DexLister is Ownable {
         lpTokenRatio = _lpToken;
     }
 
-    function addLiquidityAndDistribute(DexListingParams calldata p) external payable onlyOwner {
+    function addLiquidityAndDistribute(DexListingParams calldata p) external payable {
+        if (msg.sender != bondingCurve && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
         uint256 lpUsdc = (p.totalUsdc * lpUsdcRatio) / 100;
 
         BondingCurveToken(p.token).setSkipHoldingLimit(true);
