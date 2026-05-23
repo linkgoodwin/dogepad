@@ -39,7 +39,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant MIN_SUBSCRIBE_USDC = 1 ether;
     uint256 public constant MIN_STAKE = 1e17;
     uint256 public constant MAX_STAKE = 300 ether;
-    uint256 public constant LAUNCH_WINDOW_HOUR = 4;
     uint256 public constant DOGE_USDC_RATE = 100;
     uint256 public constant DAILY_QUEUE_LIMIT = 3;
 
@@ -159,6 +158,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public currentDay;
     uint256 public lastLaunchDay;
     uint256 public maxLaunchsPerDay = 1;
+    uint256 public launchHour = 4;
     uint256 public lastQueueDay;
     mapping(uint256 => uint256) public dayLaunchCount;
     mapping(uint256 => EpochInfo) public epochInfo;
@@ -263,6 +263,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.totalRightsVotes += weight;
 
         emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
+        _processQueueInternal();
     }
 
     function stakeUsdc(StakeDuration duration) external payable nonReentrant {
@@ -288,6 +289,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         totalStakedUsdc += newUsdc;
 
         emit Staked(msg.sender, address(0), newUsdc, duration, posId);
+        _processQueueInternal();
     }
 
     function stakeDoge(uint256 amount, StakeDuration duration) external nonReentrant {
@@ -314,6 +316,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         totalStakedDoge += amount;
 
         emit Staked(msg.sender, dogeToken, amount, duration, posId);
+        _processQueueInternal();
     }
 
     function unstakePosition(uint256 positionId) external nonReentrant {
@@ -384,6 +387,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
 
         emit RightsVoted(msg.sender, candidateId, amount);
+        _processQueueInternal();
     }
 
     function submitCandidate(
@@ -520,6 +524,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         _enqueueCandidate(candidateId);
 
         emit CandidateEarlyQueued(candidateId, msg.sender);
+        _processQueueInternal();
     }
 
     function settleEpoch() external nonReentrant {
@@ -555,88 +560,96 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
 
         emit EpochSettled(currentDay, winningId);
+        _processQueueInternal();
     }
 
-    function launchToken() external nonReentrant {
+    function _processQueueInternal() internal {
         uint256 today = _today();
-        require(dayLaunchCount[today] < maxLaunchsPerDay, "daily launch limit reached");
-        require((block.timestamp % EPOCH_DURATION) / 1 hours >= LAUNCH_WINDOW_HOUR, "launch window not open");
+        if (dayLaunchCount[today] >= maxLaunchsPerDay) return;
+        if ((block.timestamp % EPOCH_DURATION) / 1 hours < launchHour) return;
 
         _cleanupExpiredQueuedCandidates();
 
-        while (queueHead < launchQueueItems.length && candidates[launchQueueItems[queueHead]].status != CandidateStatus.Queued) {
-            queueHead++;
-        }
-
-        require(queueHead < launchQueueItems.length, "queue empty");
-
-        uint256 bestIdx = queueHead;
-        uint256 bestScore = queueScore[launchQueueItems[queueHead]];
-        for (uint256 i = queueHead + 1; i < launchQueueItems.length; i++) {
-            uint256 cid = launchQueueItems[i];
-            if (candidates[cid].status == CandidateStatus.Queued && queueScore[cid] > bestScore) {
-                bestScore = queueScore[cid];
-                bestIdx = i;
+        uint256 launched = 0;
+        while (launched < maxLaunchsPerDay && dayLaunchCount[today] < maxLaunchsPerDay) {
+            while (queueHead < launchQueueItems.length && candidates[launchQueueItems[queueHead]].status != CandidateStatus.Queued) {
+                queueHead++;
             }
+
+            if (queueHead >= launchQueueItems.length) break;
+
+            uint256 bestIdx = queueHead;
+            uint256 bestScore = queueScore[launchQueueItems[queueHead]];
+            for (uint256 i = queueHead + 1; i < launchQueueItems.length; i++) {
+                uint256 cid = launchQueueItems[i];
+                if (candidates[cid].status == CandidateStatus.Queued && queueScore[cid] > bestScore) {
+                    bestScore = queueScore[cid];
+                    bestIdx = i;
+                }
+            }
+
+            if (bestIdx != queueHead) {
+                uint256 temp = launchQueueItems[queueHead];
+                launchQueueItems[queueHead] = launchQueueItems[bestIdx];
+                launchQueueItems[bestIdx] = temp;
+            }
+
+            uint256 candidateId = launchQueueItems[queueHead];
+            Candidate storage c = candidates[candidateId];
+
+            lastLaunchDay = today;
+            dayLaunchCount[today]++;
+
+            address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
+                c.name,
+                c.symbol,
+                FIXED_TOTAL_SUPPLY,
+                c.metadataURI,
+                address(this),
+                0,
+                c.wantTaxShare,
+                c.wantLpShare,
+                c.wantTokenAllocation
+            );
+
+            IBondingCurveTokenExclude(token).excludeFromTax(address(this));
+            IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
+
+            uint256 tokensReceived = 0;
+            uint256 usdcUsed = c.totalSubUsdc;
+            uint256 excessUsdc = 0;
+
+            if (c.totalSubUsdc > LAUNCH_THRESHOLD) {
+                excessUsdc = c.totalSubUsdc - LAUNCH_THRESHOLD;
+                usdcUsed = LAUNCH_THRESHOLD;
+            }
+
+            if (usdcUsed > 0 && address(this).balance >= usdcUsed) {
+                uint256 balBefore = IERC20(token).balanceOf(address(this));
+                IBondingCurveLaunch(bondingCurve).buy{value: usdcUsed}(token, 0, address(this));
+                tokensReceived = IERC20(token).balanceOf(address(this)) - balBefore;
+            }
+
+            c.launchedUsdcUsed = usdcUsed;
+            c.launchedExcessUsdc = excessUsdc;
+
+            if (dogeToken == address(0)) {
+                dogeToken = token;
+            }
+
+            c.wasLaunched = true;
+            c.status = CandidateStatus.Launched;
+            c.launchedToken = token;
+            c.launchedTokenSupply = tokensReceived;
+
+            try IBondingCurveLaunch(bondingCurve).listOnDex(token) {} catch {}
+
+            queueHead++;
+
+            emit TokenLaunched(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
+
+            launched++;
         }
-
-        if (bestIdx != queueHead) {
-            uint256 temp = launchQueueItems[queueHead];
-            launchQueueItems[queueHead] = launchQueueItems[bestIdx];
-            launchQueueItems[bestIdx] = temp;
-        }
-
-        uint256 candidateId = launchQueueItems[queueHead];
-        Candidate storage c = candidates[candidateId];
-
-        lastLaunchDay = today;
-        dayLaunchCount[today]++;
-
-        address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
-            c.name,
-            c.symbol,
-            FIXED_TOTAL_SUPPLY,
-            c.metadataURI,
-            address(this),
-            0,
-            c.wantTaxShare,
-            c.wantLpShare,
-            c.wantTokenAllocation
-        );
-
-        IBondingCurveTokenExclude(token).excludeFromTax(address(this));
-        IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
-
-        uint256 tokensReceived = 0;
-        uint256 usdcUsed = c.totalSubUsdc;
-        uint256 excessUsdc = 0;
-
-        if (c.totalSubUsdc > LAUNCH_THRESHOLD) {
-            excessUsdc = c.totalSubUsdc - LAUNCH_THRESHOLD;
-            usdcUsed = LAUNCH_THRESHOLD;
-        }
-
-        if (usdcUsed > 0 && address(this).balance >= usdcUsed) {
-            uint256 balBefore = IERC20(token).balanceOf(address(this));
-            IBondingCurveLaunch(bondingCurve).buy{value: usdcUsed}(token, 0, address(this));
-            tokensReceived = IERC20(token).balanceOf(address(this)) - balBefore;
-        }
-
-        c.launchedUsdcUsed = usdcUsed;
-        c.launchedExcessUsdc = excessUsdc;
-
-        if (dogeToken == address(0)) {
-            dogeToken = token;
-        }
-
-        c.wasLaunched = true;
-        c.status = CandidateStatus.Launched;
-        c.launchedToken = token;
-        c.launchedTokenSupply = tokensReceived;
-
-        try IBondingCurveLaunch(bondingCurve).listOnDex(token) {} catch {}
-
-        queueHead++;
 
         EpochInfo storage epoch = epochInfo[currentDay];
         if (dogeToken != address(0) && rewardPool >= LAUNCH_REWARD && !epoch.launchRewardClaimed) {
@@ -644,8 +657,10 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             rewardPool -= LAUNCH_REWARD;
             IERC20(dogeToken).safeTransfer(msg.sender, LAUNCH_REWARD);
         }
+    }
 
-        emit TokenLaunched(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
+    function processQueue() external nonReentrant {
+        _processQueueInternal();
     }
 
     function claimSubscription(uint256 candidateId) external nonReentrant {
@@ -1168,8 +1183,13 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function setMaxLaunchsPerDay(uint256 _max) external onlyOwner {
-        require(_max >= 1 && _max <= 50, "invalid max launchs per day");
+        require(_max >= 1 && _max <= 3, "invalid max launchs per day");
         maxLaunchsPerDay = _max;
+    }
+
+    function setLaunchHour(uint256 _hour) external onlyOwner {
+        require(_hour < 24, "invalid hour");
+        launchHour = _hour;
     }
 
     function setDogeToken(address _dogeToken) external onlyOwner {

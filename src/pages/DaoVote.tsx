@@ -461,37 +461,15 @@ export default function DaoVote() {
   const [showUnstakePanel, setShowUnstakePanel] = useState(false)
   const [txError, setTxError] = useState('')
   const [isApproving, setIsApproving] = useState(false)
-  const [lastAction, setLastAction] = useState<'settle' | 'launch' | null>(null)
+  const [lastAction, setLastAction] = useState<'settle' | null>(null)
 
   const getUtcDay = () => new Date().toISOString().slice(0, 10)
-
-  const isLaunchWindowOpen = (() => {
-    const utcHour = new Date().getUTCHours()
-    return utcHour >= 4
-  })()
-  const nextLaunchWindowTime = (() => {
-    const now = new Date()
-    const utcHour = now.getUTCHours()
-    if (utcHour < 4) {
-      const next = new Date(now)
-      next.setUTCHours(4, 0, 0, 0)
-      return next
-    }
-    const next = new Date(now)
-    next.setUTCDate(next.getUTCDate() + 1)
-    next.setUTCHours(4, 0, 0, 0)
-    return next
-  })()
 
   const isSettledToday = (() => {
     try { return localStorage.getItem('dogepad-settle-day') === getUtcDay() } catch { return false }
   })()
-  const isLaunchedToday = (() => {
-    try { return localStorage.getItem('dogepad-launch-day') === getUtcDay() } catch { return false }
-  })()
 
   const [settleDone, setSettleDone] = useState(isSettledToday)
-  const [launchDone, setLaunchDone] = useState(isLaunchedToday)
 
   useEffect(() => {
     if (isConfirmed && lastAction) {
@@ -499,9 +477,6 @@ export default function DaoVote() {
       if (lastAction === 'settle') {
         localStorage.setItem('dogepad-settle-day', day)
         setSettleDone(true)
-      } else if (lastAction === 'launch') {
-        localStorage.setItem('dogepad-launch-day', day)
-        setLaunchDone(true)
       }
       setLastAction(null)
     }
@@ -550,6 +525,14 @@ export default function DaoVote() {
     query: { enabled: contractReady, refetchInterval: 10000 },
   })
 
+  const { data: launchHourData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'launchHour',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
   const { data: maxLaunchsPerDayData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -568,9 +551,28 @@ export default function DaoVote() {
     query: { enabled: contractReady, refetchInterval: 15000 },
   })
 
+  const launchHour = Number(launchHourData ?? 4)
   const maxLaunchsPerDay = Number(maxLaunchsPerDayData ?? 1)
   const todayLaunchCount = Number(todayLaunchCountData ?? 0)
   const canLaunchToday = todayLaunchCount < maxLaunchsPerDay
+
+  const isLaunchWindowOpen = (() => {
+    const utcHour = new Date().getUTCHours()
+    return utcHour >= launchHour
+  })()
+  const nextLaunchWindowTime = (() => {
+    const now = new Date()
+    const utcHour = now.getUTCHours()
+    if (utcHour < launchHour) {
+      const next = new Date(now)
+      next.setUTCHours(launchHour, 0, 0, 0)
+      return next
+    }
+    const next = new Date(now)
+    next.setUTCDate(next.getUTCDate() + 1)
+    next.setUTCHours(launchHour, 0, 0, 0)
+    return next
+  })()
 
   const { data: totalStakedBnbData } = useReadContract({
     address: daoAddress,
@@ -998,18 +1000,30 @@ export default function DaoVote() {
     }
   }
 
-  const handleLaunchToken = async () => {
+  const handleProcessQueue = async () => {
     setTxError('')
-    setLastAction('launch')
     try {
-      await doWrite({ functionName: 'launchToken', args: [] })
+      await doWrite({ functionName: 'processQueue', args: [] })
       setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
-      setLastAction(null)
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
-      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
+      if (!msg.includes('User rejected') && !msg.includes('denied') && !msg.includes('launch window') && !msg.includes('daily launch limit') && !msg.includes('queue empty')) {
+        setTxError(msg.slice(0, 200))
+      }
     }
   }
+
+  useEffect(() => {
+    if (!contractReady || !canLaunchToday || queueLength === 0) return
+    const checkAndProcess = () => {
+      const utcHour = new Date().getUTCHours()
+      if (utcHour >= launchHour) {
+        handleProcessQueue()
+      }
+    }
+    const interval = setInterval(checkAndProcess, 60000)
+    return () => clearInterval(interval)
+  }, [contractReady, canLaunchToday, queueLength, launchHour])
 
   const handleApproveDoge = async () => {
     if (!dogeTokenAddr || !address) return
@@ -1465,25 +1479,30 @@ export default function DaoVote() {
             <div className="mt-5 pt-4 border-t border-dark-500/30">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Rocket className="w-4 h-4 text-neon-green" />
-                  <span className="text-sm font-display font-bold">{t('dao.launchToken')}</span>
+                  <Rocket className="w-4 h-4 text-doge-cyan" />
+                  <span className="text-sm font-display font-bold">{t('dao.autoLaunch')}</span>
                 </div>
                 <span className="text-xs text-gray-500">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</span>
               </div>
-              {queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
-                <button
-                  className="w-full py-2.5 rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={handleLaunchToken}
-                  disabled={isWriting || isConfirming}
-                >
-                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                  {t('dao.launchToken')}
-                </button>
-              ) : queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
-                <div className="bg-dark-700 rounded-lg p-3 text-center">
-                  <Clock className="w-4 h-4 mx-auto mb-1 text-gray-500" />
-                  <div className="text-xs text-gray-400">{t('dao.launchWindowClosed')}</div>
-                  <div className="text-[10px] text-gray-500">{t('dao.opensAt')} 04:00 UTC</div>
+              {queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
+                <div className="bg-doge-cyan/5 border border-doge-cyan/20 rounded-lg p-3 text-center">
+                  <Clock className="w-4 h-4 mx-auto mb-1 text-doge-cyan" />
+                  <div className="text-xs text-doge-cyan font-bold">{t('dao.nextLaunchCountdown')}</div>
+                  <div className="text-lg font-display font-bold text-doge-cyan mt-1">
+                    {(() => {
+                      const diff = nextLaunchWindowTime.getTime() - Date.now()
+                      const h = Math.floor(diff / 3600000)
+                      const m = Math.floor((diff % 3600000) / 60000)
+                      return `${h}h ${m}m`
+                    })()}
+                  </div>
+                  <div className="text-[10px] text-gray-500">{t('dao.opensAt')} {String(launchHour).padStart(2, '0')}:00 UTC</div>
+                </div>
+              ) : queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
+                <div className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3 text-center">
+                  <Rocket className="w-4 h-4 mx-auto mb-1 text-neon-green" />
+                  <div className="text-xs text-neon-green font-bold">{t('dao.launchWindowOpen')}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">{t('dao.autoLaunching')}</div>
                 </div>
               ) : !canLaunchToday && queueLength > 0 ? (
                 <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-center">

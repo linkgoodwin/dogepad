@@ -139,7 +139,7 @@ export const LAUNCH_DAO_ABI = [
   },
   {
     inputs: [],
-    name: 'launchToken',
+    name: 'processQueue',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -263,6 +263,13 @@ export const LAUNCH_DAO_ABI = [
   },
   {
     inputs: [],
+    name: 'launchHour',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
     name: 'lastQueueDay',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
@@ -285,6 +292,13 @@ export const LAUNCH_DAO_ABI = [
   {
     inputs: [{ internalType: 'uint256', name: '_max', type: 'uint256' }],
     name: 'setMaxLaunchsPerDay',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '_hour', type: 'uint256' }],
+    name: 'setLaunchHour',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -984,9 +998,9 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     factory: resolveAddr('VITE_MONAD_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x684E2E9411352d8deDCE0cb02C5dE0cc667a033E'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x33B425Ee5322C73FDDAAF05c32716D33e21bcee8'),
-    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0xCB7d355d6ba98362eA27f8ba153e3dFCB2Bd5aB7'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x98C056A4b5d72E0B4f7e9b6A62f740983D767D2f'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0xC5D85fF0b336f5a1B1ae650ebd01851894e6158c'),
+    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0xAB2581567d645C3d8F1EaF86FFCA34F8Cd29839A'),
     longPool: resolveAddr('VITE_ARC_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62'),
     shortPool: resolveAddr('VITE_ARC_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x6Bcb9A91c9328307868B268c9b7207f293b086DA'),
     buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0xBfEa6640F909D086363B679768F8DCDbb73A2625'),
