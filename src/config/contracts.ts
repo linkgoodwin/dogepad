@@ -42,14 +42,14 @@ export const LAUNCH_DAO_ABI = [
   },
   {
     inputs: [{ internalType: 'uint256', name: 'candidateId', type: 'uint256' }],
-    name: 'subscribeBnb',
+    name: 'subscribeUsdc',
     outputs: [],
     stateMutability: 'payable',
     type: 'function',
   },
   {
     inputs: [{ internalType: 'uint8', name: 'duration', type: 'uint8' }],
-    name: 'stakeBnb',
+    name: 'stakeUsdc',
     outputs: [],
     stateMutability: 'payable',
     type: 'function',
@@ -516,7 +516,7 @@ export const BONDING_CURVE_ABI = [
       { internalType: 'address', name: 'tokenAddress', type: 'address' },
       { internalType: 'address', name: 'creator', type: 'address' },
       { internalType: 'uint256', name: 'totalSupply', type: 'uint256' },
-      { internalType: 'uint256', name: 'reserveBnb', type: 'uint256' },
+      { internalType: 'uint256', name: 'reserveUsdc', type: 'uint256' },
       { internalType: 'uint256', name: 'tokensSold', type: 'uint256' },
       { internalType: 'bool', name: 'isListedOnDex', type: 'bool' },
       { internalType: 'uint256', name: 'dexListingThreshold', type: 'uint256' },
@@ -550,6 +550,13 @@ export const BONDING_CURVE_ABI = [
     inputs: [],
     name: 'isXyloRouter',
     outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'dexLister',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -929,6 +936,7 @@ function resolveAddr(primary: string, fallback: string, hardcoded?: `0x${string}
 export interface ContractAddresses {
   launchDAO: `0x${string}`
   bondingCurve: `0x${string}`
+  dexLister: `0x${string}`
   longPool: `0x${string}`
   shortPool: `0x${string}`
   buyAndBurn: `0x${string}`
@@ -942,6 +950,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   [BSC_TESTNET]: {
     launchDAO: resolveAddr('VITE_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xb6eb6E4AD179B8296b48b850cbb34ce40846F866'),
     bondingCurve: resolveAddr('VITE_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x0248D9924E873A962A7452b840D065bFf7C4e7fA'),
+    dexLister: resolveAddr('VITE_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
     longPool: resolveAddr('VITE_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0x63414dE92d6375C4bc7f8A70F8d49652f4d86FFa'),
     shortPool: resolveAddr('VITE_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x7019F4498de895FBF489AF6Da13085Ad565871c4'),
     buyAndBurn: resolveAddr('VITE_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x91FbC0E3d92ce43CdFa4085e45547dc34f3bE5ca'),
@@ -953,6 +962,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   [BSC_MAINNET]: {
     launchDAO: resolveAddr('VITE_MAINNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xB8EBdD1278BA266f8261812B04c4B174FEF8095e'),
     bondingCurve: resolveAddr('VITE_MAINNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x9440736180F32723b4E8c7DbcA4CFa288935F355'),
+    dexLister: resolveAddr('VITE_MAINNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
     longPool: resolveAddr('VITE_MAINNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0x28b6322bb488706a7487D74b0106A00AA584A228'),
     shortPool: resolveAddr('VITE_MAINNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x709bdBC6dC24276D10Dca79b732bB7F018398946'),
     buyAndBurn: resolveAddr('VITE_MAINNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x63940E8B9Df7608a689798af42d156876b753802'),
@@ -964,6 +974,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   [MONAD_TESTNET]: {
     launchDAO: resolveAddr('VITE_MONAD_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS'),
     bondingCurve: resolveAddr('VITE_MONAD_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS'),
+    dexLister: resolveAddr('VITE_MONAD_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
     longPool: resolveAddr('VITE_MONAD_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS'),
     shortPool: resolveAddr('VITE_MONAD_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS'),
     buyAndBurn: resolveAddr('VITE_MONAD_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS'),
@@ -973,8 +984,9 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     factory: resolveAddr('VITE_MONAD_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x1E7ea3d5fc3336b06A2D6f9ebCd9D656E4f2387D'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x8a26D257fdbb71ab2D3A567E26aB6F6c7C46f0EA'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x4bF6372A819977294e73763f4B6B0f3C5d190b13'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x2527e13522D6eB78Da07161A4c2056621000432c'),
+    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x0d92d91c05f963ea78C75a742996E3Da30Fd7d69'),
     longPool: resolveAddr('VITE_ARC_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62'),
     shortPool: resolveAddr('VITE_ARC_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x6Bcb9A91c9328307868B268c9b7207f293b086DA'),
     buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0xBfEa6640F909D086363B679768F8DCDbb73A2625'),

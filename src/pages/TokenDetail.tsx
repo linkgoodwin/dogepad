@@ -194,7 +194,7 @@ export default function TokenDetail() {
       tokenAddress: tokenAddress_ as `0x${string}`,
       creator: (d.creator ?? d[1] ?? '') as string,
       totalSupply: BigInt(d.totalSupply ?? d[2] ?? 0n),
-      reserveBnb: BigInt(d.reserveBnb ?? d[3] ?? 0n),
+      reserveUsdc: BigInt(d.reserveUsdc ?? d[3] ?? 0n),
       tokensSold: BigInt(d.tokensSold ?? d[4] ?? 0n),
       isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
       dexListingThreshold: BigInt(d.dexListingThreshold ?? d[6] ?? 0n),
@@ -323,7 +323,7 @@ export default function TokenDetail() {
     return sellPriceData
   }, [sellPriceData])
 
-  const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveBnb)) : 0
+  const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveUsdc)) : 0
   const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20
   const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 

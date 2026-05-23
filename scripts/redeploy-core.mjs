@@ -13,7 +13,7 @@ const existingAddresses = {
   longPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
   shortPool: "0x6Bcb9A91c9328307868B268c9b7207f293b086DA",
   buyAndBurnEngine: "0xBfEa6640F909D086363B679768F8DCDbb73A2625",
-  feeDistributor: "0x2f7CC6b01DA6662d99971A7B96a54A22a705a982",
+  feeDistributor: "0xa52f1661Ac55D4DfD1D50C7e5451694A8b9B4F80",
   creatorRewardManager: "0x4AE1d700eE004f6A19e5fb6B3B0ADE04470bFeBb",
 };
 
@@ -41,8 +41,8 @@ async function main() {
   console.log("Deployer:", wallet.address);
   console.log("Balance:", ethers.utils.formatEther(await provider.getBalance(wallet.address)), "USDC");
 
-  const deployOverrides = { gasPrice: ethers.utils.parseUnits('50', 'gwei'), gasLimit: 6_000_000 };
-  const txOverrides = { gasPrice: ethers.utils.parseUnits('50', 'gwei'), gasLimit: 500_000 };
+  const deployOverrides = { gasPrice: ethers.utils.parseUnits('50', 'gwei'), gasLimit: 15_000_000 };
+  const txOverrides = { gasPrice: ethers.utils.parseUnits('50', 'gwei'), gasLimit: 3_000_000 };
 
   async function deploy(name, ...args) {
     const artifact = getArtifact(name);
@@ -62,8 +62,10 @@ async function main() {
     console.log(`  ✓ ${label}`);
   }
 
+  const WUSDC = "0x911b4000D3422F482F4062a913885f7b035382Df";
+
   console.log("\n--- Deploying BondingCurve ---");
-  const bondingCurve = await deploy("BondingCurve", existingAddresses.dexRouter, existingAddresses.feeDistributor, true, ethers.constants.AddressZero);
+  const bondingCurve = await deploy("BondingCurve", existingAddresses.dexRouter, existingAddresses.feeDistributor, true, WUSDC);
 
   console.log("\n--- Deploying LaunchDAO ---");
   const launchDao = await deploy("LaunchDAO", bondingCurve.address, wallet.address);

@@ -191,14 +191,14 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
     const tokenAddr = d.tokenAddress ?? d[0]
     if (!tokenAddr || isZeroAddress(tokenAddr as `0x${string}`)) return null
     return {
-      reserveBnb: BigInt(d.reserveBnb ?? d[3] ?? 0n),
+      reserveUsdc: BigInt(d.reserveUsdc ?? d[3] ?? 0n),
       isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
     }
   }, [data])
 
   const name = String(erc20Name ?? '')
   const symbol = String(erc20Symbol ?? '')
-  const reserve = tokenInfo ? Number(formatEther(tokenInfo.reserveBnb)) : 0
+  const reserve = tokenInfo ? Number(formatEther(tokenInfo.reserveUsdc)) : 0
   const isListed = listedData ? Boolean(listedData) : tokenInfo?.isListedOnDex ?? false
 
   if (isLoading || !tokenInfo) {

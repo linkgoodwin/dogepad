@@ -46,9 +46,9 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
     uint256 public lastBurnTimestamp;
     uint256 public randomDelayBlocks = 3;
 
-    mapping(address => uint256) public pendingBnb;
+    mapping(address => uint256) public pendingUsdc;
     mapping(address => uint256) public totalBurned;
-    mapping(address => uint256) public totalBnbUsed;
+    mapping(address => uint256) public totalUsdcUsed;
     mapping(address => uint256) public burnCount;
 
     address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
@@ -56,8 +56,8 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
 
     bool public isXyloRouter;
 
-    event TokenBurned(address indexed token, uint256 tokensBurned, uint256 bnbUsed);
-    event BnbDeposited(address indexed token, uint256 amount);
+    event TokenBurned(address indexed token, uint256 tokensBurned, uint256 usdcUsed);
+    event UsdcDeposited(address indexed token, uint256 amount);
 
     constructor(address _dexRouter, address _keeper, bool _isXyloRouter, address _wrappedNative) Ownable(msg.sender) {
         dexRouter = _dexRouter;
@@ -68,21 +68,21 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
 
     function deposit(address token) external payable nonReentrant {
         require(msg.value > 0, "Zero value");
-        pendingBnb[token] += msg.value;
-        emit BnbDeposited(token, msg.value);
+        pendingUsdc[token] += msg.value;
+        emit UsdcDeposited(token, msg.value);
     }
 
     function executeBurn(address token, uint256 minTokensOut) external nonReentrant {
         require(msg.sender == keeper, "Not keeper");
-        require(pendingBnb[token] >= burnThreshold, "Below threshold");
+        require(pendingUsdc[token] >= burnThreshold, "Below threshold");
         require(block.timestamp >= lastBurnTimestamp + minInterval, "Too soon");
 
-        uint256 burnAmount = pendingBnb[token];
+        uint256 burnAmount = pendingUsdc[token];
         if (burnAmount > maxSingleBurn) {
             burnAmount = maxSingleBurn;
         }
 
-        pendingBnb[token] -= burnAmount;
+        pendingUsdc[token] -= burnAmount;
         lastBurnTimestamp = block.timestamp;
 
         uint256 expectedOut = getEstimatedTokensOut(token, burnAmount);
@@ -116,7 +116,7 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
             totalBurned[token] += tokensBought;
         }
 
-        totalBnbUsed[token] += burnAmount;
+        totalUsdcUsed[token] += burnAmount;
         burnCount[token] += 1;
 
         emit TokenBurned(token, tokensBought, burnAmount);
@@ -146,11 +146,11 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
         IERC20(token).safeTransfer(to, amount);
     }
 
-    function getEstimatedTokensOut(address token, uint256 bnbAmount) public view returns (uint256) {
+    function getEstimatedTokensOut(address token, uint256 usdcAmount) public view returns (uint256) {
         address[] memory path = new address[](2);
         path[0] = wrappedNative;
         path[1] = token;
-        uint256[] memory amounts = IUniswapV2Router02(dexRouter).getAmountsOut(bnbAmount, path);
+        uint256[] memory amounts = IUniswapV2Router02(dexRouter).getAmountsOut(usdcAmount, path);
         return amounts[amounts.length - 1];
     }
 

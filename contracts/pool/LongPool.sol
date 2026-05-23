@@ -68,9 +68,9 @@ contract LongPool is ReentrancyGuard, Pausable, Ownable {
 
     event Deposited(address indexed token, address indexed user, uint256 amount, uint256 burnAmount);
     event Withdrawn(address indexed token, address indexed user, uint256 amount);
-    event Borrowed(address indexed token, address indexed user, uint256 collateralAmount, uint256 borrowBnb);
+    event Borrowed(address indexed token, address indexed user, uint256 collateralAmount, uint256 borrowUsdc);
     event Repaid(address indexed token, address indexed user, uint256 principal, uint256 interest);
-    event Liquidated(address indexed token, address indexed liquidator, address indexed borrower, uint256 repaidBnb, uint256 seizedCollateral, uint256 bonus);
+    event Liquidated(address indexed token, address indexed liquidator, address indexed borrower, uint256 repaidUsdc, uint256 seizedCollateral, uint256 bonus);
     event DepositYieldClaimed(address indexed token, address indexed user, uint256 amount);
     event ShortPoolInterestReceived(address indexed token, uint256 amount);
 
@@ -159,34 +159,34 @@ contract LongPool is ReentrancyGuard, Pausable, Ownable {
     function borrow(
         address collateralToken,
         uint256 collateralAmount,
-        uint256 borrowBnb
+        uint256 borrowUsdc
     ) external nonReentrant whenNotPaused {
         require(block.number > lastInteractionBlock[collateralToken][msg.sender]);
-        require(borrowBnb > 0);
+        require(borrowUsdc > 0);
         require(borrows[collateralToken][msg.sender].borrowAmount == 0);
-        require(address(this).balance >= borrowBnb);
+        require(address(this).balance >= borrowUsdc);
 
         IERC20(collateralToken).safeTransferFrom(msg.sender, address(this), collateralAmount);
 
         borrows[collateralToken][msg.sender] = BorrowInfo({
             collateralAmount: collateralAmount,
-            borrowAmount: borrowBnb,
+            borrowAmount: borrowUsdc,
             borrowTimestamp: block.timestamp
         });
 
         uint256 hf = getHealthFactor(collateralToken, msg.sender);
         require(hf >= HEALTH_FACTOR_THRESHOLD);
 
-        tokenBorrows[collateralToken] += borrowBnb;
+        tokenBorrows[collateralToken] += borrowUsdc;
 
         uint256 newUtilization = getUtilization(collateralToken);
         require(newUtilization <= MAX_UTILIZATION, "utilization too high");
 
-        (bool success,) = payable(msg.sender).call{value: borrowBnb}("");
+        (bool success,) = payable(msg.sender).call{value: borrowUsdc}("");
         require(success);
 
         lastInteractionBlock[collateralToken][msg.sender] = block.number;
-        emit Borrowed(collateralToken, msg.sender, collateralAmount, borrowBnb);
+        emit Borrowed(collateralToken, msg.sender, collateralAmount, borrowUsdc);
     }
 
     function repay(address token) external payable nonReentrant whenNotPaused {

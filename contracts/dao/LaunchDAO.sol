@@ -34,23 +34,23 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant RIGHTS_CYCLE = 8 hours;
     uint256 public constant LAUNCH_THRESHOLD = 20 ether;
     uint256 public constant FIXED_TOTAL_SUPPLY = 1_000_000_000e18;
-    uint256 public constant MIN_SUBSCRIBE_BNB = 1 ether;
+    uint256 public constant MIN_SUBSCRIBE_USDC = 1 ether;
     uint256 public constant MIN_STAKE = 1e17;
     uint256 public constant MAX_STAKE = 300 ether;
     uint256 public constant LAUNCH_WINDOW_HOUR = 4;
-    uint256 public constant DOGE_BNB_RATE = 100;
+    uint256 public constant DOGE_USDC_RATE = 100;
     uint256 public constant DAILY_QUEUE_LIMIT = 3;
 
     uint256 public constant RIGHTS_DENOMINATOR = 6e21;
     uint256 public constant DOGE_SCORE_MULTIPLIER = 3;
 
-    uint256 public constant BNB_RIGHTS_BASE = 600;
+    uint256 public constant USDC_RIGHTS_BASE = 600;
     uint256 public constant DOGE_RIGHTS_BASE = 6;
     uint256 public constant CONVERGE_THRESHOLD = 500;
     uint256 public constant MAX_EFFECTIVE_RIGHTS = 1000;
 
     uint256 public constant SUBSCRIBE_DENOM = 1e20;
-    uint256 public constant SUBSCRIBE_BNB_WEIGHT = 10000;
+    uint256 public constant SUBSCRIBE_USDC_WEIGHT = 10000;
 
     uint256 public constant DEMAND_BPS = 100;
     uint256 public constant FIXED_30_BPS = 150;
@@ -81,7 +81,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         string symbol;
         string metadataURI;
         uint256 totalWeight;
-        uint256 totalSubBnb;
+        uint256 totalSubUsdc;
         uint256 totalSubDoge;
         uint256 totalRightsVotes;
         uint256 submitTime;
@@ -92,8 +92,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         bool wasLaunched;
         address launchedToken;
         uint256 launchedTokenSupply;
-        uint256 launchedBnbUsed;
-        uint256 launchedExcessBnb;
+        uint256 launchedUsdcUsed;
+        uint256 launchedExcessUsdc;
         uint256 launchedDogeUsed;
         uint256 launchedExcessDoge;
         uint256 queueTime;
@@ -103,7 +103,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     struct Subscription {
-        uint256 bnbAmount;
+        uint256 usdcAmount;
         uint256 dogeAmount;
         uint256 subscribeTime;
         bool isActive;
@@ -147,7 +147,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     mapping(address => StakePosition[]) public userStakePositions;
     mapping(address => uint256) public userRawRights;
     mapping(address => uint256) public userEffectiveSpent;
-    uint256 public totalStakedBnb;
+    uint256 public totalStakedUsdc;
     uint256 public totalStakedDoge;
     uint256 public rewardPool;
 
@@ -161,9 +161,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     mapping(uint256 => uint256) public dayLaunchCount;
     mapping(uint256 => EpochInfo) public epochInfo;
 
-    event Subscribed(address indexed user, uint256 indexed candidateId, uint256 bnbAmount, uint256 dogeAmount, uint256 weight);
+    event Subscribed(address indexed user, uint256 indexed candidateId, uint256 usdcAmount, uint256 dogeAmount, uint256 weight);
     event SubscriptionClaimed(address indexed user, uint256 indexed candidateId, address token, uint256 tokenAmount);
-    event SubscriptionRefunded(address indexed user, uint256 indexed candidateId, uint256 bnbAmount, uint256 dogeAmount);
+    event SubscriptionRefunded(address indexed user, uint256 indexed candidateId, uint256 usdcAmount, uint256 dogeAmount);
     event Staked(address indexed user, address token, uint256 amount, StakeDuration duration, uint256 positionId);
     event Unstaked(address indexed user, uint256 positionId, address token, uint256 amount);
     event RightsClaimed(address indexed user, uint256 amount);
@@ -174,7 +174,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     event CandidateRecycled(uint256 indexed candidateId, address indexed newProposer, DurationTier tier);
     event EpochSettled(uint256 indexed day, uint256 winningCandidateId);
     event DailyEnqueue(uint256 indexed day, uint256 count);
-    event TokenLaunched(uint256 indexed candidateId, address token, uint256 bnbUsed, uint256 tokensReceived, uint256 excessBnb);
+    event TokenLaunched(uint256 indexed candidateId, address token, uint256 usdcUsed, uint256 tokensReceived, uint256 excessUsdc);
     event RewardsDeposited(address indexed from, uint256 amount);
 
     error InvalidDurationTier();
@@ -229,14 +229,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function _getRightsBase(address token) internal view returns (uint256) {
-        if (token == address(0)) return BNB_RIGHTS_BASE;
+        if (token == address(0)) return USDC_RIGHTS_BASE;
         if (token == dogeToken) return DOGE_RIGHTS_BASE;
         revert("unsupported token");
     }
 
-    function subscribeBnb(uint256 candidateId) external payable nonReentrant {
+    function subscribeUsdc(uint256 candidateId) external payable nonReentrant {
         require(candidateId < candidates.length, "invalid candidate");
-        require(msg.value >= MIN_SUBSCRIBE_BNB, "below min subscribe");
+        require(msg.value >= MIN_SUBSCRIBE_USDC, "below min subscribe");
 
         _tryAdvanceDay();
         _updateCandidateStatus(candidateId);
@@ -244,10 +244,10 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "not active or queued");
 
-        uint256 weight = msg.value * SUBSCRIBE_BNB_WEIGHT / SUBSCRIBE_DENOM;
+        uint256 weight = msg.value * SUBSCRIBE_USDC_WEIGHT / SUBSCRIBE_DENOM;
 
         Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        sub.bnbAmount += msg.value;
+        sub.usdcAmount += msg.value;
         sub.subscribeTime = block.timestamp;
         sub.isActive = true;
 
@@ -256,17 +256,17 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             candidateSupporters[candidateId].push(msg.sender);
         }
 
-        c.totalSubBnb += msg.value;
+        c.totalSubUsdc += msg.value;
         c.totalWeight += weight;
         c.totalRightsVotes += weight;
 
         emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
     }
 
-    function stakeBnb(StakeDuration duration) external payable nonReentrant {
+    function stakeUsdc(StakeDuration duration) external payable nonReentrant {
         require(msg.value >= MIN_STAKE, "below min stake");
-        uint256 newBnb = msg.value;
-        require(newBnb <= MAX_STAKE, "above max stake");
+        uint256 newUsdc = msg.value;
+        require(newUsdc <= MAX_STAKE, "above max stake");
 
         uint256 maturityTime = duration == StakeDuration.Demand
             ? 0
@@ -275,7 +275,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 posId = userStakePositions[msg.sender].length;
         userStakePositions[msg.sender].push(StakePosition({
             token: address(0),
-            amount: newBnb,
+            amount: newUsdc,
             startTime: block.timestamp,
             duration: duration,
             maturityTime: maturityTime,
@@ -283,9 +283,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             lastRightsClaimTime: block.timestamp
         }));
 
-        totalStakedBnb += newBnb;
+        totalStakedUsdc += newUsdc;
 
-        emit Staked(msg.sender, address(0), newBnb, duration, posId);
+        emit Staked(msg.sender, address(0), newUsdc, duration, posId);
     }
 
     function stakeDoge(uint256 amount, StakeDuration duration) external nonReentrant {
@@ -334,7 +334,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         address token = pos.token;
 
         if (token == address(0)) {
-            totalStakedBnb -= amount;
+            totalStakedUsdc -= amount;
             (bool success, ) = payable(msg.sender).call{value: amount}("");
             require(success, "transfer failed");
         } else if (token == dogeToken) {
@@ -414,7 +414,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             symbol: symbol,
             metadataURI: metadataURI,
             totalWeight: 0,
-            totalSubBnb: 0,
+            totalSubUsdc: 0,
             totalSubDoge: 0,
             totalRightsVotes: 0,
             submitTime: block.timestamp,
@@ -425,8 +425,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             wasLaunched: false,
             launchedToken: address(0),
             launchedTokenSupply: 0,
-            launchedBnbUsed: 0,
-            launchedExcessBnb: 0,
+            launchedUsdcUsed: 0,
+            launchedExcessUsdc: 0,
             launchedDogeUsed: 0,
             launchedExcessDoge: 0,
             queueTime: 0,
@@ -491,7 +491,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.expireTime = block.timestamp + duration;
         c.gracePeriodEnd = block.timestamp + duration + duration;
         c.totalWeight = 0;
-        c.totalSubBnb = 0;
+        c.totalSubUsdc = 0;
         c.totalSubDoge = 0;
         c.totalRightsVotes = 0;
         c.status = CandidateStatus.Active;
@@ -513,7 +513,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         require(c.proposer == msg.sender, "not proposer");
         require(c.status == CandidateStatus.Active, "not active");
-        require(c.totalSubBnb >= LAUNCH_THRESHOLD, "below launch threshold");
+        require(c.totalSubUsdc >= LAUNCH_THRESHOLD, "below launch threshold");
 
         _enqueueCandidate(candidateId);
 
@@ -606,22 +606,22 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
 
         uint256 tokensReceived = 0;
-        uint256 bnbUsed = c.totalSubBnb;
-        uint256 excessBnb = 0;
+        uint256 usdcUsed = c.totalSubUsdc;
+        uint256 excessUsdc = 0;
 
-        if (c.totalSubBnb > LAUNCH_THRESHOLD) {
-            excessBnb = c.totalSubBnb - LAUNCH_THRESHOLD;
-            bnbUsed = LAUNCH_THRESHOLD;
+        if (c.totalSubUsdc > LAUNCH_THRESHOLD) {
+            excessUsdc = c.totalSubUsdc - LAUNCH_THRESHOLD;
+            usdcUsed = LAUNCH_THRESHOLD;
         }
 
-        if (bnbUsed > 0 && address(this).balance >= bnbUsed) {
+        if (usdcUsed > 0 && address(this).balance >= usdcUsed) {
             uint256 balBefore = IERC20(token).balanceOf(address(this));
-            IBondingCurveLaunch(bondingCurve).buy{value: bnbUsed}(token, 0, address(this));
+            IBondingCurveLaunch(bondingCurve).buy{value: usdcUsed}(token, 0, address(this));
             tokensReceived = IERC20(token).balanceOf(address(this)) - balBefore;
         }
 
-        c.launchedBnbUsed = bnbUsed;
-        c.launchedExcessBnb = excessBnb;
+        c.launchedUsdcUsed = usdcUsed;
+        c.launchedExcessUsdc = excessUsdc;
 
         if (dogeToken == address(0)) {
             dogeToken = token;
@@ -641,7 +641,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             IERC20(dogeToken).safeTransfer(msg.sender, LAUNCH_REWARD);
         }
 
-        emit TokenLaunched(candidateId, token, bnbUsed, tokensReceived, excessBnb);
+        emit TokenLaunched(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
     }
 
     function claimSubscription(uint256 candidateId) external nonReentrant {
@@ -656,24 +656,24 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         sub.hasClaimed = true;
 
-        uint256 userBnbUsed = sub.bnbAmount;
-        if (c.launchedExcessBnb > 0 && c.totalSubBnb > 0) {
-            uint256 userExcessBnb = (sub.bnbAmount * c.launchedExcessBnb) / c.totalSubBnb;
-            userBnbUsed = sub.bnbAmount > userExcessBnb ? sub.bnbAmount - userExcessBnb : 0;
+        uint256 userUsdcUsed = sub.usdcAmount;
+        if (c.launchedExcessUsdc > 0 && c.totalSubUsdc > 0) {
+            uint256 userExcessUsdc = (sub.usdcAmount * c.launchedExcessUsdc) / c.totalSubUsdc;
+            userUsdcUsed = sub.usdcAmount > userExcessUsdc ? sub.usdcAmount - userExcessUsdc : 0;
         }
 
-        require(c.launchedBnbUsed > 0, "zero total");
+        require(c.launchedUsdcUsed > 0, "zero total");
 
-        uint256 share = (userBnbUsed * c.launchedTokenSupply) / c.launchedBnbUsed;
+        uint256 share = (userUsdcUsed * c.launchedTokenSupply) / c.launchedUsdcUsed;
 
         if (share > 0) {
             IERC20(c.launchedToken).safeTransfer(msg.sender, share);
         }
 
-        if (c.launchedExcessBnb > 0 && sub.bnbAmount > 0) {
-            uint256 refundBnb = (sub.bnbAmount * c.launchedExcessBnb) / c.totalSubBnb;
-            if (refundBnb > 0) {
-                (bool success, ) = payable(msg.sender).call{value: refundBnb}("");
+        if (c.launchedExcessUsdc > 0 && sub.usdcAmount > 0) {
+            uint256 refundUsdc = (sub.usdcAmount * c.launchedExcessUsdc) / c.totalSubUsdc;
+            if (refundUsdc > 0) {
+                (bool success, ) = payable(msg.sender).call{value: refundUsdc}("");
                 require(success, "refund failed");
             }
         }
@@ -701,14 +701,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         sub.hasRefunded = true;
         sub.isActive = false;
 
-        uint256 bnbReturn = sub.bnbAmount;
+        uint256 usdcReturn = sub.usdcAmount;
 
-        if (bnbReturn > 0) {
-            (bool success, ) = payable(msg.sender).call{value: bnbReturn}("");
+        if (usdcReturn > 0) {
+            (bool success, ) = payable(msg.sender).call{value: usdcReturn}("");
             require(success, "transfer failed");
         }
 
-        emit SubscriptionRefunded(msg.sender, candidateId, bnbReturn, 0);
+        emit SubscriptionRefunded(msg.sender, candidateId, usdcReturn, 0);
     }
 
     function depositRewards(uint256 amount) external nonReentrant {
@@ -784,7 +784,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         require(c.status == CandidateStatus.Active, "not active");
 
-        uint256 score = c.totalSubBnb + c.totalWeight * DOGE_SCORE_MULTIPLIER;
+        uint256 score = c.totalSubUsdc + c.totalWeight * DOGE_SCORE_MULTIPLIER;
 
         c.status = CandidateStatus.Queued;
         c.queueTime = block.timestamp;
@@ -803,7 +803,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 eligibleCount = 0;
         for (uint256 i = 0; i < activeCandidateIds.length; i++) {
             uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubBnb >= LAUNCH_THRESHOLD) {
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= LAUNCH_THRESHOLD) {
                 eligibleCount++;
             }
         }
@@ -819,9 +819,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         for (uint256 i = 0; i < activeCandidateIds.length; i++) {
             uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubBnb >= LAUNCH_THRESHOLD) {
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= LAUNCH_THRESHOLD) {
                 eligibleIds[idx] = cid;
-                scores[idx] = candidates[cid].totalSubBnb + candidates[cid].totalWeight * DOGE_SCORE_MULTIPLIER;
+                scores[idx] = candidates[cid].totalSubUsdc + candidates[cid].totalWeight * DOGE_SCORE_MULTIPLIER;
                 idx++;
             }
         }
@@ -1021,7 +1021,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         string[] memory names,
         string[] memory symbols,
         uint256[] memory weights,
-        uint256[] memory subBnbs,
+        uint256[] memory subUsdcs,
         uint256[] memory subDoges
     ) {
         uint256 count = 0;
@@ -1033,7 +1033,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         names = new string[](count);
         symbols = new string[](count);
         weights = new uint256[](count);
-        subBnbs = new uint256[](count);
+        subUsdcs = new uint256[](count);
         subDoges = new uint256[](count);
 
         uint256 idx = 0;
@@ -1043,7 +1043,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
                 names[idx] = candidates[i].name;
                 symbols[idx] = candidates[i].symbol;
                 weights[idx] = candidates[i].totalWeight;
-                subBnbs[idx] = candidates[i].totalSubBnb;
+                subUsdcs[idx] = candidates[i].totalSubUsdc;
                 subDoges[idx] = candidates[i].totalSubDoge;
                 idx++;
             }
@@ -1144,7 +1144,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function getSubscription(address user, uint256 candidateId) external view returns (
-        uint256 bnbAmount,
+        uint256 usdcAmount,
         uint256 dogeAmount,
         uint256 subscribeTime,
         bool isActive,
@@ -1152,7 +1152,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         bool hasRefunded
     ) {
         Subscription storage sub = userSubscriptions[user][candidateId];
-        return (sub.bnbAmount, sub.dogeAmount, sub.subscribeTime, sub.isActive, sub.hasClaimed, sub.hasRefunded);
+        return (sub.usdcAmount, sub.dogeAmount, sub.subscribeTime, sub.isActive, sub.hasClaimed, sub.hasRefunded);
     }
 
     function setBondingCurve(address _bondingCurve) external onlyOwner {

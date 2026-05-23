@@ -22,7 +22,7 @@ interface ILongPoolReceiver {
 }
 
 struct ShortPosition {
-    uint256 collateralBnb;
+    uint256 collateralUsdc;
     uint256 borrowedTokens;
     uint256 borrowTimestamp;
     bool isActive;
@@ -107,7 +107,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         }
 
         positions[msg.sender][token] = ShortPosition({
-            collateralBnb: msg.value - openFee,
+            collateralUsdc: msg.value - openFee,
             borrowedTokens: tokenAmount,
             borrowTimestamp: block.timestamp,
             isActive: true
@@ -127,8 +127,8 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         IERC20(token).safeTransferFrom(msg.sender, address(this), tokenAmount);
 
         uint256 interest = calculateInterest(msg.sender, token);
-        uint256 distributable = interest < position.collateralBnb ? interest : position.collateralBnb;
-        uint256 collateralToReturn = position.collateralBnb - distributable;
+        uint256 distributable = interest < position.collateralUsdc ? interest : position.collateralUsdc;
+        uint256 collateralToReturn = position.collateralUsdc - distributable;
 
         tokenBorrowed[token] -= position.borrowedTokens;
 
@@ -158,23 +158,23 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         uint256 interest = calculateInterest(borrower, token);
         uint256 repayRatio = (maxRepayTokens * 1e18) / position.borrowedTokens;
 
-        uint256 collateralToSeize = (position.collateralBnb * repayRatio) / 1e18;
-        uint256 bonusBnb = (collateralToSeize * LIQUIDATION_BONUS) / 1e18;
-        uint256 totalSeize = collateralToSeize + bonusBnb;
+        uint256 collateralToSeize = (position.collateralUsdc * repayRatio) / 1e18;
+        uint256 bonusUsdc = (collateralToSeize * LIQUIDATION_BONUS) / 1e18;
+        uint256 totalSeize = collateralToSeize + bonusUsdc;
 
         uint256 propInterest = (interest * repayRatio) / 1e18;
         uint256 totalDeduct = totalSeize + propInterest;
-        if (totalDeduct > position.collateralBnb) {
-            totalDeduct = position.collateralBnb;
+        if (totalDeduct > position.collateralUsdc) {
+            totalDeduct = position.collateralUsdc;
             totalSeize = totalDeduct > propInterest ? totalDeduct - propInterest : 0;
         }
 
         tokenBorrowed[token] -= maxRepayTokens;
 
         uint256 remainingTokens = position.borrowedTokens - maxRepayTokens;
-        if (remainingTokens > 0 && totalDeduct < position.collateralBnb) {
+        if (remainingTokens > 0 && totalDeduct < position.collateralUsdc) {
             position.borrowedTokens = remainingTokens;
-            position.collateralBnb -= totalDeduct;
+            position.collateralUsdc -= totalDeduct;
             position.borrowTimestamp = block.timestamp;
             tokenBorrowed[token] += remainingTokens;
         } else {
@@ -242,7 +242,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         return model.getDailyRate(getUtilization(token));
     }
 
-    function calculateInterest(address user, address token) public view returns (uint256 bnbInterest) {
+    function calculateInterest(address user, address token) public view returns (uint256 usdcInterest) {
         ShortPosition memory position = positions[user][token];
         if (!position.isActive || position.borrowedTokens == 0) return 0;
 
@@ -254,7 +254,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
         uint256 perSecondRate = model.getPerSecondRate(utilization);
 
         uint256 tokenInterest = position.borrowedTokens.mul(perSecondRate) * billableDuration;
-        bnbInterest = tokenInterest.mul(oracle.getPrice(token));
+        usdcInterest = tokenInterest.mul(oracle.getPrice(token));
     }
 
     function getHealthFactor(address user, address token) public view returns (uint256) {
@@ -263,9 +263,9 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
 
         uint256 tokenValue = position.borrowedTokens.mul(oracle.getPrice(token));
         uint256 interest = calculateInterest(user, token);
-        uint256 totalDebtBnb = tokenValue + interest;
-        if (totalDebtBnb == 0) return type(uint256).max;
-        return position.collateralBnb.mul(1e18) / totalDebtBnb;
+        uint256 totalDebtUsdc = tokenValue + interest;
+        if (totalDebtUsdc == 0) return type(uint256).max;
+        return position.collateralUsdc.mul(1e18) / totalDebtUsdc;
     }
 
     function setCooldown(address token) external {

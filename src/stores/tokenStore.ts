@@ -9,7 +9,7 @@ export type TokenInfo = {
   totalSupply: string
   marketCap: string
   volume24h: string
-  reserveBnb: string
+  reserveUsdc: string
   priceBnb: string
   priceChange24h: number
   isListedOnDex: boolean

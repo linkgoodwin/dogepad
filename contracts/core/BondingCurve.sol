@@ -8,69 +8,15 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../core/BondingCurveToken.sol";
 import "../interfaces/IBondingCurve.sol";
-
-interface IUniswapV2Router02 {
-    function addLiquidityETH(
-        address token,
-        uint256 amountTokenDesired,
-        uint256 amountTokenMin,
-        uint256 amountETHMin,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
-    function addLiquidity(
-        address tokenA,
-        address tokenB,
-        uint256 amountADesired,
-        uint256 amountBDesired,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        address to,
-        uint256 deadline
-    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
-    function factory() external view returns (address);
-}
-
-interface IUniswapV2Factory {
-    function getPair(address tokenA, address tokenB) external view returns (address);
-}
-
-interface IWUSDC {
-    function deposit() external payable;
-}
+import "../periphery/DexLister.sol";
 
 interface IPriceOracleSetter {
     function updateTwapPrice(address token, uint256 newPrice) external;
 }
 
-struct DexListingParams {
-    address token;
-    uint256 totalBnb;
-    uint256 lpTokens;
-    uint256 longPoolBnb;
-    uint256 shortPoolTokens;
-    uint256 burnEngineBnb;
-    uint256 platformBnb;
-    uint256 creatorTokens;
-    uint256 creatorLpBps;
-    uint256 multiplier;
-    address creator;
-    uint8 incentiveCount;
-    bool wantTaxShare;
-    bool wantLpShare;
-}
-
-interface IShortPoolDeposit {
-    function depositTokens(address token, uint256 amount) external;
-}
-
-interface ICreatorRewardManager {
-    function createVesting(address asset, address beneficiary, uint256 amount, uint256 cliffDuration, uint256 vestingDuration) external;
-}
-
 error TokenNotFound();
 error AlreadyListed();
-error ZeroBnb();
+error ZeroUsdc();
 error ZeroTokens();
 error SlippageTooHigh();
 error InsufficientCurveTokens();
@@ -87,15 +33,6 @@ error AlreadyDexListed();
 error ZeroAmount();
 error TransferFailed();
 error ExceedsSoldTokens();
-error BnbRatiosInvalid();
-error TokenRatiosInvalid();
-error LongPoolTransferFailed();
-
-interface ILongPoolDeposit {
-    function deposit(address token) external payable;
-}
-error BurnEngineTransferFailed();
-error PlatformTransferFailed();
 
 contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
@@ -103,7 +40,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         address tokenAddress;
         address creator;
         uint256 totalSupply;
-        uint256 reserveBnb;
+        uint256 reserveUsdc;
         uint256 tokensSold;
         bool isListedOnDex;
         uint256 dexListingThreshold;
@@ -146,16 +83,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     address public buyAndBurnEngine;
     address public priceOracle;
     address public creatorRewardManager;
+    address payable public dexLister;
     uint256 public creationFee = 0.1 ether;
     uint256 public defaultDexThreshold = 20 ether;
     bool public daoOnlyLaunch = false;
-
-    uint256 public lpBnbRatio = 70;
-    uint256 public longPoolRatio = 25;
-    uint256 public shortPoolTokenRatio = 30;
-    uint256 public burnEngineRatio = 0;
-    uint256 public platformRatio = 5;
-    uint256 public lpTokenRatio = 60;
 
     uint256 public maturityThreshold = 100 ether;
     mapping(address => bool) public isMatureOverride;
@@ -319,7 +250,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
             tokenAddress: address(token),
             creator: msg.sender,
             totalSupply: totalSupply,
-            reserveBnb: 0,
+            reserveUsdc: 0,
             tokensSold: 0,
             isListedOnDex: false,
             dexListingThreshold: defaultDexThreshold,
@@ -340,18 +271,18 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         if (recipient != msg.sender && msg.sender != launchDao) revert OnlyDao();
         TokenInfo storage info = tokens[token];
         if (info.tokenAddress == address(0)) revert TokenNotFound();
-        if (info.isListedOnDex && info.reserveBnb == 0) revert AlreadyListed();
-        if (msg.value == 0) revert ZeroBnb();
+        if (info.isListedOnDex && info.reserveUsdc == 0) revert AlreadyListed();
+        if (msg.value == 0) revert ZeroUsdc();
 
         uint256 fee = (msg.value * FEE_BPS) / 10000;
-        uint256 bnbAfterFee = msg.value - fee;
+        uint256 usdcAfterFee = msg.value - fee;
 
-        uint256 tokensToBuy = _calculateBuyAmount(token, bnbAfterFee);
+        uint256 tokensToBuy = _calculateBuyAmount(token, usdcAfterFee);
         if (tokensToBuy == 0) revert ZeroTokens();
         if (tokensToBuy < minTokensOut) revert SlippageTooHigh();
         if (BondingCurveToken(token).balanceOf(token) < tokensToBuy) revert InsufficientCurveTokens();
 
-        info.reserveBnb += bnbAfterFee;
+        info.reserveUsdc += usdcAfterFee;
         info.tokensSold += tokensToBuy;
 
         BondingCurveToken(token).buyFromCurve(recipient, tokensToBuy);
@@ -366,26 +297,26 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         _checkAndListOnDex(token);
     }
 
-    function sell(address token, uint256 tokenAmount, uint256 minBnbOut) external override nonReentrant whenNotPaused {
+    function sell(address token, uint256 tokenAmount, uint256 minUsdcOut) external override nonReentrant whenNotPaused {
         TokenInfo storage info = tokens[token];
         if (info.tokenAddress == address(0)) revert TokenNotFound();
-        if (info.isListedOnDex && info.reserveBnb == 0) revert AlreadyListed();
+        if (info.isListedOnDex && info.reserveUsdc == 0) revert AlreadyListed();
         if (tokenAmount == 0) revert ZeroAmount();
 
-        uint256 bnbToReturn = _calculateSellAmount(token, tokenAmount);
-        if (bnbToReturn == 0) revert ZeroBnb();
-        if (bnbToReturn > info.reserveBnb) revert InsufficientReserve();
-        if (bnbToReturn < minBnbOut) revert SlippageTooHigh();
+        uint256 usdcToReturn = _calculateSellAmount(token, tokenAmount);
+        if (usdcToReturn == 0) revert ZeroUsdc();
+        if (usdcToReturn > info.reserveUsdc) revert InsufficientReserve();
+        if (usdcToReturn < minUsdcOut) revert SlippageTooHigh();
 
-        uint256 fee = (bnbToReturn * FEE_BPS) / 10000;
-        uint256 bnbAfterFee = bnbToReturn - fee;
+        uint256 fee = (usdcToReturn * FEE_BPS) / 10000;
+        uint256 usdcAfterFee = usdcToReturn - fee;
 
-        info.reserveBnb -= bnbToReturn;
+        info.reserveUsdc -= usdcToReturn;
         info.tokensSold -= tokenAmount;
 
         BondingCurveToken(token).sellToCurve(msg.sender, tokenAmount);
 
-        (bool sent, ) = msg.sender.call{value: bnbAfterFee}("");
+        (bool sent, ) = msg.sender.call{value: usdcAfterFee}("");
         if (!sent) revert TransferFailed();
 
         if (fee > 0) {
@@ -393,10 +324,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
             if (!feeSent) revert FeeTransferFailed();
         }
 
-        emit TokenSold(token, msg.sender, tokenAmount, bnbAfterFee);
+        emit TokenSold(token, msg.sender, tokenAmount, usdcAfterFee);
     }
 
-    function _calculateBuyAmount(address token, uint256 bnbAmount) internal view returns (uint256) {
+    function _calculateBuyAmount(address token, uint256 usdcAmount) internal view returns (uint256) {
         TokenInfo storage info = tokens[token];
         uint256 s0 = info.tokensSold;
 
@@ -404,10 +335,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
         if (SLOPE == 0) {
             if (priceS0 == 0) return 0;
-            return (bnbAmount * PRICE_PRECISION) / priceS0;
+            return (usdcAmount * PRICE_PRECISION) / priceS0;
         }
 
-        uint256 discriminant = priceS0 * priceS0 + 2 * SLOPE * bnbAmount;
+        uint256 discriminant = priceS0 * priceS0 + 2 * SLOPE * usdcAmount;
         if (discriminant < priceS0 * priceS0) return 0;
 
         uint256 sqrtD = _sqrt(discriminant);
@@ -427,8 +358,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         uint256 priceS1 = _getPrice(s1);
         uint256 priceS0 = _getPrice(s0);
 
-        uint256 bnbOut = (tokenAmount * (priceS0 + priceS1)) / (2 * PRICE_PRECISION);
-        return bnbOut;
+        uint256 usdcOut = (tokenAmount * (priceS0 + priceS1)) / (2 * PRICE_PRECISION);
+        return usdcOut;
     }
 
     function _getPrice(uint256 supply) internal pure returns (uint256) {
@@ -447,26 +378,9 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         return z;
     }
 
-    function _getLpToken(address token) internal view returns (address) {
-        address factory_ = IUniswapV2Router02(dexRouter).factory();
-        return IUniswapV2Factory(factory_).getPair(token, baseAsset);
-    }
-
-    function _handleCreatorLpShare(address lpToken, address creator, uint256 creatorLpBps) internal {
-        if (lpToken == address(0)) return;
-        uint256 totalLp = IERC20(lpToken).balanceOf(address(this));
-        uint256 creatorLpAmount = (totalLp * creatorLpBps) / 10000;
-        if (creatorLpAmount > 0) {
-            IERC20(lpToken).safeTransfer(creatorRewardManager, creatorLpAmount);
-            ICreatorRewardManager(creatorRewardManager).createVesting(
-                lpToken, creator, creatorLpAmount, 0, CREATOR_LP_VESTING
-            );
-        }
-    }
-
     function _checkAndListOnDex(address token) internal {
         TokenInfo storage info = tokens[token];
-        if (info.reserveBnb < info.dexListingThreshold) return;
+        if (info.reserveUsdc < info.dexListingThreshold) return;
         if (info.isListedOnDex) return;
 
         info.isListedOnDex = true;
@@ -476,9 +390,9 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     function listOnDex(address token) external nonReentrant whenNotPaused {
         TokenInfo storage info = tokens[token];
         if (!info.isListedOnDex) revert NotReadyForListing();
-        if (info.reserveBnb == 0) revert AlreadyDexListed();
+        if (info.reserveUsdc == 0) revert AlreadyDexListed();
 
-        uint256 totalBnb = info.reserveBnb;
+        uint256 totalUsdc = info.reserveUsdc;
         uint256 totalTokens = BondingCurveToken(token).balanceOf(token);
 
         BondingCurveToken(token).buyFromCurve(address(this), totalTokens);
@@ -497,19 +411,21 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         uint256 creatorLpBps = (count > 0 && ci.wantLpShare) ? (BASE_LP_SHARE_BPS * multiplier) / 10000 : 0;
         uint256 creatorTokens = (totalTokens * creatorTokenBps) / 10000;
 
-        uint256 lpTokens = (totalTokens * lpTokenRatio) / 100;
-        uint256 shortPoolTokens = (totalTokens * shortPoolTokenRatio) / 100;
+        uint256 lpTokens = (totalTokens * DexLister(dexLister).lpTokenRatio()) / 100;
+        uint256 shortPoolTokens = (totalTokens * DexLister(dexLister).shortPoolTokenRatio()) / 100;
 
-        info.reserveBnb = 0;
+        info.reserveUsdc = 0;
 
-        _addLiquidityAndDistribute(DexListingParams({
+        IERC20(token).forceApprove(dexLister, totalTokens);
+
+        DexLister(dexLister).addLiquidityAndDistribute{value: totalUsdc}(DexListingParams({
             token: token,
-            totalBnb: totalBnb,
+            totalUsdc: totalUsdc,
             lpTokens: lpTokens,
-            longPoolBnb: longPoolBnbAmt(totalBnb),
+            longPoolUsdc: DexLister(dexLister).longPoolUsdcAmt(totalUsdc),
             shortPoolTokens: shortPoolTokens,
-            burnEngineBnb: burnEngineBnbAmt(totalBnb),
-            platformBnb: platformBnbAmt(totalBnb),
+            burnEngineUsdc: DexLister(dexLister).burnEngineUsdcAmt(totalUsdc),
+            platformUsdc: DexLister(dexLister).platformUsdcAmt(totalUsdc),
             creatorTokens: creatorTokens,
             creatorLpBps: creatorLpBps,
             multiplier: multiplier,
@@ -520,106 +436,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         }));
     }
 
-    function longPoolBnbAmt(uint256 totalBnb) internal view returns (uint256) {
-        uint256 base = (totalBnb * longPoolRatio) / 100;
-        uint256 accounted = (totalBnb * (lpBnbRatio + longPoolRatio + burnEngineRatio + platformRatio)) / 100;
-        if (accounted < totalBnb) {
-            base += totalBnb - accounted;
-        }
-        return base;
-    }
-
-    function burnEngineBnbAmt(uint256 totalBnb) internal view returns (uint256) {
-        return (totalBnb * burnEngineRatio) / 100;
-    }
-
-    function platformBnbAmt(uint256 totalBnb) internal view returns (uint256) {
-        return (totalBnb * platformRatio) / 100;
-    }
-
-    function _addLiquidityAndDistribute(DexListingParams memory p) internal {
-        uint256 lpBnb = (p.totalBnb * lpBnbRatio) / 100;
-
-        BondingCurveToken(p.token).setSkipHoldingLimit(true);
-
-        IERC20(p.token).forceApprove(dexRouter, p.lpTokens);
-
-        if (!isXyloRouter) {
-            IUniswapV2Router02(dexRouter).addLiquidityETH{value: lpBnb}(
-                p.token,
-                p.lpTokens,
-                (p.lpTokens * 95) / 100,
-                (lpBnb * 95) / 100,
-                address(this),
-                block.timestamp + 300
-            );
-        } else {
-            IWUSDC(baseAsset).deposit{value: lpBnb}();
-            IERC20(baseAsset).forceApprove(dexRouter, lpBnb);
-            IUniswapV2Router02(dexRouter).addLiquidity(
-                baseAsset,
-                p.token,
-                lpBnb,
-                p.lpTokens,
-                (lpBnb * 95) / 100,
-                (p.lpTokens * 95) / 100,
-                address(this),
-                block.timestamp + 300
-            );
-        }
-
-        address lpToken = _getLpToken(p.token);
-        if (lpToken != address(0)) {
-            BondingCurveToken(p.token).setDexPair(lpToken);
-        }
-
-        BondingCurveToken(p.token).setSkipHoldingLimit(false);
-
-        if (p.incentiveCount > 0 && p.wantTaxShare) {
-            uint256 creatorTaxBps = (BASE_TAX_SHARE_BPS * p.multiplier) / 10000;
-            BondingCurveToken(p.token).setCreatorTaxReceiver(p.creator, creatorTaxBps);
-        }
-
-        if (p.incentiveCount > 0 && p.wantLpShare && creatorRewardManager != address(0)) {
-            _handleCreatorLpShare(lpToken, p.creator, p.creatorLpBps);
-        }
-
-        if (p.creatorTokens > 0 && creatorRewardManager != address(0)) {
-            IERC20(p.token).safeTransfer(creatorRewardManager, p.creatorTokens);
-            ICreatorRewardManager(creatorRewardManager).createVesting(
-                p.token, p.creator, p.creatorTokens, CREATOR_TOKEN_CLIFF, CREATOR_TOKEN_VESTING
-            );
-        }
-
-        if (p.longPoolBnb > 0 && longPool != address(0)) {
-            ILongPoolDeposit(longPool).deposit{value: p.longPoolBnb}(p.token);
-        }
-
-        if (p.shortPoolTokens > 0 && shortPool != address(0)) {
-            IERC20(p.token).forceApprove(shortPool, p.shortPoolTokens);
-            IShortPoolDeposit(shortPool).depositTokens(p.token, p.shortPoolTokens);
-        }
-
-        if (p.burnEngineBnb > 0 && buyAndBurnEngine != address(0)) {
-            (bool sent, ) = buyAndBurnEngine.call{value: p.burnEngineBnb}("");
-            if (!sent) revert BurnEngineTransferFailed();
-        }
-
-        if (p.platformBnb > 0) {
-            (bool sent, ) = feeDistributor.call{value: p.platformBnb}("");
-            if (!sent) revert PlatformTransferFailed();
-        }
-
-        uint256 actualRemaining = IERC20(p.token).balanceOf(address(this));
-        if (actualRemaining > 0) {
-            BondingCurveToken(p.token).burn(actualRemaining);
-        }
-
-        emit DexListed(p.token, lpBnb, p.lpTokens);
-    }
-
-    function getBuyPrice(address token, uint256 bnbAmount) external view override returns (uint256) {
-        return _calculateBuyAmount(token, bnbAmount);
+    function getBuyPrice(address token, uint256 usdcAmount) external view override returns (uint256) {
+        return _calculateBuyAmount(token, usdcAmount);
     }
 
     function getSellPrice(address token, uint256 tokenAmount) external view override returns (uint256) {
@@ -627,7 +445,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     }
 
     function getReserve(address token) external view override returns (uint256) {
-        return tokens[token].reserveBnb;
+        return tokens[token].reserveUsdc;
     }
 
     function isListed(address token) external view override returns (bool) {
@@ -638,37 +456,19 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         address tokenAddress,
         address creator,
         uint256 totalSupply,
-        uint256 reserveBnb,
+        uint256 reserveUsdc,
         uint256 tokensSold,
         bool isListedOnDex,
         uint256 dexListingThreshold,
         string memory metadataURI
     ) {
         TokenInfo storage info = tokens[token];
-        return (info.tokenAddress, info.creator, info.totalSupply, info.reserveBnb, info.tokensSold, info.isListedOnDex, info.dexListingThreshold, info.metadataURI);
+        return (info.tokenAddress, info.creator, info.totalSupply, info.reserveUsdc, info.tokensSold, info.isListedOnDex, info.dexListingThreshold, info.metadataURI);
     }
 
     function setPools(address _longPool, address _shortPool) external onlyOwner {
         longPool = _longPool;
         shortPool = _shortPool;
-    }
-
-    function setRatios(
-        uint256 _lpBnb,
-        uint256 _long,
-        uint256 _shortToken,
-        uint256 _burnEngine,
-        uint256 _platform,
-        uint256 _lpToken
-    ) external onlyOwner {
-        if (_lpBnb + _long + _burnEngine + _platform != 100) revert BnbRatiosInvalid();
-        if (_lpToken + _shortToken > 100) revert TokenRatiosInvalid();
-        lpBnbRatio = _lpBnb;
-        longPoolRatio = _long;
-        shortPoolTokenRatio = _shortToken;
-        burnEngineRatio = _burnEngine;
-        platformRatio = _platform;
-        lpTokenRatio = _lpToken;
     }
 
     function setCreationFee(uint256 _fee) external onlyOwner {
@@ -689,10 +489,14 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         baseAsset = _baseAsset;
     }
 
+    function setDexLister(address payable _dexLister) external onlyOwner {
+        dexLister = _dexLister;
+    }
+
     function isMature(address token) external view returns (bool) {
         if (isMatureOverride[token]) return true;
         if (tokens[token].isListedOnDex) return true;
-        if (tokens[token].reserveBnb >= maturityThreshold) return true;
+        if (tokens[token].reserveUsdc >= maturityThreshold) return true;
         return false;
     }
 

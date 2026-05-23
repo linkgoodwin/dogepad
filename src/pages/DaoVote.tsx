@@ -877,7 +877,7 @@ export default function DaoVote() {
     }
     try {
       await doWrite({
-        functionName: 'subscribeBnb',
+        functionName: 'subscribeUsdc',
         args: [BigInt(selectedCandidate)],
         value: parseEther(subBnbAmount),
       })
@@ -902,7 +902,7 @@ export default function DaoVote() {
           return
         }
         await doWrite({
-          functionName: 'stakeBnb',
+          functionName: 'stakeUsdc',
           args: [stakeDuration],
           value: parseEther(stakeAmount),
         })
