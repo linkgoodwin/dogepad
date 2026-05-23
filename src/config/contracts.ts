@@ -124,6 +124,13 @@ export const LAUNCH_DAO_ABI = [
     type: 'function',
   },
   {
+    inputs: [{ internalType: 'uint256', name: 'candidateId', type: 'uint256' }],
+    name: 'earlyQueue',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [],
     name: 'settleEpoch',
     outputs: [],
@@ -945,7 +952,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     factory: resolveAddr('VITE_MONAD_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x4819808056bcB9E42fF3c52f4ee07D988d03E383'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x1d33aC5963B19Eb4Fc4C6193B148701371cDc02E'),
     bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x8a26D257fdbb71ab2D3A567E26aB6F6c7C46f0EA'),
     longPool: resolveAddr('VITE_ARC_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62'),
     shortPool: resolveAddr('VITE_ARC_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x6Bcb9A91c9328307868B268c9b7207f293b086DA'),

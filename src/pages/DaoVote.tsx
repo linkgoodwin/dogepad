@@ -109,6 +109,7 @@ function CandidateDetailCard({
   abi,
   doWrite,
   onError,
+  currentAddress,
 }: {
   candidateId: number
   isSelected: boolean
@@ -119,6 +120,7 @@ function CandidateDetailCard({
   abi: typeof LAUNCH_DAO_ABI
   doWrite: (params: { functionName: string; args: readonly unknown[]; value?: bigint; gas?: bigint }) => Promise<`0x${string}`>
   onError?: (msg: string) => void
+  currentAddress?: `0x${string}`
 }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
@@ -394,6 +396,40 @@ function CandidateDetailCard({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {variant === 'active' && candidate && currentAddress &&
+        candidate.proposer.toLowerCase() === currentAddress.toLowerCase() &&
+        candidate.status === 0 &&
+        Number(formatEther(candidate.totalSubBnb)) >= 20 && (
+        <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 mt-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-2">
+            <Rocket className="w-4 h-4 text-doge-gold" />
+            <p className="text-xs text-doge-gold font-bold">{t('dao.earlyQueueTitle')}</p>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">{t('dao.earlyQueueDesc')}</p>
+          <button
+            className="w-full py-2 text-xs rounded-lg bg-doge-gold/10 text-doge-gold border border-doge-gold/30 hover:bg-doge-gold/20 transition-colors font-bold flex items-center justify-center gap-1.5"
+            onClick={async () => {
+              try {
+                await doWrite({
+                  functionName: 'earlyQueue',
+                  args: [BigInt(candidateId)],
+                })
+              } catch (err: any) {
+                const msg = err?.shortMessage || err?.message || ''
+                if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
+                  onError?.(msg.slice(0, 150))
+                } else if (msg === 'RPC_LIMITED') {
+                  onError?.('RPC_LIMITED')
+                }
+              }
+            }}
+          >
+            <Rocket className="w-3.5 h-3.5" />
+            {t('dao.earlyQueueBtn')}
+          </button>
         </div>
       )}
     </div>
@@ -1109,6 +1145,7 @@ export default function DaoVote() {
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
                       onError={(msg) => setTxError(msg)}
+                      currentAddress={address}
                     />
                   ))}
                 </div>

@@ -506,6 +506,20 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         emit CandidateRecycled(candidateId, msg.sender, tier);
     }
 
+    event CandidateEarlyQueued(uint256 indexed candidateId, address indexed proposer);
+
+    function earlyQueue(uint256 candidateId) external nonReentrant {
+        require(candidateId < candidates.length, "invalid candidate");
+        Candidate storage c = candidates[candidateId];
+        require(c.proposer == msg.sender, "not proposer");
+        require(c.status == CandidateStatus.Active, "not active");
+        require(c.totalSubBnb >= LAUNCH_THRESHOLD, "below launch threshold");
+
+        _enqueueCandidate(candidateId);
+
+        emit CandidateEarlyQueued(candidateId, msg.sender);
+    }
+
     function settleEpoch() external nonReentrant {
         _tryAdvanceDay();
         _cleanupActiveCandidates();
