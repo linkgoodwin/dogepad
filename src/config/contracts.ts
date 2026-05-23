@@ -532,6 +532,27 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  {
+    inputs: [],
+    name: 'dexRouter',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'baseAsset',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'isXyloRouter',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
 ] as const
 
 export const LONG_POOL_ABI = [
