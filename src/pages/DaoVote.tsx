@@ -715,8 +715,20 @@ export default function DaoVote() {
       status: Number(d.status ?? d[12] ?? 0),
       totalSubBnb: BigInt(d.totalSubBnb ?? d[5] ?? 0n),
       proposer: String(d.proposer ?? d[0] ?? ''),
+      launchedToken: String(d.launchedToken ?? d[14] ?? ''),
     }
   }, [selectedCandidateData])
+
+  const selectedTokenIsListed = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'isListed',
+    args: selectedCandidateInfo?.launchedToken && !isZeroAddress(selectedCandidateInfo.launchedToken as `0x${string}`)
+      ? [selectedCandidateInfo.launchedToken as `0x${string}`]
+      : undefined,
+    chainId: targetChainId,
+    query: { enabled: !!selectedCandidateInfo?.launchedToken && !isZeroAddress(selectedCandidateInfo.launchedToken as `0x${string}`) },
+  })
 
   const parseIds = (data: unknown): number[] => {
     if (!data) return []
@@ -1309,19 +1321,21 @@ export default function DaoVote() {
               const settleComplete = selectedCandidateInfo.status === 0 && settleDone
               const isQueued = selectedCandidateInfo.status === 1
               const isLaunched = selectedCandidateInfo.status === 5
+              const isOnDex = isLaunched && selectedTokenIsListed.data === true
+              const isOnBonding = isLaunched && !isOnDex
               const isVoting = selectedCandidateInfo.status === 0 && !isExpired
 
               let activeStep = -1
-              if (isVoting) activeStep = 0
-              else if (canSettle || settleComplete) activeStep = 1
-              else if (isQueued) activeStep = 2
-              else if (isLaunched) activeStep = 3
+              if (isVoting || canSettle || settleComplete) activeStep = 0
+              else if (isQueued) activeStep = 1
+              else if (isOnBonding) activeStep = 2
+              else if (isOnDex) activeStep = 3
 
               const steps = [
                 { label: t('dao.step.subscribe'), icon: Vote },
-                { label: t('dao.step.settle'), icon: TrendingUp },
                 { label: t('dao.step.queue'), icon: Rocket },
-                { label: t('dao.step.launched'), icon: Check },
+                { label: t('dao.step.internal'), icon: TrendingUp },
+                { label: t('dao.step.external'), icon: Sparkles },
               ]
 
               return (
@@ -1371,37 +1385,39 @@ export default function DaoVote() {
                     })}
                   </div>
 
-                  {isVoting && (
+                  {(isVoting || canSettle || settleComplete) && (
                     <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-xl p-5 text-center">
-                      <Timer className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
-                      <div className="text-2xl font-display font-bold text-doge-gold tracking-wide">
-                        {formatCountdown(selectedCandidateInfo.expireTime)}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1.5">{t('dao.step.subscribeDesc')}</div>
-                    </div>
-                  )}
-
-                  {canSettle && (
-                    <button
-                      className="w-full bg-neon-green/5 border border-neon-green/30 rounded-xl p-5 text-center hover:bg-neon-green/10 transition-all cursor-pointer group"
-                      onClick={handleSettleEpoch}
-                      disabled={isWriting || isConfirming}
-                    >
-                      {isWriting || isConfirming ? (
-                        <Loader2 className="w-7 h-7 mx-auto mb-2 text-neon-green animate-spin" />
+                      {isVoting ? (
+                        <>
+                          <Timer className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
+                          <div className="text-2xl font-display font-bold text-doge-gold tracking-wide">
+                            {formatCountdown(selectedCandidateInfo.expireTime)}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1.5">{t('dao.step.subscribeDesc')}</div>
+                        </>
+                      ) : canSettle ? (
+                        <>
+                          <button
+                            className="w-full text-center hover:bg-neon-green/10 transition-all cursor-pointer group"
+                            onClick={handleSettleEpoch}
+                            disabled={isWriting || isConfirming}
+                          >
+                            {isWriting || isConfirming ? (
+                              <Loader2 className="w-7 h-7 mx-auto mb-2 text-neon-green animate-spin" />
+                            ) : (
+                              <TrendingUp className="w-7 h-7 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                            )}
+                            <div className="text-lg font-display font-bold text-neon-green">{t('dao.settleEpoch')}</div>
+                            <div className="text-xs text-neon-green/70 mt-1">{t('dao.settleReward')}</div>
+                          </button>
+                        </>
                       ) : (
-                        <TrendingUp className="w-7 h-7 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                        <>
+                          <Check className="w-7 h-7 mx-auto mb-2 text-emerald-400" />
+                          <div className="text-lg font-display font-bold text-emerald-400">{t('dao.settleDone')}</div>
+                          <div className="text-xs text-gray-400 mt-1">{t('dao.utcReset')}</div>
+                        </>
                       )}
-                      <div className="text-lg font-display font-bold text-neon-green">{t('dao.settleEpoch')}</div>
-                      <div className="text-xs text-neon-green/70 mt-1">{t('dao.settleReward')}</div>
-                    </button>
-                  )}
-
-                  {settleComplete && (
-                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5 text-center">
-                      <Check className="w-7 h-7 mx-auto mb-2 text-emerald-400" />
-                      <div className="text-lg font-display font-bold text-emerald-400">{t('dao.settleDone')}</div>
-                      <div className="text-xs text-gray-400 mt-1">{t('dao.utcReset')}</div>
                     </div>
                   )}
 
@@ -1413,11 +1429,19 @@ export default function DaoVote() {
                     </div>
                   )}
 
-                  {isLaunched && (
+                  {isOnBonding && (
                     <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-xl p-5 text-center">
-                      <Sparkles className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
-                      <div className="text-lg font-display font-bold text-doge-gold">{t('dao.launched')}</div>
-                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.launchedDesc')}</div>
+                      <TrendingUp className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-lg font-display font-bold text-doge-gold">{t('dao.step.internal')}</div>
+                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.internalDesc')}</div>
+                    </div>
+                  )}
+
+                  {isOnDex && (
+                    <div className="bg-neon-green/5 border border-neon-green/20 rounded-xl p-5 text-center">
+                      <Sparkles className="w-7 h-7 mx-auto mb-2 text-neon-green" />
+                      <div className="text-lg font-display font-bold text-neon-green">{t('dao.step.external')}</div>
+                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.externalDesc')}</div>
                     </div>
                   )}
 
