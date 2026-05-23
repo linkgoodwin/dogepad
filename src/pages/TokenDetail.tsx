@@ -135,7 +135,6 @@ export default function TokenDetail() {
   const { address } = useParams()
   const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
-  const [tradeMode, setTradeMode] = useState<'internal' | 'external'>('internal')
   const [txError, setTxError] = useState('')
   const t = useT()
   const { address: userAddress, isConnected } = useAccount()
@@ -379,6 +378,7 @@ export default function TokenDetail() {
   }, [sellAmount, allowanceData])
 
   const isListed = isListedData ?? tokenData?.isListedOnDex ?? false
+  const tradeMode = isListed ? 'external' as const : 'internal' as const
 
   const { data: dexRouterData } = useReadContract({
     address: bondingCurveAddress,
@@ -991,32 +991,19 @@ export default function TokenDetail() {
               </button>
             </div>
 
-            {isListed && (
-              <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
-                <button
-                  className={cn(
-                    'flex-1 py-1.5 rounded-md text-xs font-display font-semibold transition-all flex items-center justify-center gap-1',
-                    tradeMode === 'internal' ? 'bg-doge-gold text-dark-900' : 'text-gray-400 hover:text-white'
-                  )}
-                  onClick={() => setTradeMode('internal')}
-                >
-                  <TrendingUp className="w-3 h-3" />
-                  {t('tokenDetail.internalMarket')}
-                </button>
-                <button
-                  className={cn(
-                    'flex-1 py-1.5 rounded-md text-xs font-display font-semibold transition-all flex items-center justify-center gap-1',
-                    tradeMode === 'external' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
-                  )}
-                  onClick={() => setTradeMode('external')}
-                >
-                  <ArrowRightLeft className="w-3 h-3" />
-                  {t('tokenDetail.externalMarket')}
-                </button>
-              </div>
-            )}
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg border"
+              style={isListed
+                ? { backgroundColor: 'rgba(16,185,129,0.05)', borderColor: 'rgba(16,185,129,0.2)' }
+                : { backgroundColor: 'rgba(249,115,22,0.05)', borderColor: 'rgba(249,115,22,0.2)' }
+              }
+            >
+              {isListed
+                ? <><ArrowRightLeft className="w-4 h-4 text-neon-green" /><span className="text-xs text-neon-green font-medium">{t('tokenDetail.externalMarket')}</span></>
+                : <><TrendingUp className="w-4 h-4 text-doge-gold" /><span className="text-xs text-doge-gold font-medium">{t('tokenDetail.internalMarket')}</span></>
+              }
+            </div>
 
-            {tradeMode === 'external' && isListed ? (
+            {isListed ? (
               activeTab === 'buy' ? (
                 <div className="space-y-4">
                   <div>
@@ -1142,7 +1129,7 @@ export default function TokenDetail() {
                   )}
                 </div>
               )
-            ) : isListed && tradeMode === 'internal' ? (
+            ) : (
               activeTab === 'buy' ? (
                 <div className="space-y-4">
                   <div>
@@ -1260,122 +1247,6 @@ export default function TokenDetail() {
                   )}
                 </div>
               )
-            ) : activeTab === 'buy' ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
-                  <input
-                    type="number"
-                    className="input-dark w-full"
-                    placeholder="0.0"
-                    value={buyAmount}
-                    onChange={(e) => setBuyAmount(e.target.value)}
-                  />
-                </div>
-                <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                  <p className="font-display font-bold text-lg">{formatTokenAmount(estimatedTokens)} {tokenSymbol}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                  <div className="flex gap-2">
-                    {[0.5, 1, 3].map((s) => (
-                      <button
-                        key={s}
-                        className={cn(
-                          'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                          slippage === s
-                            ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                            : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                        )}
-                        onClick={() => setSlippage(s)}
-                      >
-                        {s}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {!isConnected ? (
-                  <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
-                    {t('common.connect')}
-                  </button>
-                ) : (
-                  <button
-                    className="btn-primary w-full text-center"
-                    onClick={handleBuy}
-                    disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
-                  >
-                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenSymbol})</label>
-                    {userTokenBalance !== undefined && (
-                      <button
-                        className="text-xs text-neon-green hover:underline"
-                        onClick={() => setSellAmount(formatEther(userTokenBalance))}
-                      >
-                        Max: {formatTokenAmount(userTokenBalance)}
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    className="input-dark w-full"
-                    placeholder="0.0"
-                    value={sellAmount}
-                    onChange={(e) => setSellAmount(e.target.value)}
-                  />
-                </div>
-                <div className="bg-dark-700 rounded-lg p-3">
-                  <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                  <p className="font-display font-bold text-lg">{estimatedBnb > BigInt(0) ? formatUsdc(Number(formatEther(estimatedBnb))) : '0'} {nativeSymbol}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                  <div className="flex gap-2">
-                    {[0.5, 1, 3].map((s) => (
-                      <button
-                        key={s}
-                        className={cn(
-                          'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                          slippage === s
-                            ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                            : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                        )}
-                        onClick={() => setSlippage(s)}
-                      >
-                        {s}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {!isConnected ? (
-                  <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
-                    {t('common.connect')}
-                  </button>
-                ) : needsApproval ? (
-                  <button
-                    className="btn-primary w-full text-center"
-                    onClick={handleApprove}
-                    disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                  >
-                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : t('common.approve', { symbol: tokenSymbol })}
-                  </button>
-                ) : (
-                  <button
-                    className="btn-danger w-full text-center"
-                    onClick={handleSell}
-                    disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                  >
-                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
-                  </button>
-                )}
-              </div>
             )}
 
             {txError && (
