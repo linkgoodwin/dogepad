@@ -486,34 +486,79 @@ export default function TokenDetail() {
   const publicClient = usePublicClient({ chainId })
 
   const { data: trades } = useQuery({
-    queryKey: ['trades', tokenAddress, chainId],
+    queryKey: ['trades', tokenAddress, chainId, isListed, dexRouter],
     queryFn: async () => {
-      if (!publicClient || !tokenAddress) return []
-      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 bnbAmount, uint256 tokenAmount)')
-      const sellEvent = parseAbiItem('event TokenSold(address indexed token, address indexed seller, uint256 tokenAmount, uint256 bnbAmount)')
+      if (!publicClient || !tokenAddress || isZeroAddress(bondingCurveAddress)) return []
+      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 usdcAmount, uint256 tokenAmount)')
+      const sellEvent = parseAbiItem('event TokenSold(address indexed token, address indexed seller, uint256 tokenAmount, uint256 usdcAmount)')
       const [buyLogs, sellLogs] = await Promise.all([
-        publicClient.getLogs({ event: buyEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
-        publicClient.getLogs({ event: sellEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
+        publicClient.getLogs({ address: bondingCurveAddress, event: buyEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
+        publicClient.getLogs({ address: bondingCurveAddress, event: sellEvent, args: { token: tokenAddress }, fromBlock: 'earliest', toBlock: 'latest' }),
       ])
-      const all = [
-        ...buyLogs.map((log) => ({ type: 'buy' as const, address: log.args.buyer!, bnbAmount: log.args.bnbAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
-        ...sellLogs.map((log) => ({ type: 'sell' as const, address: log.args.seller!, bnbAmount: log.args.bnbAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
+      const all: { type: 'buy' | 'sell'; source: 'internal' | 'external'; address: `0x${string}`; usdcAmount: bigint; tokenAmount: bigint; blockNumber: bigint; txHash: `0x${string}` }[] = [
+        ...buyLogs.map((log) => ({ type: 'buy' as const, source: 'internal' as const, address: log.args.buyer!, usdcAmount: log.args.usdcAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
+        ...sellLogs.map((log) => ({ type: 'sell' as const, source: 'internal' as const, address: log.args.seller!, usdcAmount: log.args.usdcAmount!, tokenAmount: log.args.tokenAmount!, blockNumber: log.blockNumber!, txHash: log.transactionHash })),
       ]
+
+      if (isListed && dexRouter && !isZeroAddress(dexRouter) && baseAsset) {
+        try {
+          const swapEvent = parseAbiItem('event Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, address indexed to)')
+          const pairCreatedEvent = parseAbiItem('event PairCreated(address indexed token0, address indexed token1, address pair, uint256)')
+          const pairLogs = await publicClient.getLogs({ address: dexRouter, event: pairCreatedEvent, fromBlock: 'earliest', toBlock: 'latest' })
+          const pairAddr = pairLogs
+            .map((log) => {
+              const args = log.args as any
+              const t0 = String(args.token0 ?? args[0] ?? '').toLowerCase()
+              const t1 = String(args.token1 ?? args[1] ?? '').toLowerCase()
+              const pair = String(args.pair ?? args[2] ?? '')
+              if ((t0 === tokenAddress.toLowerCase() && t1 === baseAsset.toLowerCase()) ||
+                  (t1 === tokenAddress.toLowerCase() && t0 === baseAsset.toLowerCase())) {
+                return pair
+              }
+              return null
+            })
+            .find((p) => p !== null)
+
+          if (pairAddr) {
+            const swapLogs = await publicClient.getLogs({ address: pairAddr as `0x${string}`, event: swapEvent, fromBlock: 'earliest', toBlock: 'latest' })
+            const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
+            for (const log of swapLogs) {
+              const args = log.args as any
+              const amount0In = BigInt(args.amount0In ?? args[1] ?? 0)
+              const amount1In = BigInt(args.amount1In ?? args[2] ?? 0)
+              const amount0Out = BigInt(args.amount0Out ?? args[3] ?? 0)
+              const amount1Out = BigInt(args.amount1Out ?? args[4] ?? 0)
+              const tokenIn = tokenIsToken0 ? amount0In : amount1In
+              const tokenOut = tokenIsToken0 ? amount0Out : amount1Out
+              const usdcIn = tokenIsToken0 ? amount1In : amount0In
+              const usdcOut = tokenIsToken0 ? amount1Out : amount0Out
+              if (tokenIn > BigInt(0) && usdcOut > BigInt(0)) {
+                all.push({ type: 'sell' as const, source: 'external' as const, address: (args.sender ?? args[0]) as `0x${string}`, usdcAmount: usdcOut, tokenAmount: tokenIn, blockNumber: log.blockNumber!, txHash: log.transactionHash })
+              } else if (usdcIn > BigInt(0) && tokenOut > BigInt(0)) {
+                all.push({ type: 'buy' as const, source: 'external' as const, address: (args.sender ?? args[0]) as `0x${string}`, usdcAmount: usdcIn, tokenAmount: tokenOut, blockNumber: log.blockNumber!, txHash: log.transactionHash })
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch DEX trades:', e)
+        }
+      }
+
       return all.sort((a, b) => Number(b.blockNumber - a.blockNumber)).slice(0, 50)
     },
-    enabled: !!publicClient && !!tokenAddress,
+    enabled: !!publicClient && !!tokenAddress && !isZeroAddress(bondingCurveAddress),
     staleTime: 30_000,
   })
 
   const volume24h = useMemo(() => {
     if (!trades || trades.length === 0) return 0
-    return trades.reduce((sum, trade) => sum + Number(formatEther(trade.bnbAmount)), 0)
+    return trades.reduce((sum, trade) => sum + Number(formatEther(trade.usdcAmount)), 0)
   }, [trades])
 
   const priceChange24h = useMemo(() => {
     if (!trades || trades.length < 2) return { change: 0, percent: 0 }
-    const oldestPrice = Number(formatEther(trades[trades.length - 1].bnbAmount)) / Number(formatEther(trades[trades.length - 1].tokenAmount))
-    const newestPrice = Number(formatEther(trades[0].bnbAmount)) / Number(formatEther(trades[0].tokenAmount))
+    const oldestPrice = Number(formatEther(trades[trades.length - 1].usdcAmount)) / Number(formatEther(trades[trades.length - 1].tokenAmount))
+    const newestPrice = Number(formatEther(trades[0].usdcAmount)) / Number(formatEther(trades[0].tokenAmount))
     if (oldestPrice === 0) return { change: 0, percent: 0 }
     const change = newestPrice - oldestPrice
     const percent = (change / oldestPrice) * 100
@@ -552,9 +597,9 @@ export default function TokenDetail() {
     queryKey: ['subBnb', tokenAddress, chainId, daoAddress],
     queryFn: async () => {
       if (!publicClient || !tokenAddress || isZeroAddress(daoAddress)) return BigInt(0)
-      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 bnbAmount, uint256 tokenAmount)')
-      const logs = await publicClient.getLogs({ event: buyEvent, args: { token: tokenAddress, buyer: daoAddress }, fromBlock: 'earliest', toBlock: 'latest' })
-      return logs.reduce((sum, log) => sum + (log.args.bnbAmount ?? BigInt(0)), BigInt(0))
+      const buyEvent = parseAbiItem('event TokenBought(address indexed token, address indexed buyer, uint256 usdcAmount, uint256 tokenAmount)')
+      const logs = await publicClient.getLogs({ address: bondingCurveAddress, event: buyEvent, args: { token: tokenAddress, buyer: daoAddress }, fromBlock: 'earliest', toBlock: 'latest' })
+      return logs.reduce((sum, log) => sum + (log.args.usdcAmount ?? BigInt(0)), BigInt(0))
     },
     enabled: !!publicClient && !!tokenAddress && !isZeroAddress(daoAddress),
     staleTime: 30_000,
@@ -907,13 +952,18 @@ export default function TokenDetail() {
                           <span className={cn('text-xs font-semibold px-2 py-0.5 rounded', trade.type === 'buy' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-red/10 text-neon-red')}>
                             {trade.type === 'buy' ? t('tokenDetail.buy') : t('tokenDetail.sell')}
                           </span>
+                          {'source' in trade && (
+                            <span className={cn('text-[10px] ml-1 px-1.5 py-0.5 rounded', trade.source === 'external' ? 'bg-doge-cyan/10 text-doge-cyan' : 'bg-dark-600 text-gray-400')}>
+                              {trade.source === 'external' ? 'DEX' : 'BC'}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-2 font-mono text-xs">
                           <a href={getBscScanUrl(chainId, 'address', trade.address)} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-doge-gold transition-colors">
                             {String(trade.address ?? '').slice(0, 6)}...{String(trade.address ?? '').slice(-4)}
                           </a>
                         </td>
-                        <td className="py-2 px-2 text-right font-mono text-xs">{formatUsdc(Number(formatEther(trade.bnbAmount)))}</td>
+                        <td className="py-2 px-2 text-right font-mono text-xs">{formatUsdc(Number(formatEther(trade.usdcAmount)))}</td>
                         <td className="py-2 px-2 text-right font-mono text-xs">{Number(formatEther(trade.tokenAmount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                         <td className="py-2 px-2 text-right">
                           <a href={getBscScanUrl(chainId, 'tx', trade.txHash)} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-doge-gold transition-colors">

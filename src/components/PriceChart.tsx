@@ -4,7 +4,7 @@ import { useT } from '@/i18n/useT'
 
 interface Trade {
   type: 'buy' | 'sell'
-  bnbAmount: bigint
+  usdcAmount: bigint
   tokenAmount: bigint
   blockNumber: bigint
 }
@@ -20,7 +20,7 @@ export default function PriceChart({ trades }: PriceChartProps) {
     if (!trades || trades.length === 0) return []
     return trades.map((trade) => ({
       type: trade.type,
-      price: Number(formatEther(trade.bnbAmount)) / Number(formatEther(trade.tokenAmount)),
+      price: Number(formatEther(trade.usdcAmount)) / Number(formatEther(trade.tokenAmount)),
     }))
   }, [trades])
 
