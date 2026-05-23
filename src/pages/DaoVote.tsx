@@ -1346,39 +1346,11 @@ export default function DaoVote() {
                   )}
                 </>
               ) : (
-                <>
-                  {epochTimeRemaining === 0 && !settleDone ? (
-                    <button
-                      className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
-                      onClick={handleSettleEpoch}
-                      disabled={isWriting || isConfirming}
-                    >
-                      {isWriting || isConfirming ? (
-                        <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
-                      ) : (
-                        <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
-                      )}
-                      <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
-                      <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
-                    </button>
-                  ) : (
-                    <div className={cn('text-center p-3 rounded-lg border', epochTimeRemaining > 0 ? 'border-doge-gold/30 bg-doge-gold/5' : settleDone ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
-                      {settleDone && epochTimeRemaining === 0 ? (
-                        <>
-                          <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
-                          <div className="text-sm font-bold text-emerald-400">{t('dao.settleDone')}</div>
-                          <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
-                        </>
-                      ) : (
-                        <>
-                          <Vote className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
-                          <div className="text-sm font-bold">{formatTime(epochTimeRemaining)}</div>
-                          <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </>
+                <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700 col-span-2">
+                  <Inbox className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                  <div className="text-sm font-bold text-gray-400">{t('dao.selectCandidateHint')}</div>
+                  <div className="text-xs text-gray-500">{t('dao.selectCandidateHintDesc')}</div>
+                </div>
               )}
               {queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
                 <button
