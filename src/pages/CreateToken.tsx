@@ -72,6 +72,31 @@ export default function CreateToken() {
     return trimmed
   }
 
+  const validateWebsite = (url: string): string | null => {
+    if (!url) return null
+    const normalized = sanitizeUrl(url).replace(/\/+$/, '')
+    const slashCount = (normalized.match(/\//g) || []).length
+    if (slashCount > 2) return t('create.websiteInvalid')
+    return null
+  }
+
+  const TWITTER_BLOCKED_KEYWORDS = ['search', 'explore', 'home', 'i/', 'settings', 'compose', 'notifications', 'messages']
+
+  const validateTwitter = (url: string): string | null => {
+    if (!url) return null
+    const normalized = sanitizeSocialUrl(url, 'twitter.com', 'x.com').replace(/\/+$/, '')
+    const slashCount = (normalized.match(/\//g) || []).length
+    if (slashCount !== 3) return t('create.twitterInvalid')
+    const pathLower = normalized.toLowerCase()
+    for (const kw of TWITTER_BLOCKED_KEYWORDS) {
+      if (pathLower.includes('/' + kw)) return t('create.twitterInvalid')
+    }
+    return null
+  }
+
+  const websiteError = validateWebsite(website)
+  const twitterError = validateTwitter(twitter)
+
   const buildMetadataURI = (): string => {
     const meta: Record<string, string> = {}
     if (avatarUrl) meta.image = sanitizeUrl(avatarUrl)
@@ -265,11 +290,17 @@ export default function CreateToken() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('create.website')} className="input-dark flex-1" />
+                <div className="flex-1">
+                  <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('create.website')} className="input-dark w-full" />
+                  {websiteError && <p className="text-[10px] text-neon-red mt-1">{websiteError}</p>}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Twitter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <input type="text" value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder={t('create.twitter')} className="input-dark flex-1" />
+                <div className="flex-1">
+                  <input type="text" value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder={t('create.twitter')} className="input-dark w-full" />
+                  {twitterError && <p className="text-[10px] text-neon-red mt-1">{twitterError}</p>}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -409,7 +440,7 @@ export default function CreateToken() {
               <p className="text-xs text-gray-400 mt-1">{t('create.connectWalletDesc')}</p>
             </div>
           ) : (
-            <button className="btn-primary w-full" disabled={!name || !symbol || uploading || isContractNotDeployed || !(wantTaxShare || wantLpShare || wantTokenAllocation)} onClick={handleSubmit}>
+            <button className="btn-primary w-full" disabled={!name || !symbol || uploading || isContractNotDeployed || !(wantTaxShare || wantLpShare || wantTokenAllocation) || !!websiteError || !!twitterError} onClick={handleSubmit}>
               {isContractNotDeployed ? (
                 t('create.contractNotDeployed')
               ) : uploading ? (
