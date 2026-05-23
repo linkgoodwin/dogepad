@@ -1294,99 +1294,182 @@ export default function DaoVote() {
           </div>
 
           <div className="card-dark">
-            <h3 className="font-display font-bold text-lg mb-4">{t('dao.epochTimeline')}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {selectedCandidate !== null && selectedCandidateInfo ? (
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-display font-bold text-lg">{t('dao.epochTimeline')}</h3>
+              <span className="badge-cyan">
+                <Clock className="w-3 h-3 mr-1" />
+                {formatTime(epochTimeRemaining)}
+              </span>
+            </div>
+
+            {selectedCandidate !== null && selectedCandidateInfo ? (() => {
+              const isExpired = selectedCandidateInfo.expireTime > 0 && (selectedCandidateInfo.expireTime * 1000) <= Date.now()
+              const canSettle = selectedCandidateInfo.status === 0 && isExpired && epochTimeRemaining === 0 && !settleDone
+              const settleComplete = selectedCandidateInfo.status === 0 && settleDone
+              const isQueued = selectedCandidateInfo.status === 1
+              const isLaunched = selectedCandidateInfo.status === 5
+              const isVoting = selectedCandidateInfo.status === 0 && !isExpired
+
+              let activeStep = -1
+              if (isVoting) activeStep = 0
+              else if (canSettle || settleComplete) activeStep = 1
+              else if (isQueued) activeStep = 2
+              else if (isLaunched) activeStep = 3
+
+              const steps = [
+                { label: t('dao.step.subscribe'), icon: Vote },
+                { label: t('dao.step.settle'), icon: TrendingUp },
+                { label: t('dao.step.queue'), icon: Rocket },
+                { label: t('dao.step.launched'), icon: Check },
+              ]
+
+              return (
                 <>
-                  {selectedCandidateInfo.status === 0 && selectedCandidateInfo.expireTime > 0 && (selectedCandidateInfo.expireTime * 1000) > Date.now() ? (
-                    <div className="text-center p-3 rounded-lg border border-doge-gold/30 bg-doge-gold/5">
-                      <Timer className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
-                      <div className="text-sm font-bold text-doge-gold">
+                  <div className="flex items-center mb-1.5">
+                    {steps.map((step, i) => {
+                      const Icon = step.icon
+                      const isActive = i === activeStep
+                      const isCompleted = i < activeStep
+                      return (
+                        <div key={i} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : 'none' }}>
+                          <div className={cn(
+                            'w-8 h-8 rounded-full flex items-center justify-center border-2 shrink-0 transition-all duration-300',
+                            isActive ? 'border-doge-gold bg-doge-gold/15 text-doge-gold' :
+                            isCompleted ? 'border-emerald-500/70 bg-emerald-500/10 text-emerald-400' :
+                            'border-dark-500/50 bg-dark-700 text-gray-600'
+                          )}>
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          {i < steps.length - 1 && (
+                            <div className={cn(
+                              'flex-1 h-0.5 mx-1.5 transition-all duration-300',
+                              isCompleted ? 'bg-emerald-500/50' : 'bg-dark-500/30'
+                            )} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex mb-5">
+                    {steps.map((step, i) => {
+                      const isActive = i === activeStep
+                      const isCompleted = i < activeStep
+                      return (
+                        <div key={i} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : 'none' }}>
+                          <span className={cn(
+                            'text-[11px] whitespace-nowrap transition-colors',
+                            isActive ? 'text-doge-gold font-bold' :
+                            isCompleted ? 'text-emerald-400/80' :
+                            'text-gray-600'
+                          )}>
+                            {step.label}
+                          </span>
+                          {i < steps.length - 1 && <div className="flex-1" />}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {isVoting && (
+                    <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-xl p-5 text-center">
+                      <Timer className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-2xl font-display font-bold text-doge-gold tracking-wide">
                         {formatCountdown(selectedCandidateInfo.expireTime)}
                       </div>
-                      <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
+                      <div className="text-xs text-gray-400 mt-1.5">{t('dao.step.subscribeDesc')}</div>
                     </div>
-                  ) : selectedCandidateInfo.status === 0 && epochTimeRemaining === 0 && !settleDone ? (
+                  )}
+
+                  {canSettle && (
                     <button
-                      className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
+                      className="w-full bg-neon-green/5 border border-neon-green/30 rounded-xl p-5 text-center hover:bg-neon-green/10 transition-all cursor-pointer group"
                       onClick={handleSettleEpoch}
                       disabled={isWriting || isConfirming}
                     >
                       {isWriting || isConfirming ? (
-                        <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
+                        <Loader2 className="w-7 h-7 mx-auto mb-2 text-neon-green animate-spin" />
                       ) : (
-                        <TrendingUp className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                        <TrendingUp className="w-7 h-7 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
                       )}
-                      <div className="text-sm font-bold text-neon-green">{t('dao.settleEpoch')}</div>
-                      <div className="text-xs text-neon-green/70">{t('dao.settleReward')}</div>
+                      <div className="text-lg font-display font-bold text-neon-green">{t('dao.settleEpoch')}</div>
+                      <div className="text-xs text-neon-green/70 mt-1">{t('dao.settleReward')}</div>
                     </button>
-                  ) : selectedCandidateInfo.status === 0 && settleDone ? (
-                    <div className="text-center p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
-                      <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
-                      <div className="text-sm font-bold text-emerald-400">{t('dao.settleDone')}</div>
-                      <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
+                  )}
+
+                  {settleComplete && (
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5 text-center">
+                      <Check className="w-7 h-7 mx-auto mb-2 text-emerald-400" />
+                      <div className="text-lg font-display font-bold text-emerald-400">{t('dao.settleDone')}</div>
+                      <div className="text-xs text-gray-400 mt-1">{t('dao.utcReset')}</div>
                     </div>
-                  ) : selectedCandidateInfo.status === 1 ? (
-                    <div className="text-center p-3 rounded-lg border border-doge-cyan/30 bg-doge-cyan/5">
-                      <Rocket className="w-5 h-5 mx-auto mb-2 text-doge-cyan" />
-                      <div className="text-sm font-bold text-doge-cyan">{t('dao.queuedBadge')}</div>
-                      <div className="text-xs text-gray-400">{t('dao.inQueue')}</div>
+                  )}
+
+                  {isQueued && (
+                    <div className="bg-doge-cyan/5 border border-doge-cyan/20 rounded-xl p-5 text-center">
+                      <Rocket className="w-7 h-7 mx-auto mb-2 text-doge-cyan" />
+                      <div className="text-lg font-display font-bold text-doge-cyan">{t('dao.queuedBadge')}</div>
+                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.queueDesc')}</div>
                     </div>
-                  ) : selectedCandidateInfo.status === 5 ? (
-                    <div className="text-center p-3 rounded-lg border border-doge-gold/30 bg-doge-gold/5">
-                      <Check className="w-5 h-5 mx-auto mb-2 text-doge-gold" />
-                      <div className="text-sm font-bold text-doge-gold">{t('dao.launched')}</div>
+                  )}
+
+                  {isLaunched && (
+                    <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-xl p-5 text-center">
+                      <Sparkles className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-lg font-display font-bold text-doge-gold">{t('dao.launched')}</div>
+                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.launchedDesc')}</div>
                     </div>
-                  ) : (
-                    <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700">
-                      <Vote className="w-5 h-5 mx-auto mb-2 text-gray-500" />
+                  )}
+
+                  {activeStep === -1 && (
+                    <div className="bg-dark-700/50 border border-dark-500/30 rounded-xl p-5 text-center">
+                      <Vote className="w-7 h-7 mx-auto mb-2 text-gray-500" />
                       <div className="text-sm font-bold text-gray-400">{formatTime(epochTimeRemaining)}</div>
-                      <div className="text-xs text-gray-400">{t('dao.phase.voting')}</div>
+                      <div className="text-xs text-gray-500 mt-1">{t('dao.phase.voting')}</div>
                     </div>
                   )}
                 </>
-              ) : (
-                <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700 col-span-2">
-                  <Inbox className="w-5 h-5 mx-auto mb-2 text-gray-500" />
-                  <div className="text-sm font-bold text-gray-400">{t('dao.selectCandidateHint')}</div>
-                  <div className="text-xs text-gray-500">{t('dao.selectCandidateHintDesc')}</div>
+              )
+            })() : (
+              <div className="bg-dark-700/50 border border-dark-500/20 rounded-xl p-6 text-center">
+                <Inbox className="w-8 h-8 mx-auto mb-3 text-gray-600" />
+                <div className="text-sm font-bold text-gray-400">{t('dao.selectCandidateHint')}</div>
+                <div className="text-xs text-gray-500 mt-1">{t('dao.selectCandidateHintDesc')}</div>
+              </div>
+            )}
+
+            <div className="mt-5 pt-4 border-t border-dark-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Rocket className="w-4 h-4 text-neon-green" />
+                  <span className="text-sm font-display font-bold">{t('dao.launchToken')}</span>
                 </div>
-              )}
+                <span className="text-xs text-gray-500">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</span>
+              </div>
               {queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
                 <button
-                  className="text-center p-3 rounded-lg border border-neon-green/40 bg-neon-green/5 hover:bg-neon-green/10 transition-all cursor-pointer group"
+                  className="w-full py-2.5 rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   onClick={handleLaunchToken}
                   disabled={isWriting || isConfirming}
                 >
-                  {isWriting || isConfirming ? (
-                    <Loader2 className="w-5 h-5 mx-auto mb-2 text-neon-green animate-spin" />
-                  ) : (
-                    <Rocket className="w-5 h-5 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
-                  )}
-                  <div className="text-sm font-bold text-neon-green">{t('dao.launchToken')}</div>
-                  <div className="text-xs text-neon-green/70">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
+                  {isWriting || isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  {t('dao.launchToken')}
                 </button>
               ) : queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
-                <div className="text-center p-3 rounded-lg border border-dark-500/30 bg-dark-700">
-                  <Clock className="w-5 h-5 mx-auto mb-2 text-gray-500" />
-                  <div className="text-sm font-bold text-gray-400">{t('dao.launchWindowClosed')}</div>
-                  <div className="text-xs text-gray-500">{t('dao.opensAt')} 04:00 UTC</div>
+                <div className="bg-dark-700 rounded-lg p-3 text-center">
+                  <Clock className="w-4 h-4 mx-auto mb-1 text-gray-500" />
+                  <div className="text-xs text-gray-400">{t('dao.launchWindowClosed')}</div>
+                  <div className="text-[10px] text-gray-500">{t('dao.opensAt')} 04:00 UTC</div>
+                </div>
+              ) : !canLaunchToday && queueLength > 0 ? (
+                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-center">
+                  <Check className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
+                  <div className="text-xs text-emerald-400">{maxLaunchsPerDay}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
+                  <div className="text-[10px] text-gray-500">{t('dao.utcReset')}</div>
                 </div>
               ) : (
-                <div className={cn('text-center p-3 rounded-lg border', !canLaunchToday && queueLength > 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-dark-500/30 bg-dark-700')}>
-                  {!canLaunchToday && queueLength > 0 ? (
-                    <>
-                      <Check className="w-5 h-5 mx-auto mb-2 text-emerald-400" />
-                      <div className="text-sm font-bold text-emerald-400">{maxLaunchsPerDay}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
-                      <div className="text-xs text-gray-400">{t('dao.utcReset')}</div>
-                    </>
-                  ) : (
-                    <>
-                      <Rocket className="w-5 h-5 mx-auto mb-2 text-gray-500" />
-                      <div className="text-sm font-bold">{queueLength} {t('dao.inQueue')}</div>
-                      <div className="text-xs text-gray-400">{t('dao.launchQueue')}</div>
-                    </>
-                  )}
+                <div className="bg-dark-700 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-400">{queueLength} {t('dao.inQueue')}</div>
+                  <div className="text-[10px] text-gray-500">{t('dao.launchQueue')}</div>
                 </div>
               )}
             </div>
