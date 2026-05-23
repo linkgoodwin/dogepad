@@ -31,7 +31,7 @@ jobs:
 
       - name: Create .env file
         run: |
-          cp .env.example .env 2>/dev/null || true
+          touch .env
           echo "VITE_WALLETCONNECT_PROJECT_ID=${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}" >> .env
           echo "VITE_PINATA_JWT=${{ secrets.VITE_PINATA_JWT }}" >> .env
 
