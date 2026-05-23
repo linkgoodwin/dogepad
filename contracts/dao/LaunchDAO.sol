@@ -242,7 +242,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         _updateCandidateStatus(candidateId);
 
         Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active, "not active");
+        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "not active or queued");
 
         uint256 weight = msg.value * SUBSCRIBE_BNB_WEIGHT / SUBSCRIBE_DENOM;
 
@@ -370,7 +370,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         _updateCandidateStatus(candidateId);
 
         Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active, "not active");
+        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "not active or queued");
 
         userEffectiveSpent[msg.sender] += amount;
         c.totalRightsVotes += amount;
