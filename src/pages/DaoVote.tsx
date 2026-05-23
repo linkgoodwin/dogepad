@@ -204,7 +204,7 @@ function CandidateDetailCard({
   const borderColor = variant === 'active'
     ? isSelected ? 'border-doge-gold/50 bg-doge-gold/5' : 'border-dark-500/30 bg-dark-700 hover:border-dark-500/60'
     : variant === 'queued'
-    ? 'border-doge-cyan/30 bg-doge-cyan/5'
+    ? isSelected ? 'border-doge-cyan/50 bg-doge-cyan/10' : 'border-doge-cyan/30 bg-doge-cyan/5 hover:border-doge-cyan/50'
     : variant === 'grace'
     ? 'border-neon-yellow/30 bg-neon-yellow/5'
     : 'border-neon-red/30 bg-neon-red/5'
@@ -215,10 +215,10 @@ function CandidateDetailCard({
     <div
       className={cn(
         'relative rounded-xl border p-4 transition-all duration-200',
-        variant === 'active' ? 'cursor-pointer' : '',
+        (variant === 'active' || variant === 'queued') ? 'cursor-pointer' : '',
         borderColor
       )}
-      onClick={variant === 'active' ? onSelect : undefined}
+      onClick={(variant === 'active' || variant === 'queued') ? onSelect : undefined}
     >
       {rank === 0 && variant === 'active' && (
         <div className="absolute top-2 right-2">
@@ -1206,14 +1206,15 @@ export default function DaoVote() {
                     <CandidateDetailCard
                       key={id}
                       candidateId={id}
-                      isSelected={false}
-                      onSelect={() => {}}
+                      isSelected={selectedCandidate === id}
+                      onSelect={() => setSelectedCandidate(id)}
                       rank={0}
                       variant="queued"
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
                       doWrite={doWrite}
                       onError={(msg) => setTxError(msg)}
+                      currentAddress={address}
                     />
                   ))}
                 </div>
