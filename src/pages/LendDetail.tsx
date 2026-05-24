@@ -350,14 +350,49 @@ export default function LendDetail() {
 
   const feeDogeTokenAddr = (feeDogeTokenData as `0x${string}` | undefined) ?? undefined
   const feeDogeReady = !!feeDogeTokenAddr && !isZeroAddress(feeDogeTokenAddr)
+
+  const { data: feeDogeAllowanceData, refetch: refetchFeeDogeAllowance } = useReadContract({
+    address: feeDogeTokenAddr,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: userAddress && feeDistributorAddress ? [userAddress, feeDistributorAddress] : undefined,
+    chainId,
+    query: { enabled: feeDogeReady && !!userAddress && !!feeDistributorAddress },
+  })
+
+  const feeDogeAllowance = feeDogeAllowanceData as bigint | undefined
   const feeTotalStaked = feeTotalStakedData ? Number(formatEther(feeTotalStakedData as bigint)) : 0
   const feeUserStaked = feeUserData ? Number(formatEther((feeUserData as [bigint, bigint, bigint, bigint])[0])) : 0
   const feePendingDividend = feePendingDividendData ? Number(formatEther(feePendingDividendData as bigint)) : 0
   const feeMinDurationDays = feeMinDurationData ? Number(feeMinDurationData as bigint) / 86400 : 7
 
+  const handleFeeApprove = () => {
+    setTxError('')
+    if (!feeDogeTokenAddr || !feeDistributorAddress || !feeStakeAmount) return
+    writeContractAsync({
+      address: feeDogeTokenAddr,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [feeDistributorAddress, parseEther(feeStakeAmount)],
+      gas: 500_000n,
+    } as any).then(() => {
+      refetchFeeDogeAllowance()
+      setNeedsFeeApprove(false)
+    }).catch((err: any) => {
+      const msg = err?.shortMessage || err?.message || ''
+      if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
+      }
+    })
+  }
+
   const handleFeeStake = () => {
     setTxError('')
     if (!feeStakeAmount || Number(feeStakeAmount) <= 0 || !feeReady || !feeDogeReady) return
+    if (feeDogeAllowance === undefined || feeDogeAllowance < parseEther(feeStakeAmount)) {
+      setNeedsFeeApprove(true)
+      return
+    }
     writeContractAsync({
       address: feeDistributorAddress,
       abi: FEE_DISTRIBUTOR_ABI,
@@ -1063,18 +1098,33 @@ export default function LendDetail() {
                         />
                       </div>
                       <p className="text-xs text-gray-500">{t('fee.minStakeDuration')}: {feeMinDurationDays} {t('dao.daysUnit')}</p>
-                      <button
-                        className="btn-primary w-full text-center flex items-center justify-center gap-2"
-                        style={{ background: '#eab308' }}
-                        onClick={handleFeeStake}
-                        disabled={isWritePending || isConfirming || !feeStakeAmount || Number(feeStakeAmount) <= 0}
-                      >
-                        {isWritePending || isConfirming ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
-                        ) : (
-                          <><Coins className="w-4 h-4" /> {t('fee.stakeDoge')}</>
-                        )}
-                      </button>
+                      {needsFeeApprove ? (
+                        <button
+                          className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                          style={{ background: '#f59e0b' }}
+                          onClick={handleFeeApprove}
+                          disabled={isWritePending || isConfirming || !feeStakeAmount || Number(feeStakeAmount) <= 0}
+                        >
+                          {isWritePending || isConfirming ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                          ) : (
+                            <>{t('common.approve', { symbol: 'DOGE' })}</>
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-primary w-full text-center flex items-center justify-center gap-2"
+                          style={{ background: '#eab308' }}
+                          onClick={handleFeeStake}
+                          disabled={isWritePending || isConfirming || !feeStakeAmount || Number(feeStakeAmount) <= 0}
+                        >
+                          {isWritePending || isConfirming ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('lendDetail.confirming')}</>
+                          ) : (
+                            <><Coins className="w-4 h-4" /> {t('fee.stakeDoge')}</>
+                          )}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-3">
