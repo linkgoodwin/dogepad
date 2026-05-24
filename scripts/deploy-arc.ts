@@ -22,7 +22,9 @@ function setEnvValue(key: string, value: string) {
 }
 
 const XYLO_ROUTER_ARC_TESTNET = "0x73742278c31a76dBb0D2587d03ef92E6E2141023";
+const WUSDC_ARC_TESTNET = "0x911b4000D3422F482F4062a913885f7b035382Df";
 const ARC_RPC = "https://arc-testnet.drpc.org";
+const CORRECT_DOGE_TOKEN = "0xC65D9B12760d8ad32A62271814EB6c88aFC9d2FB";
 
 async function main() {
   const pk = process.env.DEPLOYER_PRIVATE_KEY;
@@ -53,8 +55,7 @@ async function main() {
     process.exit(1);
   }
 
-  const DEX_ROUTER = XYLO_ROUTER_ARC_TESTNET;
-  console.log("XyloRouter:", DEX_ROUTER);
+  console.log("Using SimpleRouter as DEX_ROUTER");
   console.log("");
 
   const deployOverrides = { gasPrice: 2_000_000_000, gasLimit: 6_000_000 };
@@ -96,14 +97,25 @@ async function main() {
 
   console.log("\n--- Phase 2: Core (BondingCurve + Factory) ---");
 
-  const bondingCurve = await deploy("BondingCurve", DEX_ROUTER, deployerAddress);
+  const simpleFactory = await deploy("SimpleFactory");
+  const simpleRouter = await deploy("SimpleRouter", simpleFactory.address, WUSDC_ARC_TESTNET);
+
+  const DEX_ROUTER = simpleRouter.address;
+  console.log("SimpleFactory:", simpleFactory.address);
+  console.log("SimpleRouter:", DEX_ROUTER);
+
+  const bondingCurve = await deploy("BondingCurve", DEX_ROUTER, deployerAddress, true, WUSDC_ARC_TESTNET);
   const factory = await deploy("BondingCurveFactory", bondingCurve.address);
 
   await tx("BondingCurve.setFactory", () => bondingCurve.setFactory(factory.address, txOverrides));
 
   console.log("\n--- Phase 3: BuyAndBurn ---");
 
-  const burnEngine = await deploy("BuyAndBurnEngine", DEX_ROUTER, deployerAddress);
+  const burnEngine = await deploy("BuyAndBurnEngine", DEX_ROUTER, deployerAddress, true, WUSDC_ARC_TESTNET);
+
+  console.log("\n--- Phase 3b: DexLister ---");
+
+  const dexLister = await deploy("DexLister", DEX_ROUTER, deployerAddress, true, WUSDC_ARC_TESTNET);
 
   console.log("\n--- Phase 4: Pools ---");
 
@@ -112,7 +124,7 @@ async function main() {
 
   console.log("\n--- Phase 5: FeeDistributor ---");
 
-  const feeDist = await deploy("FeeDistributor", ethers.constants.AddressZero, DEX_ROUTER, burnEngine.address, ethers.constants.AddressZero, longPool.address);
+  const feeDist = await deploy("FeeDistributor", CORRECT_DOGE_TOKEN, DEX_ROUTER, burnEngine.address, ethers.constants.AddressZero, longPool.address);
 
   await tx("BondingCurve.setPools", () => bondingCurve.setPools(longPool.address, shortPool.address, txOverrides));
   await tx("BondingCurve.setBuyAndBurnEngine", () => bondingCurve.setBuyAndBurnEngine(burnEngine.address, txOverrides));
@@ -140,8 +152,15 @@ async function main() {
   console.log("\n--- Phase 8: Final Wiring ---");
 
   await tx("BondingCurve.setFeeDistributor", () => bondingCurve.setFeeDistributor(feeDist.address, txOverrides));
+  await tx("BondingCurve.setDexLister", () => bondingCurve.setDexLister(dexLister.address, txOverrides));
   await tx("LaunchDAO.setFeeDistributor", () => launchDao.setFeeDistributor(feeDist.address, txOverrides));
   await tx("ShortPool.setPlatformTreasury", () => shortPool.setPlatformTreasury(feeDist.address, txOverrides));
+
+  await tx("DexLister.setPools", () => dexLister.setPools(longPool.address, shortPool.address, txOverrides));
+  await tx("DexLister.setFeeDistributor", () => dexLister.setFeeDistributor(feeDist.address, txOverrides));
+  await tx("DexLister.setBuyAndBurnEngine", () => dexLister.setBuyAndBurnEngine(burnEngine.address, txOverrides));
+  await tx("DexLister.setCreatorRewardManager", () => dexLister.setCreatorRewardManager(creatorRewardMgr.address, txOverrides));
+  await tx("DexLister.setBondingCurve", () => dexLister.setBondingCurve(bondingCurve.address, txOverrides));
 
   await tx("PriceOracle.authorize(bondingCurve)", () => priceOracle.setAuthorizedUpdater(bondingCurve.address, true, txOverrides));
   await tx("PriceOracle.authorize(longPool)", () => priceOracle.setAuthorizedUpdater(longPool.address, true, txOverrides));
@@ -155,9 +174,12 @@ async function main() {
 
   setEnvValue(`${prefix}_BONDING_CURVE_ADDRESS`, bondingCurve.address);
   setEnvValue(`${prefix}_FACTORY_ADDRESS`, factory.address);
+  setEnvValue(`${prefix}_SIMPLE_FACTORY_ADDRESS`, simpleFactory.address);
+  setEnvValue(`${prefix}_SIMPLE_ROUTER_ADDRESS`, simpleRouter.address);
   setEnvValue(`${prefix}_LONG_POOL_ADDRESS`, longPool.address);
   setEnvValue(`${prefix}_SHORT_POOL_ADDRESS`, shortPool.address);
   setEnvValue(`${prefix}_BUY_AND_BURN_ADDRESS`, burnEngine.address);
+  setEnvValue(`${prefix}_DEX_LISTER_ADDRESS`, dexLister.address);
   setEnvValue(`${prefix}_LAUNCH_DAO_ADDRESS`, launchDao.address);
   setEnvValue(`${prefix}_PRICE_ORACLE_ADDRESS`, priceOracle.address);
   setEnvValue(`${prefix}_FEE_DISTRIBUTOR_ADDRESS`, feeDist.address);
@@ -176,11 +198,14 @@ async function main() {
     priceOracle: priceOracle.address,
     exponentialRateModel: expRateModel.address,
     linearRateModel: linRateModel.address,
+    simpleFactory: simpleFactory.address,
+    simpleRouter: simpleRouter.address,
     bondingCurve: bondingCurve.address,
     bondingCurveFactory: factory.address,
     longPool: longPool.address,
     shortPool: shortPool.address,
     buyAndBurnEngine: burnEngine.address,
+    dexLister: dexLister.address,
     launchDao: launchDao.address,
     feeDistributor: feeDist.address,
     creatorRewardManager: creatorRewardMgr.address,

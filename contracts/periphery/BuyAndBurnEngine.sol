@@ -126,6 +126,18 @@ contract BuyAndBurnEngine is ReentrancyGuard, Ownable {
         keeper = _keeper;
     }
 
+    function setIsXyloRouter(bool _isXyloRouter) external onlyOwner {
+        isXyloRouter = _isXyloRouter;
+    }
+
+    function setWrappedNative(address _wrappedNative) external onlyOwner {
+        wrappedNative = _wrappedNative;
+    }
+
+    function setDexRouter(address _dexRouter) external onlyOwner {
+        dexRouter = _dexRouter;
+    }
+
     function setBurnThreshold(uint256 _threshold) external onlyOwner {
         burnThreshold = _threshold;
     }
