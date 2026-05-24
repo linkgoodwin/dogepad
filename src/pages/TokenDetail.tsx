@@ -1,45 +1,19 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, ExternalLink, Globe, Twitter, MessageCircle, UsersRound, SearchX, Loader2, AlertCircle, ArrowRightLeft, TrendingUp } from 'lucide-react'
-import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
-import { formatEther, parseEther, formatUnits, parseAbiItem, zeroAddress } from 'viem'
+import { ArrowLeft, Users, ExternalLink, Globe, Twitter, MessageCircle, UsersRound, SearchX, Loader2, TrendingUp } from 'lucide-react'
+import { useReadContract, useReadContracts, usePublicClient } from 'wagmi'
+import { formatEther, parseEther, parseAbiItem, zeroAddress } from 'viem'
 import { useQuery } from '@tanstack/react-query'
 import { BONDING_CURVE_ABI, LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, getBscScanUrl, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
-import { useTradeStore } from '@/stores/tradeStore'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import CopyableAddress from '@/components/CopyableAddress'
 import PriceChart from '@/components/PriceChart'
+import InternalTradePanel from '@/components/InternalTradePanel'
+import ExternalTradePanel from '@/components/ExternalTradePanel'
 import { useT } from '@/i18n/useT'
 
 const ERC20_ABI = [
-  {
-    inputs: [
-      { internalType: 'address', name: 'spender', type: 'address' },
-      { internalType: 'uint256', name: 'amount', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'owner', type: 'address' },
-      { internalType: 'address', name: 'spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
   {
     inputs: [],
     name: 'name',
@@ -63,81 +37,9 @@ const ERC20_ABI = [
   },
 ] as const
 
-const ROUTER_ABI = [
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
-      { internalType: 'address[]', name: 'path', type: 'address[]' },
-    ],
-    name: 'getAmountsOut',
-    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
-      { internalType: 'uint256', name: 'amountOutMin', type: 'uint256' },
-      { internalType: 'address[]', name: 'path', type: 'address[]' },
-      { internalType: 'address', name: 'to', type: 'address' },
-      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
-    ],
-    name: 'swapExactTokensForTokens',
-    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'amountOutMin', type: 'uint256' },
-      { internalType: 'address[]', name: 'path', type: 'address[]' },
-      { internalType: 'address', name: 'to', type: 'address' },
-      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
-    ],
-    name: 'swapExactETHForTokens',
-    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
-      { internalType: 'uint256', name: 'amountOutMin', type: 'uint256' },
-      { internalType: 'address[]', name: 'path', type: 'address[]' },
-      { internalType: 'address', name: 'to', type: 'address' },
-      { internalType: 'uint256', name: 'deadline', type: 'uint256' },
-    ],
-    name: 'swapExactTokensForETH',
-    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const
-
-const WUSDC_ABI = [
-  {
-    inputs: [],
-    name: 'deposit',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: 'wad', type: 'uint256' }],
-    name: 'withdraw',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const
-
 export default function TokenDetail() {
   const { address } = useParams()
-  const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
-  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
-  const [txError, setTxError] = useState('')
   const t = useT()
-  const { address: userAddress, isConnected } = useAccount()
   const chainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(chainId)
 
@@ -146,9 +48,6 @@ export default function TokenDetail() {
   const daoAddress = getContractAddress(chainId, 'launchDAO')
   const isValidAddress = tokenAddress.startsWith('0x') && tokenAddress.length === 42
   const contractReady = isValidAddress && !isZeroAddress(bondingCurveAddress)
-
-  const { writeContractAsync, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
   const { data: tokenInfo, isLoading: isTokenInfoLoading, refetch: refetchTokenInfo } = useReadContract({
     address: bondingCurveAddress,
@@ -244,88 +143,7 @@ export default function TokenDetail() {
     query: { enabled: contractReady },
   })
 
-  const buyBnbAmount = useMemo(() => {
-    if (!buyAmount || Number(buyAmount) <= 0) return parseEther('1')
-    try {
-      return parseEther(buyAmount)
-    } catch {
-      return parseEther('1')
-    }
-  }, [buyAmount])
-
-  const buyBnbAmountAfterFee = useMemo(() => {
-    const feeBps = BigInt(100)
-    return (buyBnbAmount * (BigInt(10000) - feeBps)) / BigInt(10000)
-  }, [buyBnbAmount])
-
-  const { data: buyPriceData, refetch: refetchBuyPrice } = useReadContract({
-    address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'getBuyPrice',
-    args: [tokenAddress, buyBnbAmountAfterFee],
-    chainId,
-    query: { enabled: contractReady },
-  })
-
-  const sellTokenAmount = useMemo(() => {
-    if (!sellAmount || Number(sellAmount) <= 0) return BigInt(0)
-    try {
-      return parseEther(sellAmount)
-    } catch {
-      return BigInt(0)
-    }
-  }, [sellAmount])
-
-  const { data: sellPriceData, refetch: refetchSellPrice } = useReadContract({
-    address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'getSellPrice',
-    args: [tokenAddress, sellTokenAmount],
-    chainId,
-    query: { enabled: contractReady && sellTokenAmount > BigInt(0) },
-  })
-
-  const { data: userTokenBalance, refetch: refetchBalance } = useReadContract({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: userAddress ? [userAddress] : undefined,
-    chainId,
-    query: { enabled: isValidAddress && !!userAddress },
-  })
-
-  const { data: allowanceData, refetch: refetchAllowance } = useReadContract({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: 'allowance',
-    args: userAddress ? [userAddress, bondingCurveAddress] : undefined,
-    chainId,
-    query: { enabled: isValidAddress && !!userAddress && activeTab === 'sell' },
-  })
-
-  useEffect(() => {
-    if (isConfirmed) {
-      refetchTokenInfo()
-      refetchBuyPrice()
-      refetchSellPrice()
-      refetchBalance()
-      refetchAllowance()
-    }
-  }, [isConfirmed, refetchTokenInfo, refetchBuyPrice, refetchSellPrice, refetchBalance, refetchAllowance])
-
-  const estimatedTokens = useMemo(() => {
-    if (!buyPriceData) return BigInt(0)
-    return buyPriceData
-  }, [buyPriceData])
-
-  const estimatedBnb = useMemo(() => {
-    if (!sellPriceData) return BigInt(0)
-    return sellPriceData
-  }, [sellPriceData])
-
-  const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveUsdc)) : 0
-  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20
-  const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
+  const isListed = isListedData ?? tokenData?.isListedOnDex ?? false
 
   const oneUsdcAfterFee = useMemo(() => {
     const oneUsdc = parseEther('1')
@@ -339,46 +157,15 @@ export default function TokenDetail() {
     functionName: 'getBuyPrice',
     args: [tokenAddress, oneUsdcAfterFee],
     chainId,
-    query: { enabled: contractReady },
+    query: { enabled: contractReady && !isListed },
   })
 
-  const basePricePerToken = useMemo(() => {
+  const internalBasePricePerToken = useMemo(() => {
     if (!basePriceData || basePriceData === BigInt(0)) return 0
     const tokensPerUsdc = Number(formatEther(basePriceData))
     if (tokensPerUsdc === 0) return 0
     return 1 / tokensPerUsdc
   }, [basePriceData])
-
-  const pricePerToken = useMemo(() => {
-    if (!buyAmount || Number(buyAmount) <= 0 || !estimatedTokens || estimatedTokens === BigInt(0)) return basePricePerToken
-    try {
-      const usdcVal = Number(buyAmount)
-      const tokensVal = Number(formatEther(estimatedTokens))
-      if (tokensVal === 0) return basePricePerToken
-      return usdcVal / tokensVal
-    } catch {
-      return basePricePerToken
-    }
-  }, [buyAmount, estimatedTokens, basePricePerToken])
-
-  const marketCap = useMemo(() => {
-    if (!tokenData || pricePerToken === 0) return 0
-    const supply = Number(formatEther(tokenData.totalSupply))
-    return supply * pricePerToken
-  }, [tokenData, pricePerToken])
-
-  const needsApproval = useMemo(() => {
-    if (!sellAmount || !allowanceData) return true
-    try {
-      const tokenWei = parseEther(sellAmount)
-      return allowanceData < tokenWei
-    } catch {
-      return true
-    }
-  }, [sellAmount, allowanceData])
-
-  const isListed = isListedData ?? tokenData?.isListedOnDex ?? false
-  const tradeMode = isListed ? 'external' as const : 'internal' as const
 
   const { data: dexRouterData } = useReadContract({
     address: bondingCurveAddress,
@@ -396,17 +183,8 @@ export default function TokenDetail() {
     query: { enabled: contractReady && isListed },
   })
 
-  const { data: isXyloRouterData } = useReadContract({
-    address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'isXyloRouter',
-    chainId,
-    query: { enabled: contractReady && isListed },
-  })
-
   const dexRouter = dexRouterData as `0x${string}` | undefined
   const baseAsset = baseAssetData as `0x${string}` | undefined
-  const isXyloRouter = isXyloRouterData as boolean | undefined
 
   const { data: dexFactoryAddress } = useReadContract({
     address: dexRouter,
@@ -444,70 +222,20 @@ export default function TokenDetail() {
     return { lpUsdc, lpTokens }
   }, [dexReserves, baseAsset, tokenAddress])
 
-  const dexBuyPath = useMemo(() => {
-    if (!baseAsset || !tokenAddress) return undefined
-    return [baseAsset, tokenAddress] as `0x${string}`[]
-  }, [baseAsset, tokenAddress])
+  const dexPricePerToken = useMemo(() => {
+    if (!dexLpInfo || dexLpInfo.lpTokens === 0) return 0
+    return dexLpInfo.lpUsdc / dexLpInfo.lpTokens
+  }, [dexLpInfo])
 
-  const dexSellPath = useMemo(() => {
-    if (!baseAsset || !tokenAddress) return undefined
-    return [tokenAddress, baseAsset] as `0x${string}`[]
-  }, [baseAsset, tokenAddress])
+  const pricePerToken = isListed ? dexPricePerToken : internalBasePricePerToken
 
-  const dexBuyAmountIn = useMemo(() => {
-    if (tradeMode !== 'external' || !buyAmount || Number(buyAmount) <= 0) return BigInt(0)
-    try { return parseEther(buyAmount) } catch { return BigInt(0) }
-  }, [tradeMode, buyAmount])
-
-  const { data: dexBuyAmountsOut } = useReadContract({
-    address: dexRouter,
-    abi: ROUTER_ABI,
-    functionName: 'getAmountsOut',
-    args: dexBuyAmountIn > BigInt(0) && dexBuyPath ? [dexBuyAmountIn, dexBuyPath] : undefined,
-    chainId,
-    query: { enabled: tradeMode === 'external' && dexBuyAmountIn > BigInt(0) && !!dexRouter && !!dexBuyPath },
-  })
-
-  const dexSellAmountIn = useMemo(() => {
-    if (tradeMode !== 'external' || !sellAmount || Number(sellAmount) <= 0) return BigInt(0)
-    try { return parseEther(sellAmount) } catch { return BigInt(0) }
-  }, [tradeMode, sellAmount])
-
-  const { data: dexSellAmountsOut } = useReadContract({
-    address: dexRouter,
-    abi: ROUTER_ABI,
-    functionName: 'getAmountsOut',
-    args: dexSellAmountIn > BigInt(0) && dexSellPath ? [dexSellAmountIn, dexSellPath] : undefined,
-    chainId,
-    query: { enabled: tradeMode === 'external' && dexSellAmountIn > BigInt(0) && !!dexRouter && !!dexSellPath },
-  })
-
-  const dexEstimatedTokens = useMemo(() => {
-    if (!dexBuyAmountsOut || !Array.isArray(dexBuyAmountsOut)) return BigInt(0)
-    return BigInt(dexBuyAmountsOut[dexBuyAmountsOut.length - 1] ?? 0n)
-  }, [dexBuyAmountsOut])
-
-  const dexEstimatedBnb = useMemo(() => {
-    if (!dexSellAmountsOut || !Array.isArray(dexSellAmountsOut)) return BigInt(0)
-    return BigInt(dexSellAmountsOut[dexSellAmountsOut.length - 1] ?? 0n)
-  }, [dexSellAmountsOut])
-
-  const { data: dexAllowanceData, refetch: refetchDexAllowance } = useReadContract({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: 'allowance',
-    args: userAddress && dexRouter ? [userAddress, dexRouter] : undefined,
-    chainId,
-    query: { enabled: tradeMode === 'external' && !!userAddress && !!dexRouter && activeTab === 'sell' },
-  })
+  const marketCap = useMemo(() => {
+    if (!tokenData || pricePerToken === 0) return 0
+    const supply = Number(formatEther(tokenData.totalSupply))
+    return supply * pricePerToken
+  }, [tokenData, pricePerToken])
 
   const publicClient = usePublicClient({ chainId })
-
-  const dexNeedsApproval = useMemo(() => {
-    if (activeTab === 'buy') return false
-    if (!sellAmount || !dexAllowanceData) return true
-    try { return dexAllowanceData < parseEther(sellAmount) } catch { return true }
-  }, [activeTab, sellAmount, dexAllowanceData])
 
   const { data: trades } = useQuery({
     queryKey: ['trades', tokenAddress, chainId, isListed, dexRouter],
@@ -635,143 +363,9 @@ export default function TokenDetail() {
     return holders.reduce((sum, h) => sum + h.balance, BigInt(0))
   }, [holders])
 
-  const handleBuy = useCallback(() => {
-    setTxError('')
-    if (!buyAmount || !tokenAddress || estimatedTokens === BigInt(0)) return
-    try {
-      const bnbWei = parseEther(buyAmount)
-      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-      const minTokensOut = (estimatedTokens * slippageBps) / BigInt(10000)
-      writeContractAsync({
-        address: bondingCurveAddress,
-        abi: BONDING_CURVE_ABI,
-        functionName: 'buy',
-        args: [tokenAddress, minTokensOut, zeroAddress],
-        value: bnbWei,
-        chainId,
-        gas: 5_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) {
-          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-        }
-      })
-    } catch (e) {
-      console.error('Buy failed', e)
-    }
-  }, [buyAmount, tokenAddress, estimatedTokens, slippage, writeContractAsync, bondingCurveAddress, chainId])
-
-  const handleApprove = useCallback(() => {
-    setTxError('')
-    if (!sellAmount || !tokenAddress) return
-    try {
-      const tokenWei = parseEther(sellAmount)
-      writeContractAsync({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [bondingCurveAddress, tokenWei],
-        chainId,
-        gas: 1_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) {
-          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-        }
-      })
-    } catch (e) {
-      console.error('Approve failed', e)
-    }
-  }, [sellAmount, tokenAddress, bondingCurveAddress, writeContractAsync, chainId])
-
-  const handleSell = useCallback(() => {
-    setTxError('')
-    if (!sellAmount || !tokenAddress || estimatedBnb === BigInt(0)) return
-    try {
-      const tokenWei = parseEther(sellAmount)
-      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-      const minBnbOut = (estimatedBnb * slippageBps) / BigInt(10000)
-      writeContractAsync({
-        address: bondingCurveAddress,
-        abi: BONDING_CURVE_ABI,
-        functionName: 'sell',
-        args: [tokenAddress, tokenWei, minBnbOut],
-        chainId,
-        gas: 5_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) {
-          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-        }
-      })
-    } catch (e) {
-      console.error('Sell failed', e)
-    }
-  }, [sellAmount, tokenAddress, estimatedBnb, slippage, writeContractAsync, bondingCurveAddress, chainId])
-
-  const handleDexBuy = useCallback(() => {
-    setTxError('')
-    if (!buyAmount || !tokenAddress || !dexRouter || !dexBuyPath || dexEstimatedTokens === BigInt(0)) return
-    try {
-      const amountIn = parseEther(buyAmount)
-      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-      const minOut = (dexEstimatedTokens * slippageBps) / BigInt(10000)
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 300)
-      writeContractAsync({
-        address: dexRouter,
-        abi: ROUTER_ABI,
-        functionName: 'swapExactETHForTokens',
-        args: [minOut, dexBuyPath, userAddress!, deadline],
-        value: amountIn,
-        chainId,
-        gas: 5_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-      })
-    } catch (e) { console.error('DEX Buy failed', e) }
-  }, [buyAmount, tokenAddress, dexRouter, dexBuyPath, dexEstimatedTokens, slippage, userAddress, writeContractAsync, chainId])
-
-  const handleDexApprove = useCallback(() => {
-    setTxError('')
-    if (!tokenAddress || !dexRouter || !sellAmount) return
-    try {
-      const amount = parseEther(sellAmount)
-      writeContractAsync({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [dexRouter, amount],
-        chainId,
-        gas: 1_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-      })
-    } catch (e) { console.error('DEX Approve failed', e) }
-  }, [tokenAddress, dexRouter, sellAmount, writeContractAsync, chainId])
-
-  const handleDexSell = useCallback(() => {
-    setTxError('')
-    if (!sellAmount || !tokenAddress || !dexRouter || !dexSellPath || dexEstimatedBnb === BigInt(0)) return
-    try {
-      const amountIn = parseEther(sellAmount)
-      const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-      const minOut = (dexEstimatedBnb * slippageBps) / BigInt(10000)
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 300)
-      writeContractAsync({
-        address: dexRouter,
-        abi: ROUTER_ABI,
-        functionName: 'swapExactTokensForETH',
-        args: [amountIn, minOut, dexSellPath, userAddress!, deadline],
-        chainId,
-        gas: 5_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-      })
-    } catch (e) { console.error('DEX Sell failed', e) }
-  }, [sellAmount, tokenAddress, dexRouter, dexSellPath, dexEstimatedBnb, slippage, userAddress, writeContractAsync, chainId])
+  const handleTxConfirmed = useCallback(() => {
+    refetchTokenInfo()
+  }, [refetchTokenInfo])
 
   if (isTokenInfoLoading) {
     return (
@@ -807,13 +401,9 @@ export default function TokenDetail() {
   }
 
   const formatBnb = (val: number) => formatUsdc(val)
-  const formatTokenAmount = (val: bigint) => {
-    const num = Number(formatEther(val))
-    if (num === 0) return '0'
-    if (num >= 1) return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    if (num >= 0.001) return num.toFixed(4)
-    return num.toExponential(2)
-  }
+  const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveUsdc)) : 0
+  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20
+  const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
   return (
     <div className="animate-fade-in">
@@ -1014,306 +604,25 @@ export default function TokenDetail() {
         </div>
 
         <div className="space-y-6">
-          <div className="card-dark">
-            <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
-              <button
-                className={cn(
-                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
-                  activeTab === 'buy' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
-                )}
-                onClick={() => setActiveTab('buy')}
-              >
-                {t('tokenDetail.buy')}
-              </button>
-              <button
-                className={cn(
-                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
-                  activeTab === 'sell' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
-                )}
-                onClick={() => setActiveTab('sell')}
-              >
-                {t('tokenDetail.sell')}
-              </button>
-            </div>
-
-            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg border"
-              style={tradeMode === 'external'
-                ? { backgroundColor: 'rgba(16,185,129,0.05)', borderColor: 'rgba(16,185,129,0.2)' }
-                : { backgroundColor: 'rgba(249,115,22,0.05)', borderColor: 'rgba(249,115,22,0.2)' }
-              }
-            >
-              {tradeMode === 'external'
-                ? <><ArrowRightLeft className="w-4 h-4 text-neon-green" /><span className="text-xs text-neon-green font-medium">{t('tokenDetail.externalMarket')}</span></>
-                : <><TrendingUp className="w-4 h-4 text-doge-gold" /><span className="text-xs text-doge-gold font-medium">{t('tokenDetail.internalMarket')}</span></>
-              }
-            </div>
-
-            {tradeMode === 'external' ? (
-              activeTab === 'buy' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
-                    <input
-                      type="number"
-                      className="input-dark w-full"
-                      placeholder="0.0"
-                      value={buyAmount}
-                      onChange={(e) => setBuyAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="bg-dark-700 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                    <p className="font-display font-bold text-lg">{formatTokenAmount(dexEstimatedTokens)} {tokenSymbol}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                    <div className="flex gap-2">
-                      {[0.5, 1, 3].map((s) => (
-                        <button
-                          key={s}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                            slippage === s
-                              ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                              : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                          )}
-                          onClick={() => setSlippage(s)}
-                        >
-                          {s}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!isConnected ? (
-                    <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
-                      {t('common.connect')}
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-primary w-full text-center"
-                      onClick={handleDexBuy}
-                      disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenSymbol})</label>
-                      {userTokenBalance !== undefined && (
-                        <button
-                          className="text-xs text-neon-green hover:underline"
-                          onClick={() => setSellAmount(formatEther(userTokenBalance))}
-                        >
-                          Max: {formatTokenAmount(userTokenBalance)}
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      className="input-dark w-full"
-                      placeholder="0.0"
-                      value={sellAmount}
-                      onChange={(e) => setSellAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="bg-dark-700 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                    <p className="font-display font-bold text-lg">{dexEstimatedBnb > BigInt(0) ? formatUsdc(Number(formatEther(dexEstimatedBnb))) : '0'} {nativeSymbol}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                    <div className="flex gap-2">
-                      {[0.5, 1, 3].map((s) => (
-                        <button
-                          key={s}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                            slippage === s
-                              ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                              : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                          )}
-                          onClick={() => setSlippage(s)}
-                        >
-                          {s}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!isConnected ? (
-                    <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
-                      {t('common.connect')}
-                    </button>
-                  ) : dexNeedsApproval ? (
-                    <button
-                      className="btn-primary w-full text-center"
-                      onClick={handleDexApprove}
-                      disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : t('common.approve', { symbol: tokenSymbol })}
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-danger w-full text-center"
-                      onClick={handleDexSell}
-                      disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
-                    </button>
-                  )}
-                </div>
-              )
-            ) : (
-              activeTab === 'buy' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
-                    <input
-                      type="number"
-                      className="input-dark w-full"
-                      placeholder="0.0"
-                      value={buyAmount}
-                      onChange={(e) => setBuyAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="bg-dark-700 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                    <p className="font-display font-bold text-lg">{formatTokenAmount(estimatedTokens)} {tokenSymbol}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                    <div className="flex gap-2">
-                      {[0.5, 1, 3].map((s) => (
-                        <button
-                          key={s}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                            slippage === s
-                              ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                              : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                          )}
-                          onClick={() => setSlippage(s)}
-                        >
-                          {s}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!isConnected ? (
-                    <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
-                      {t('common.connect')}
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-primary w-full text-center"
-                      onClick={handleBuy}
-                      disabled={isWritePending || isConfirming || !buyAmount || Number(buyAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenSymbol})</label>
-                      {userTokenBalance !== undefined && (
-                        <button
-                          className="text-xs text-neon-green hover:underline"
-                          onClick={() => setSellAmount(formatEther(userTokenBalance))}
-                        >
-                          Max: {formatTokenAmount(userTokenBalance)}
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      className="input-dark w-full"
-                      placeholder="0.0"
-                      value={sellAmount}
-                      onChange={(e) => setSellAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="bg-dark-700 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-                    <p className="font-display font-bold text-lg">{estimatedBnb > BigInt(0) ? formatUsdc(Number(formatEther(estimatedBnb))) : '0'} {nativeSymbol}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-                    <div className="flex gap-2">
-                      {[0.5, 1, 3].map((s) => (
-                        <button
-                          key={s}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                            slippage === s
-                              ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                              : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                          )}
-                          onClick={() => setSlippage(s)}
-                        >
-                          {s}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!isConnected ? (
-                    <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
-                      {t('common.connect')}
-                    </button>
-                  ) : needsApproval ? (
-                    <button
-                      className="btn-primary w-full text-center"
-                      onClick={handleApprove}
-                      disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : t('common.approve', { symbol: tokenSymbol })}
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-danger w-full text-center"
-                      onClick={handleSell}
-                      disabled={isWritePending || isConfirming || !sellAmount || Number(sellAmount) <= 0}
-                    >
-                      {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
-                    </button>
-                  )}
-                </div>
-              )
-            )}
-
-            {txError && (
-              <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3">
-                <p className="text-xs text-neon-red">{txError}</p>
-              </div>
-            )}
-
-            {writeError && (
-              <div className="mt-3 flex items-start gap-2 text-neon-red text-xs bg-neon-red/10 rounded-lg p-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{writeError.message?.includes('User rejected') ? t('common.transactionRejected') : writeError.message?.slice(0, 100) || t('common.transactionFailed')}</span>
-              </div>
-            )}
-            {isConfirmed && (
-              <div className="mt-3 flex items-start gap-2 text-neon-green text-xs bg-neon-green/10 rounded-lg p-2">
-                <span>{t('common.transactionConfirmed')}</span>
-                {txHash && (
-                  <a
-                    href={getBscScanUrl(chainId, 'tx', txHash)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:no-underline"
-                  >
-                    {t('common.view')}
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
+          {isListed ? (
+            <ExternalTradePanel
+              tokenAddress={tokenAddress}
+              tokenSymbol={tokenSymbol}
+              nativeSymbol={nativeSymbol}
+              bondingCurveAddress={bondingCurveAddress}
+              chainId={chainId}
+              onTxConfirmed={handleTxConfirmed}
+            />
+          ) : (
+            <InternalTradePanel
+              tokenAddress={tokenAddress}
+              tokenSymbol={tokenSymbol}
+              nativeSymbol={nativeSymbol}
+              bondingCurveAddress={bondingCurveAddress}
+              chainId={chainId}
+              onTxConfirmed={handleTxConfirmed}
+            />
+          )}
 
           <div className="card-dark">
             <h3 className="font-display font-semibold mb-3">{t('tokenDetail.tokenInfo')}</h3>
@@ -1391,7 +700,7 @@ export default function TokenDetail() {
                   to={`/lend/short/${tokenAddress}`}
                   className="bg-neon-red/5 border border-neon-red/20 rounded-xl p-4 text-center hover:bg-neon-red/10 transition-all group"
                 >
-                  <ArrowRightLeft className="w-6 h-6 mx-auto mb-2 text-neon-red group-hover:scale-110 transition-transform" />
+                  <ArrowLeft className="w-6 h-6 mx-auto mb-2 text-neon-red group-hover:scale-110 transition-transform" />
                   <div className="font-display font-bold text-neon-red text-sm">{t('tokenDetail.goShort')}</div>
                   <div className="text-[10px] text-gray-400 mt-1">{t('tokenDetail.goShortDesc')}</div>
                 </Link>
