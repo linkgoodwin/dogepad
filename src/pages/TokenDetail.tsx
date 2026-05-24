@@ -408,6 +408,42 @@ export default function TokenDetail() {
   const baseAsset = baseAssetData as `0x${string}` | undefined
   const isXyloRouter = isXyloRouterData as boolean | undefined
 
+  const { data: dexFactoryAddress } = useReadContract({
+    address: dexRouter,
+    abi: [{ type: 'function', name: 'factory', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+    functionName: 'factory',
+    chainId,
+    query: { enabled: !!dexRouter && isListed },
+  })
+
+  const { data: dexFactoryPair } = useReadContract({
+    address: dexFactoryAddress as `0x${string}` | undefined,
+    abi: [{ type: 'function', name: 'getPair', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'address' }], outputs: [{ type: 'address' }] }],
+    functionName: 'getPair',
+    args: baseAsset && tokenAddress ? [baseAsset, tokenAddress] : undefined,
+    chainId,
+    query: { enabled: !!dexFactoryAddress && !!baseAsset && !!tokenAddress && isListed },
+  })
+
+  const lpPairAddress = dexFactoryPair as `0x${string}` | undefined
+
+  const { data: dexReserves } = useReadContract({
+    address: lpPairAddress,
+    abi: [{ type: 'function', name: 'getReserves', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint112' }, { type: 'uint112' }, { type: 'uint32' }] }],
+    functionName: 'getReserves',
+    chainId,
+    query: { enabled: !!lpPairAddress && isListed },
+  })
+
+  const dexLpInfo = useMemo(() => {
+    if (!dexReserves || !baseAsset || !tokenAddress) return null
+    const [r0, r1] = dexReserves as [bigint, bigint, number]
+    const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
+    const lpUsdc = tokenIsToken0 ? Number(formatEther(BigInt(r1))) : Number(formatEther(BigInt(r0)))
+    const lpTokens = tokenIsToken0 ? Number(formatEther(BigInt(r0))) : Number(formatEther(BigInt(r1)))
+    return { lpUsdc, lpTokens }
+  }, [dexReserves, baseAsset, tokenAddress])
+
   const dexBuyPath = useMemo(() => {
     if (!baseAsset || !tokenAddress) return undefined
     return [baseAsset, tokenAddress] as `0x${string}`[]
@@ -827,61 +863,62 @@ export default function TokenDetail() {
           </div>
 
           <div className="card-dark">
-            <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.dexProgress')}</h3>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-400 text-sm">{t('tokenDetail.reserve')}</span>
-              <span className="font-display font-semibold">{formatUsdc(reserveBnb)} / {formatUsdc(dexThreshold)} {nativeSymbol}</span>
-            </div>
-            <div className="w-full h-4 bg-dark-700 rounded-full overflow-hidden flex">
-              {(() => {
-                const subBnbVal = subBnb ? Number(formatEther(subBnb)) : 0
-                const curveBnbVal = Math.max(0, reserveBnb - subBnbVal)
-                const subPct = Math.min((subBnbVal / dexThreshold) * 100, 100)
-                const curvePct = Math.min((curveBnbVal / dexThreshold) * 100, 100 - subPct)
-                return (
-                  <>
-                    <div className="h-full bg-doge-gold transition-all duration-500" style={{ width: `${subPct}%` }} title={`${t('tokenDetail.subBnb')}: ${formatUsdc(subBnbVal)} ${nativeSymbol}`} />
-                    <div className="h-full bg-doge-cyan transition-all duration-500" style={{ width: `${curvePct}%` }} title={`${t('tokenDetail.curveBnb')}: ${formatUsdc(curveBnbVal)} ${nativeSymbol}`} />
-                  </>
-                )
-              })()}
-            </div>
-            <div className="flex items-center gap-4 mt-2 text-xs">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-gold inline-block" />{t('tokenDetail.subBnb')}</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-cyan inline-block" />{t('tokenDetail.curveBnb')}</span>
-            </div>
-            <p className="text-sm text-gray-400 mt-2">
-              {progress >= 100
-                ? t('tokenDetail.alreadyListed')
-                : `${formatUsdc(dexThreshold - reserveBnb)} ${nativeSymbol} ${t('tokenDetail.remaining')}`}
-            </p>
-
-            {progress >= 100 && (
-              <div className="mt-4 pt-4 border-t border-dark-500/30">
-                <h4 className="font-display font-semibold text-sm mb-3">{t('tokenDetail.distribution')}</h4>
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-green inline-block" />{t('tokenDetail.distLp')}</span>
-                    <span className="font-semibold text-neon-green">70% {nativeSymbol} + 30% {t('tokenDetail.tokens')}</span>
+            {isListed ? (
+              <>
+                <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.dexLiquidityPool')}</h3>
+                {dexLpInfo ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">{nativeSymbol} {t('tokenDetail.liquidity')}</span>
+                      <span className="font-display font-semibold text-neon-green">{formatUsdc(dexLpInfo.lpUsdc)} {nativeSymbol}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">{tokenSymbol} {t('tokenDetail.liquidity')}</span>
+                      <span className="font-display font-semibold text-doge-cyan">{dexLpInfo.lpTokens.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-dark-500/30">
+                      <span className="text-gray-400 text-sm">{t('tokenDetail.lpTotalValue')}</span>
+                      <span className="font-display font-bold text-lg neon-text">{formatUsdc(dexLpInfo.lpUsdc * 2)} {nativeSymbol}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">{t('tokenDetail.lpBurned')}</p>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-cyan inline-block" />{t('tokenDetail.distLongPool')}</span>
-                    <span className="font-semibold text-doge-cyan">25% {nativeSymbol}</span>
+                ) : (
+                  <div className="bg-dark-700/50 rounded-lg p-4 text-center">
+                    <p className="text-gray-400 text-sm">{t('tokenDetail.loadingLpInfo')}</p>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-violet inline-block" />{t('tokenDetail.distShortPool')}</span>
-                    <span className="font-semibold text-doge-violet">15% {t('tokenDetail.tokens')}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-doge-gold inline-block" />{t('tokenDetail.distPlatform')}</span>
-                    <span className="font-semibold text-doge-gold">5% {nativeSymbol}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon-red inline-block" />{t('tokenDetail.distBurn')}</span>
-                    <span className="font-semibold text-neon-red">5% {t('tokenDetail.tokens')}</span>
-                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="font-display font-semibold text-lg mb-4">{t('tokenDetail.dexProgress')}</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-400 text-sm">{t('tokenDetail.reserve')}</span>
+                  <span className="font-display font-semibold">{formatUsdc(reserveBnb)} / {formatUsdc(dexThreshold)} {nativeSymbol}</span>
                 </div>
-              </div>
+                <div className="w-full h-4 bg-dark-700 rounded-full overflow-hidden flex">
+                  {(() => {
+                    const subBnbVal = subBnb ? Number(formatEther(subBnb)) : 0
+                    const curveBnbVal = Math.max(0, reserveBnb - subBnbVal)
+                    const subPct = Math.min((subBnbVal / dexThreshold) * 100, 100)
+                    const curvePct = Math.min((curveBnbVal / dexThreshold) * 100, 100 - subPct)
+                    return (
+                      <>
+                        <div className="h-full bg-doge-gold transition-all duration-500" style={{ width: `${subPct}%` }} title={`${t('tokenDetail.subBnb')}: ${formatUsdc(subBnbVal)} ${nativeSymbol}`} />
+                        <div className="h-full bg-doge-cyan transition-all duration-500" style={{ width: `${curvePct}%` }} title={`${t('tokenDetail.curveBnb')}: ${formatUsdc(curveBnbVal)} ${nativeSymbol}`} />
+                      </>
+                    )
+                  })()}
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-xs">
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-gold inline-block" />{t('tokenDetail.subBnb')}</span>
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-doge-cyan inline-block" />{t('tokenDetail.curveBnb')}</span>
+                </div>
+                <p className="text-sm text-gray-400 mt-2">
+                  {progress >= 100
+                    ? t('tokenDetail.alreadyListed')
+                    : `${formatUsdc(dexThreshold - reserveBnb)} ${nativeSymbol} ${t('tokenDetail.remaining')}`}
+                </p>
+              </>
             )}
           </div>
 

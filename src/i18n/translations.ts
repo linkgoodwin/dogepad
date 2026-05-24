@@ -315,6 +315,11 @@ export const zhTranslations: TranslationKeys = {
   'portfolio.creatorRevenue': '创作者收入',
 
   'tokenDetail.dexProgress': 'DEX 上线进度',
+  'tokenDetail.dexLiquidityPool': 'DEX 流动性池',
+  'tokenDetail.liquidity': '流动性',
+  'tokenDetail.lpTotalValue': 'LP 总价值',
+  'tokenDetail.lpBurned': '🔒 LP 代币已销毁至黑洞地址',
+  'tokenDetail.loadingLpInfo': '加载流动性池信息...',
   'tokenDetail.reserve': '储备金',
   'tokenDetail.alreadyListed': '✅ 已上线 Uniswap',
   'tokenDetail.remaining': 'USDC 距离DEX上线',
@@ -1094,6 +1099,11 @@ export const enTranslations: TranslationKeys = {
   'portfolio.creatorRevenue': 'Creator Revenue',
 
   'tokenDetail.dexProgress': 'DEX Listing Progress',
+  'tokenDetail.dexLiquidityPool': 'DEX Liquidity Pool',
+  'tokenDetail.liquidity': 'Liquidity',
+  'tokenDetail.lpTotalValue': 'LP Total Value',
+  'tokenDetail.lpBurned': '🔒 LP tokens burned to dead address',
+  'tokenDetail.loadingLpInfo': 'Loading liquidity pool info...',
   'tokenDetail.reserve': 'Reserve',
   'tokenDetail.alreadyListed': '✅ Already listed on Uniswap',
   'tokenDetail.remaining': 'USDC remaining to DEX listing',
