@@ -378,8 +378,7 @@ export default function TokenDetail() {
   }, [sellAmount, allowanceData])
 
   const isListed = isListedData ?? tokenData?.isListedOnDex ?? false
-  const dexPairReady = isListed && tokenData && tokenData.reserveUsdc === BigInt(0)
-  const tradeMode = (isListed && dexPairReady) ? 'external' as const : 'internal' as const
+  const tradeMode = isListed ? 'external' as const : 'internal' as const
 
   const { data: dexRouterData } = useReadContract({
     address: bondingCurveAddress,
@@ -716,24 +715,6 @@ export default function TokenDetail() {
     } catch (e) { console.error('DEX Approve failed', e) }
   }, [tokenAddress, dexRouter, sellAmount, writeContractAsync, chainId])
 
-  const handleListOnDex = useCallback(() => {
-    setTxError('')
-    if (!tokenAddress) return
-    try {
-      writeContractAsync({
-        address: bondingCurveAddress,
-        abi: BONDING_CURVE_ABI,
-        functionName: 'listOnDex',
-        args: [tokenAddress],
-        chainId,
-        gas: 10_000_000n,
-      } as any).catch((err: any) => {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-      })
-    } catch (e) { console.error('List on DEX failed', e) }
-  }, [tokenAddress, bondingCurveAddress, writeContractAsync, chainId])
-
   const handleDexSell = useCallback(() => {
     setTxError('')
     if (!sellAmount || !tokenAddress || !dexRouter || !dexSellPath || dexEstimatedBnb === BigInt(0)) return
@@ -823,8 +804,8 @@ export default function TokenDetail() {
                   <h1 className="font-display font-bold text-2xl">{tokenName}</h1>
                   <span className="text-gray-400">{tokenSymbol}</span>
                   {isListed && (
-                    <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', dexPairReady ? 'bg-neon-green/10 text-neon-green border border-neon-green/30' : 'bg-doge-gold/10 text-doge-gold border border-doge-gold/30')}>
-                      {dexPairReady ? 'DEX' : 'PENDING'}
+                    <span className="px-2 py-0.5 text-xs font-medium bg-neon-green/10 text-neon-green border border-neon-green/30 rounded-full">
+                      DEX
                     </span>
                   )}
                 </div>
@@ -1030,20 +1011,7 @@ export default function TokenDetail() {
               }
             </div>
 
-            {isListed && !dexPairReady ? (
-              <div className="space-y-4">
-                <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-4 text-center">
-                  <p className="text-sm text-doge-gold mb-3">{t('tokenDetail.listOnDexPending')}</p>
-                  <button
-                    className="btn-primary w-full text-center"
-                    onClick={handleListOnDex}
-                    disabled={isWritePending || isConfirming}
-                  >
-                    {isWritePending ? t('common.confirmInWallet') : isConfirming ? t('create.confirming') : t('tokenDetail.listOnDex')}
-                  </button>
-                </div>
-              </div>
-            ) : tradeMode === 'external' ? (
+            {tradeMode === 'external' ? (
               activeTab === 'buy' ? (
                 <div className="space-y-4">
                   <div>
@@ -1370,7 +1338,7 @@ export default function TokenDetail() {
             </div>
           </div>
 
-          {dexPairReady && (
+          {isListed && (
             <div className="card-dark">
               <h3 className="font-display font-semibold mb-3">{t('tokenDetail.longShort')}</h3>
               <div className="grid grid-cols-2 gap-3">
