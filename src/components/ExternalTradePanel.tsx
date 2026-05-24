@@ -41,16 +41,6 @@ const ROUTER_ABI = [
   {
     inputs: [
       { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
-      { internalType: 'address[]', name: 'path', type: 'address[]' },
-    ],
-    name: 'getAmountsOut',
-    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
       { internalType: 'uint256', name: 'amountOutMin', type: 'uint256' },
       { internalType: 'address[]', name: 'path', type: 'address[]' },
       { internalType: 'address', name: 'to', type: 'address' },
@@ -132,6 +122,33 @@ const WUSDC_ABI = [
   },
 ] as const
 
+const FACTORY_ABI = [
+  {
+    type: 'function',
+    name: 'getPair',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }, { type: 'address' }],
+    outputs: [{ type: 'address' }],
+  },
+] as const
+
+const PAIR_ABI = [
+  {
+    type: 'function',
+    name: 'getReserves',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'uint112' }, { type: 'uint112' }, { type: 'uint32' }],
+  },
+  {
+    type: 'function',
+    name: 'token0',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'address' }],
+  },
+] as const
+
 type BuyStep = 'idle' | 'depositing' | 'approving-wusdc' | 'swapping'
 type SellStep = 'idle' | 'approving-token' | 'swapping' | 'withdrawing'
 
@@ -142,6 +159,14 @@ interface ExternalTradePanelProps {
   bondingCurveAddress: `0x${string}`
   chainId: number
   onTxConfirmed?: () => void
+}
+
+function quote(amountIn: bigint, reserveIn: bigint, reserveOut: bigint): bigint {
+  if (reserveIn === BigInt(0) || reserveOut === BigInt(0) || amountIn === BigInt(0)) return BigInt(0)
+  const amountInWithFee = amountIn * BigInt(997)
+  const numerator = amountInWithFee * reserveOut
+  const denominator = reserveIn * BigInt(1000) + amountInWithFee
+  return numerator / denominator
 }
 
 export default function ExternalTradePanel({
@@ -200,43 +225,69 @@ export default function ExternalTradePanel({
     return [tokenAddress, baseAsset] as `0x${string}`[]
   }, [baseAsset, tokenAddress])
 
+  const { data: dexFactoryAddress } = useReadContract({
+    address: dexRouter,
+    abi: [{ type: 'function', name: 'factory', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+    functionName: 'factory',
+    chainId,
+    query: { enabled: !!dexRouter },
+  })
+
+  const { data: dexFactoryPair } = useReadContract({
+    address: dexFactoryAddress as `0x${string}` | undefined,
+    abi: FACTORY_ABI,
+    functionName: 'getPair',
+    args: baseAsset && tokenAddress ? [baseAsset, tokenAddress] : undefined,
+    chainId,
+    query: { enabled: !!dexFactoryAddress && !!baseAsset && !!tokenAddress },
+  })
+
+  const lpPairAddress = dexFactoryPair as `0x${string}` | undefined
+
+  const { data: pairToken0 } = useReadContract({
+    address: lpPairAddress,
+    abi: PAIR_ABI,
+    functionName: 'token0',
+    chainId,
+    query: { enabled: !!lpPairAddress },
+  })
+
+  const { data: dexReserves } = useReadContract({
+    address: lpPairAddress,
+    abi: PAIR_ABI,
+    functionName: 'getReserves',
+    chainId,
+    query: { enabled: !!lpPairAddress },
+  })
+
+  const lpReserves = useMemo(() => {
+    if (!dexReserves || !baseAsset || !tokenAddress) return null
+    const [r0, r1] = dexReserves as [bigint, bigint, number]
+    const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
+    const reserveUsdc = tokenIsToken0 ? BigInt(r1) : BigInt(r0)
+    const reserveTokens = tokenIsToken0 ? BigInt(r0) : BigInt(r1)
+    return { reserveUsdc, reserveTokens }
+  }, [dexReserves, baseAsset, tokenAddress])
+
   const dexBuyAmountIn = useMemo(() => {
     if (!buyAmount || Number(buyAmount) <= 0) return BigInt(0)
     try { return parseEther(buyAmount) } catch { return BigInt(0) }
   }, [buyAmount])
-
-  const { data: dexBuyAmountsOut } = useReadContract({
-    address: dexRouter,
-    abi: ROUTER_ABI,
-    functionName: 'getAmountsOut',
-    args: dexBuyAmountIn > BigInt(0) && dexBuyPath ? [dexBuyAmountIn, dexBuyPath] : undefined,
-    chainId,
-    query: { enabled: dexBuyAmountIn > BigInt(0) && !!dexRouter && !!dexBuyPath },
-  })
 
   const dexSellAmountIn = useMemo(() => {
     if (!sellAmount || Number(sellAmount) <= 0) return BigInt(0)
     try { return parseEther(sellAmount) } catch { return BigInt(0) }
   }, [sellAmount])
 
-  const { data: dexSellAmountsOut } = useReadContract({
-    address: dexRouter,
-    abi: ROUTER_ABI,
-    functionName: 'getAmountsOut',
-    args: dexSellAmountIn > BigInt(0) && dexSellPath ? [dexSellAmountIn, dexSellPath] : undefined,
-    chainId,
-    query: { enabled: dexSellAmountIn > BigInt(0) && !!dexRouter && !!dexSellPath },
-  })
-
   const dexEstimatedTokens = useMemo(() => {
-    if (!dexBuyAmountsOut || !Array.isArray(dexBuyAmountsOut)) return BigInt(0)
-    return BigInt(dexBuyAmountsOut[dexBuyAmountsOut.length - 1] ?? 0n)
-  }, [dexBuyAmountsOut])
+    if (!lpReserves || dexBuyAmountIn === BigInt(0)) return BigInt(0)
+    return quote(dexBuyAmountIn, lpReserves.reserveUsdc, lpReserves.reserveTokens)
+  }, [lpReserves, dexBuyAmountIn])
 
   const dexEstimatedUsdc = useMemo(() => {
-    if (!dexSellAmountsOut || !Array.isArray(dexSellAmountsOut)) return BigInt(0)
-    return BigInt(dexSellAmountsOut[dexSellAmountsOut.length - 1] ?? 0n)
-  }, [dexSellAmountsOut])
+    if (!lpReserves || dexSellAmountIn === BigInt(0)) return BigInt(0)
+    return quote(dexSellAmountIn, lpReserves.reserveTokens, lpReserves.reserveUsdc)
+  }, [lpReserves, dexSellAmountIn])
 
   const { data: userTokenBalance, refetch: refetchBalance } = useReadContract({
     address: tokenAddress,
