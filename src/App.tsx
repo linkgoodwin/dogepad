@@ -11,8 +11,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"))
 const DaoVote = lazy(() => import("@/pages/DaoVote"))
 const CreateToken = lazy(() => import("@/pages/CreateToken"))
 const TokenDetail = lazy(() => import("@/pages/TokenDetail"))
-const LendMarket = lazy(() => import("@/pages/LendMarket"))
-const LendDetail = lazy(() => import("@/pages/LendDetail"))
+const PerpetualPage = lazy(() => import("@/pages/PerpetualPage"))
 const Portfolio = lazy(() => import("@/pages/Portfolio"))
 const HowToPlay = lazy(() => import("@/pages/HowToPlay"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
@@ -50,9 +49,7 @@ export default function App() {
           <Route path="/dao" element={<DaoVote />} />
           <Route path="/create" element={<CreateToken />} />
           <Route path="/token/:address" element={<TokenDetail />} />
-          <Route path="/lend" element={<LendMarket />} />
-          <Route path="/lend/:mode" element={<LendDetail />} />
-          <Route path="/lend/:mode/:tokenAddress" element={<LendDetail />} />
+          <Route path="/perpetual" element={<PerpetualPage />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/guide" element={<HowToPlay />} />
         </Route>

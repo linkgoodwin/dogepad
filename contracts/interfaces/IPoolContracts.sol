@@ -24,22 +24,6 @@ interface IBuyAndBurnEngine {
     function totalBurned(address token) external view returns (uint256);
 }
 
-interface ILongPool {
-    function deposit() external payable;
-    function borrow(address token, uint256 tokenAmount, uint256 bnbAmount) external;
-    function repay() external payable;
-    function withdraw(uint256 amount) external;
-    function getHealthFactor(address user) external view returns (uint256);
-}
-
-interface IShortPool {
-    function borrow(address token, uint256 tokenAmount) external payable;
-    function repay(address token, uint256 tokenAmount) external;
-    function getUtilization(address token) external view returns (uint256);
-    function getDailyRate(address token) external view returns (uint256);
-    function getHealthFactor(address user, address token) external view returns (uint256);
-}
-
 interface IBondingCurve {
     function buy(address token) external payable;
     function sell(address token, uint256 tokenAmount) external;

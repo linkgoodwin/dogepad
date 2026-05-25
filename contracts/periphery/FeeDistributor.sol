@@ -40,13 +40,13 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     address public dexRouter;
     address public wrappedNative;
     address public buyAndBurnEngine;
-    address public longPool;
+    address public perpetualPool;
 
     uint256 public totalStakedDoge;
     uint256 public accRewardPerShare;
     uint256 public dividendRatio = 30e16;
     uint256 public burnRatio = 20e16;
-    uint256 public lendingPoolRatio = 50e16;
+    uint256 public perpPoolRatio = 50e16;
 
     uint256 public totalDistributed;
     uint256 public totalBurned;
@@ -62,21 +62,21 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     event DividendClaimed(address indexed user, uint256 amount);
     event FeesReceived(uint256 usdcAmount);
     event DogeBurned(uint256 usdcUsed, uint256 dogeBurned);
-    event LendingPoolFunded(uint256 usdcAmount);
+    event PerpPoolFunded(uint256 usdcAmount);
 
     constructor(
         address _dogeToken,
         address _dexRouter,
         address _buyAndBurnEngine,
         address _wrappedNative,
-        address _longPool
+        address _perpetualPool
     ) Ownable(msg.sender) {
-        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
+        require(dividendRatio + burnRatio + perpPoolRatio == 1e18, "ratios must sum to 100%");
         dogeToken = IERC20(_dogeToken);
         dexRouter = _dexRouter;
         wrappedNative = _wrappedNative;
         buyAndBurnEngine = _buyAndBurnEngine;
-        longPool = _longPool;
+        perpetualPool = _perpetualPool;
     }
 
     function stakeDoge(uint256 amount, uint256 duration) external nonReentrant whenNotPaused {
@@ -154,19 +154,19 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     function setDividendRatio(uint256 _dividendRatio) external onlyOwner {
         require(_dividendRatio <= 1e18, "too high");
         dividendRatio = _dividendRatio;
-        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
+        require(dividendRatio + burnRatio + perpPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
     function setBurnRatio(uint256 _burnRatio) external onlyOwner {
         require(_burnRatio <= 1e18, "too high");
         burnRatio = _burnRatio;
-        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
+        require(dividendRatio + burnRatio + perpPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
-    function setLendingPoolRatio(uint256 _lendingPoolRatio) external onlyOwner {
-        require(_lendingPoolRatio <= 1e18, "too high");
-        lendingPoolRatio = _lendingPoolRatio;
-        require(dividendRatio + burnRatio + lendingPoolRatio == 1e18, "ratios must sum to 100%");
+    function setPerpPoolRatio(uint256 _perpPoolRatio) external onlyOwner {
+        require(_perpPoolRatio <= 1e18, "too high");
+        perpPoolRatio = _perpPoolRatio;
+        require(dividendRatio + burnRatio + perpPoolRatio == 1e18, "ratios must sum to 100%");
     }
 
     function setBuyAndBurnEngine(address _engine) external onlyOwner {
@@ -177,8 +177,8 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
         dogeToken = IERC20(_dogeToken);
     }
 
-    function setLongPool(address _longPool) external onlyOwner {
-        longPool = _longPool;
+    function setPerpetualPool(address _perpetualPool) external onlyOwner {
+        perpetualPool = _perpetualPool;
     }
 
     function pause() external onlyOwner {
@@ -202,7 +202,7 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
     function _distribute(uint256 amount) internal {
         uint256 dividendAmount = (amount * dividendRatio) / 1e18;
         uint256 burnAmount = (amount * burnRatio) / 1e18;
-        uint256 lendingPoolAmount = (amount * lendingPoolRatio) / 1e18;
+        uint256 perpPoolAmount = (amount * perpPoolRatio) / 1e18;
 
         if (dividendAmount > 0 && totalStakedDoge > 0) {
             accRewardPerShare += (dividendAmount * 1e18) / totalStakedDoge;
@@ -214,11 +214,11 @@ contract FeeDistributor is ReentrancyGuard, Ownable, Pausable {
             totalBurned += burnAmount;
         }
 
-        if (lendingPoolAmount > 0 && longPool != address(0)) {
-            (bool sent,) = payable(longPool).call{value: lendingPoolAmount}("");
-            require(sent, "lending pool transfer failed");
-            totalLent += lendingPoolAmount;
-            emit LendingPoolFunded(lendingPoolAmount);
+        if (perpPoolAmount > 0 && perpetualPool != address(0)) {
+            (bool sent,) = payable(perpetualPool).call{value: perpPoolAmount}("");
+            require(sent, "perp pool transfer failed");
+            totalLent += perpPoolAmount;
+            emit PerpPoolFunded(perpPoolAmount);
         }
 
         emit FeesReceived(amount);

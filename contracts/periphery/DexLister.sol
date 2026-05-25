@@ -36,24 +36,21 @@ interface IWUSDC {
     function deposit() external payable;
 }
 
-interface IShortPoolDeposit {
+interface IPerpetualPoolDeposit {
     function depositTokens(address token, uint256 amount) external;
+    function depositUsdcToInsurance(address token) external payable;
 }
 
 interface ICreatorRewardManager {
     function createVesting(address asset, address beneficiary, uint256 amount, uint256 cliffDuration, uint256 vestingDuration) external;
 }
 
-interface ILongPoolDeposit {
-    function deposit(address token) external payable;
-}
-
 struct DexListingParams {
     address token;
     uint256 totalUsdc;
     uint256 lpTokens;
-    uint256 longPoolUsdc;
-    uint256 shortPoolTokens;
+    uint256 perpPoolUsdc;
+    uint256 perpPoolTokens;
     uint256 burnEngineUsdc;
     uint256 platformUsdc;
     uint256 creatorTokens;
@@ -74,8 +71,7 @@ contract DexLister is Ownable {
     address public dexRouter;
     bool public isXyloRouter;
     address public baseAsset;
-    address public longPool;
-    address public shortPool;
+    address public perpetualPool;
     address public feeDistributor;
     address public buyAndBurnEngine;
     address public creatorRewardManager;
@@ -86,8 +82,8 @@ contract DexLister is Ownable {
     uint256 public constant CREATOR_LP_VESTING = 180 days;
 
     uint256 public lpUsdcRatio = 70;
-    uint256 public longPoolRatio = 25;
-    uint256 public shortPoolTokenRatio = 30;
+    uint256 public perpPoolUsdcRatio = 25;
+    uint256 public perpPoolTokenRatio = 30;
     uint256 public burnEngineRatio = 0;
     uint256 public platformRatio = 5;
     uint256 public lpTokenRatio = 60;
@@ -113,9 +109,8 @@ contract DexLister is Ownable {
         baseAsset = _baseAsset;
     }
 
-    function setPools(address _longPool, address _shortPool) external onlyOwner {
-        longPool = _longPool;
-        shortPool = _shortPool;
+    function setPerpetualPool(address _perpetualPool) external onlyOwner {
+        perpetualPool = _perpetualPool;
     }
 
     function setFeeDistributor(address _feeDistributor) external onlyOwner {
@@ -136,17 +131,17 @@ contract DexLister is Ownable {
 
     function setRatios(
         uint256 _lpUsdc,
-        uint256 _long,
-        uint256 _shortToken,
+        uint256 _perpUsdc,
+        uint256 _perpToken,
         uint256 _burnEngine,
         uint256 _platform,
         uint256 _lpToken
     ) external onlyOwner {
-        if (_lpUsdc + _long + _burnEngine + _platform != 100) revert();
-        if (_lpToken + _shortToken > 100) revert();
+        if (_lpUsdc + _perpUsdc + _burnEngine + _platform != 100) revert();
+        if (_lpToken + _perpToken > 100) revert();
         lpUsdcRatio = _lpUsdc;
-        longPoolRatio = _long;
-        shortPoolTokenRatio = _shortToken;
+        perpPoolUsdcRatio = _perpUsdc;
+        perpPoolTokenRatio = _perpToken;
         burnEngineRatio = _burnEngine;
         platformRatio = _platform;
         lpTokenRatio = _lpToken;
@@ -156,7 +151,7 @@ contract DexLister is Ownable {
         if (msg.sender != bondingCurve && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
         uint256 lpUsdc = (p.totalUsdc * lpUsdcRatio) / 100;
 
-        IERC20(p.token).safeTransferFrom(msg.sender, address(this), p.lpTokens + p.shortPoolTokens + p.creatorTokens);
+        IERC20(p.token).safeTransferFrom(msg.sender, address(this), p.lpTokens + p.perpPoolTokens + p.creatorTokens);
 
         BondingCurveToken(p.token).setSkipHoldingLimit(true);
 
@@ -214,13 +209,13 @@ contract DexLister is Ownable {
             );
         }
 
-        if (p.longPoolUsdc > 0 && longPool != address(0)) {
-            ILongPoolDeposit(longPool).deposit{value: p.longPoolUsdc}(p.token);
+        if (p.perpPoolUsdc > 0 && perpetualPool != address(0)) {
+            IPerpetualPoolDeposit(perpetualPool).depositUsdcToInsurance{value: p.perpPoolUsdc}(p.token);
         }
 
-        if (p.shortPoolTokens > 0 && shortPool != address(0)) {
-            IERC20(p.token).forceApprove(shortPool, p.shortPoolTokens);
-            IShortPoolDeposit(shortPool).depositTokens(p.token, p.shortPoolTokens);
+        if (p.perpPoolTokens > 0 && perpetualPool != address(0)) {
+            IERC20(p.token).forceApprove(perpetualPool, p.perpPoolTokens);
+            IPerpetualPoolDeposit(perpetualPool).depositTokens(p.token, p.perpPoolTokens);
         }
 
         if (p.burnEngineUsdc > 0 && buyAndBurnEngine != address(0)) {
@@ -260,9 +255,9 @@ contract DexLister is Ownable {
         }
     }
 
-    function longPoolUsdcAmt(uint256 totalUsdc) external view returns (uint256) {
-        uint256 base = (totalUsdc * longPoolRatio) / 100;
-        uint256 accounted = (totalUsdc * (lpUsdcRatio + longPoolRatio + burnEngineRatio + platformRatio)) / 100;
+    function perpPoolUsdcAmt(uint256 totalUsdc) external view returns (uint256) {
+        uint256 base = (totalUsdc * perpPoolUsdcRatio) / 100;
+        uint256 accounted = (totalUsdc * (lpUsdcRatio + perpPoolUsdcRatio + burnEngineRatio + platformRatio)) / 100;
         if (accounted < totalUsdc) {
             base += totalUsdc - accounted;
         }

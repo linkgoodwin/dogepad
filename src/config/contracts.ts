@@ -576,147 +576,6 @@ export const BONDING_CURVE_ABI = [
   },
 ] as const
 
-export const LONG_POOL_ABI = [
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'deposit',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'uint256', name: 'amount', type: 'uint256' },
-    ],
-    name: 'withdraw',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'claimYield',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: '', type: 'address' },
-      { internalType: 'address', name: '', type: 'address' },
-    ],
-    name: 'deposits',
-    outputs: [
-      { internalType: 'uint256', name: 'amount', type: 'uint256' },
-      { internalType: 'uint256', name: 'rewardDebt', type: 'uint256' },
-      { internalType: 'uint256', name: 'pendingRewards', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: '', type: 'address' },
-      { internalType: 'address', name: '', type: 'address' },
-    ],
-    name: 'borrows',
-    outputs: [
-      { internalType: 'uint256', name: 'collateralAmount', type: 'uint256' },
-      { internalType: 'uint256', name: 'borrowAmount', type: 'uint256' },
-      { internalType: 'uint256', name: 'borrowTimestamp', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'tokenDeposits',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'tokenBorrows',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getUtilization',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getDailyRate',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'address', name: 'user', type: 'address' },
-    ],
-    name: 'getLTV',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'address', name: 'user', type: 'address' },
-    ],
-    name: 'pendingYield',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'address', name: 'user', type: 'address' },
-    ],
-    name: 'getHealthFactor',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'address', name: 'borrower', type: 'address' },
-    ],
-    name: 'liquidate',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'collateralToken', type: 'address' },
-      { internalType: 'uint256', name: 'collateralAmount', type: 'uint256' },
-      { internalType: 'uint256', name: 'borrowBnb', type: 'uint256' },
-    ],
-    name: 'borrow',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'repay',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-] as const
-
 export const FEE_DISTRIBUTOR_ABI = [
   {
     inputs: [
@@ -800,7 +659,7 @@ export const FEE_DISTRIBUTOR_ABI = [
   },
   {
     inputs: [],
-    name: 'lendingPoolRatio',
+    name: 'perpPoolRatio',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -833,102 +692,6 @@ export const FEE_DISTRIBUTOR_ABI = [
   },
 ] as const
 
-export const SHORT_POOL_ABI = [
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'tokenAvailable',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'tokenBorrowed',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getUtilization',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getDailyRate',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'uint256', name: 'tokenAmount', type: 'uint256' },
-    ],
-    name: 'borrow',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'token', type: 'address' },
-      { internalType: 'uint256', name: 'tokenAmount', type: 'uint256' },
-    ],
-    name: 'repay',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: '', type: 'address' },
-      { internalType: 'address', name: '', type: 'address' },
-    ],
-    name: 'positions',
-    outputs: [
-      { internalType: 'uint256', name: 'collateralBnb', type: 'uint256' },
-      { internalType: 'uint256', name: 'borrowedTokens', type: 'uint256' },
-      { internalType: 'uint256', name: 'borrowTimestamp', type: 'uint256' },
-      { internalType: 'bool', name: 'isActive', type: 'bool' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'user', type: 'address' },
-      { internalType: 'address', name: 'token', type: 'address' },
-    ],
-    name: 'getHealthFactor',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'user', type: 'address' },
-      { internalType: 'address', name: 'token', type: 'address' },
-    ],
-    name: 'calculateInterest',
-    outputs: [{ internalType: 'uint256', name: 'bnbInterest', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'borrower', type: 'address' },
-      { internalType: 'address', name: 'token', type: 'address' },
-    ],
-    name: 'liquidate',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const
-
 const BSC_MAINNET = 56
 const BSC_TESTNET = 97
 const MONAD_TESTNET = 10143
@@ -951,8 +714,7 @@ export interface ContractAddresses {
   launchDAO: `0x${string}`
   bondingCurve: `0x${string}`
   dexLister: `0x${string}`
-  longPool: `0x${string}`
-  shortPool: `0x${string}`
+  perpetualPool: `0x${string}`
   buyAndBurn: `0x${string}`
   priceOracle: `0x${string}`
   feeDistributor: `0x${string}`
@@ -967,8 +729,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     launchDAO: resolveAddr('VITE_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xb6eb6E4AD179B8296b48b850cbb34ce40846F866'),
     bondingCurve: resolveAddr('VITE_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x0248D9924E873A962A7452b840D065bFf7C4e7fA'),
     dexLister: resolveAddr('VITE_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
-    longPool: resolveAddr('VITE_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0x63414dE92d6375C4bc7f8A70F8d49652f4d86FFa'),
-    shortPool: resolveAddr('VITE_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x7019F4498de895FBF489AF6Da13085Ad565871c4'),
+    perpetualPool: resolveAddr('VITE_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS'),
     buyAndBurn: resolveAddr('VITE_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x91FbC0E3d92ce43CdFa4085e45547dc34f3bE5ca'),
     priceOracle: resolveAddr('VITE_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0x7857dc9866f26926E505B067C7A8e323D863F938'),
     feeDistributor: resolveAddr('VITE_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0xD0bf15a8314b2eD9CEa18CfBC7127A169fE44E67'),
@@ -981,8 +742,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     launchDAO: resolveAddr('VITE_MAINNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xB8EBdD1278BA266f8261812B04c4B174FEF8095e'),
     bondingCurve: resolveAddr('VITE_MAINNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x9440736180F32723b4E8c7DbcA4CFa288935F355'),
     dexLister: resolveAddr('VITE_MAINNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
-    longPool: resolveAddr('VITE_MAINNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0x28b6322bb488706a7487D74b0106A00AA584A228'),
-    shortPool: resolveAddr('VITE_MAINNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x709bdBC6dC24276D10Dca79b732bB7F018398946'),
+    perpetualPool: resolveAddr('VITE_MAINNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS'),
     buyAndBurn: resolveAddr('VITE_MAINNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x63940E8B9Df7608a689798af42d156876b753802'),
     priceOracle: resolveAddr('VITE_MAINNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0xbc91660D4a4a4642A891230BF9DDF40B3d2A3E50'),
     feeDistributor: resolveAddr('VITE_MAINNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x7736C3E7434D2BA964e65254ceBEf5273d381c0d'),
@@ -995,8 +755,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     launchDAO: resolveAddr('VITE_MONAD_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS'),
     bondingCurve: resolveAddr('VITE_MONAD_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS'),
     dexLister: resolveAddr('VITE_MONAD_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS'),
-    longPool: resolveAddr('VITE_MONAD_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS'),
-    shortPool: resolveAddr('VITE_MONAD_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS'),
+    perpetualPool: resolveAddr('VITE_MONAD_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS'),
     buyAndBurn: resolveAddr('VITE_MONAD_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS'),
     priceOracle: resolveAddr('VITE_MONAD_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS'),
     feeDistributor: resolveAddr('VITE_MONAD_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS'),
@@ -1006,18 +765,17 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_MONAD_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xe7026f69C6101873a4C774F5f9F220d7EAD9E052'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x2ab11aE49f186eeAcAcBB09E986589539BF935AE'),
-    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x928A176760b67E101e893004CD40B89B272C2D05'),
-    longPool: resolveAddr('VITE_ARC_TESTNET_LONG_POOL_ADDRESS', 'VITE_LONG_POOL_ADDRESS', '0x196090E7268BE15df113B199BAD2EE83F6000942'),
-    shortPool: resolveAddr('VITE_ARC_TESTNET_SHORT_POOL_ADDRESS', 'VITE_SHORT_POOL_ADDRESS', '0x4765D504B335adeb5Cb51251361e0deA6301FCE4'),
-    buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0xcA8235B33cBFEcE89e1a473b1905f6514B583845'),
-    priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0x45bd221f9D39dE7c6EEF5c53e535A953958efB35'),
-    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0xb6B8dA185DE85E2Eb3d64De665038903832D59E5'),
-    creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0xD4484D3A6F5b27Ce859204DfA56c890b0D893137'),
-    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x1E4Ff2ae8d599Df67b5F5C5E8CA874B6003Dce02'),
-    simpleFactory: resolveAddr('VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS', 'VITE_SIMPLE_FACTORY_ADDRESS', '0xb9c4C8dDFa02A712CDC5418F0cd2e3e6a78627E5'),
-    simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x442E0af4eFD4eE0AB8aAeCB2b3E1681438aBFE1A'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xB58581e4651B75E2866a8F97D90f27C49b5668BA'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x6E38185ec618EFC768C7A341D039E0d4DfbF1840'),
+    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x534B1e8BA1a5F458206A796110287031cbE0bE6d'),
+    perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0x47DD50968541e71F98E79eFe59Ac373739378B1E'),
+    buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0xD6499a86E4AE4874d477E7d9EF2e7320027BD9e3'),
+    priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0xBDd16C6A12049D9E9342183daF28F5eF8ec0c3B9'),
+    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x644d6b97FD0e6464146fA7dd2F0B2851186Ef593'),
+    creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0xD162F52f3B6B7179b3ED970F1D8fd1b2064C0Ae4'),
+    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x6B3b4311Bc306016e8B13C8eAe48B798a0dCFE8b'),
+    simpleFactory: resolveAddr('VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS', 'VITE_SIMPLE_FACTORY_ADDRESS', '0x698430D097bF78bCe8DEc283c94589f2A42BA613'),
+    simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x18F754fCfCd00fee999897Fc916A98Aad8a13b86'),
   },
 }
 

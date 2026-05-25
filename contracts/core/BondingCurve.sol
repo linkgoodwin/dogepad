@@ -77,8 +77,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     address public dexRouter;
     bool public isXyloRouter;
     address public baseAsset;
-    address public longPool;
-    address public shortPool;
+    address public perpetualPool;
     address public feeDistributor;
     address public buyAndBurnEngine;
     address public priceOracle;
@@ -419,7 +418,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         uint256 creatorTokens = (totalTokens * creatorTokenBps) / 10000;
 
         uint256 lpTokens = (totalTokens * DexLister(dexLister).lpTokenRatio()) / 100;
-        uint256 shortPoolTokens = (totalTokens * DexLister(dexLister).shortPoolTokenRatio()) / 100;
+        uint256 perpPoolTokens = (totalTokens * DexLister(dexLister).perpPoolTokenRatio()) / 100;
 
         info.reserveUsdc = 0;
 
@@ -429,8 +428,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
             token: token,
             totalUsdc: totalUsdc,
             lpTokens: lpTokens,
-            longPoolUsdc: DexLister(dexLister).longPoolUsdcAmt(totalUsdc),
-            shortPoolTokens: shortPoolTokens,
+            perpPoolUsdc: DexLister(dexLister).perpPoolUsdcAmt(totalUsdc),
+            perpPoolTokens: perpPoolTokens,
             burnEngineUsdc: DexLister(dexLister).burnEngineUsdcAmt(totalUsdc),
             platformUsdc: DexLister(dexLister).platformUsdcAmt(totalUsdc),
             creatorTokens: creatorTokens,
@@ -473,9 +472,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         return (info.tokenAddress, info.creator, info.totalSupply, info.reserveUsdc, info.tokensSold, info.isListedOnDex, info.dexListingThreshold, info.metadataURI);
     }
 
-    function setPools(address _longPool, address _shortPool) external onlyOwner {
-        longPool = _longPool;
-        shortPool = _shortPool;
+    function setPerpetualPool(address _perpetualPool) external onlyOwner {
+        perpetualPool = _perpetualPool;
     }
 
     function setCreationFee(uint256 _fee) external onlyOwner {

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Wallet, ArrowRight, Landmark, Coins, Sparkles, Loader2, HandCoins, RotateCcw, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther } from 'viem'
-import { LAUNCH_DAO_ABI, LONG_POOL_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
+import { LAUNCH_DAO_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
 import { cn, parseMetadata, sanitizeHref, formatUsdc, formatTokenAmount } from '@/lib/utils'
 import { Link } from 'react-router-dom'
@@ -25,10 +25,8 @@ export default function Portfolio() {
   const nativeSymbol = getNativeSymbol(chainId)
 
   const daoAddress = getContractAddress(chainId, 'launchDAO')
-  const longPoolAddress = getContractAddress(chainId, 'longPool')
   const feeDistributorAddress = getContractAddress(chainId, 'feeDistributor')
   const daoReady = !isZeroAddress(daoAddress)
-  const longPoolReady = !isZeroAddress(longPoolAddress)
   const feeReady = !isZeroAddress(feeDistributorAddress)
 
   const { writeContractAsync, data: txHash, isPending: isWritePending } = useWriteContract()
@@ -250,24 +248,6 @@ export default function Portfolio() {
 
   const NATIVE_TOKEN_ADDR = '0x0000000000000000000000000000000000000000' as `0x${string}`
 
-  const { data: userDepositData } = useReadContract({
-    address: longPoolAddress,
-    abi: LONG_POOL_ABI,
-    functionName: 'deposits',
-    args: userAddress ? [NATIVE_TOKEN_ADDR, userAddress] : undefined,
-    chainId,
-    query: { enabled: longPoolReady && !!userAddress },
-  })
-
-  const { data: userYieldData } = useReadContract({
-    address: longPoolAddress,
-    abi: LONG_POOL_ABI,
-    functionName: 'pendingYield',
-    args: userAddress ? [NATIVE_TOKEN_ADDR, userAddress] : undefined,
-    chainId,
-    query: { enabled: longPoolReady && !!userAddress },
-  })
-
   const { data: feeStakedDogeData } = useReadContract({
     address: feeDistributorAddress,
     abi: FEE_DISTRIBUTOR_ABI,
@@ -286,17 +266,12 @@ export default function Portfolio() {
     query: { enabled: feeReady && !!userAddress },
   })
 
-  const lendingDeposit = userDepositData ? Number(formatEther((userDepositData as [bigint, bigint, bigint])[0])) : 0
-  const pendingYield = userYieldData ? Number(formatEther(userYieldData as bigint)) : 0
-  const lendingYieldEarned = 0
-  const lendingYieldClaimed = 0
   const feeStakedDoge = feeStakedDogeData ? Number(formatEther(feeStakedDogeData as bigint)) : 0
   const feePendingDividend = feePendingDivData ? Number(formatEther(feePendingDivData as bigint)) : 0
 
   const totalStakingBnb = parsedStakePositions.filter(p => p.tokenSymbol === nativeSymbol && !p.isWithdrawn).reduce((sum, p) => sum + p.amount, 0)
   const totalSubBnbValue = mySubscriptions.reduce((sum, s) => sum + s.bnbAmount, 0)
-  const totalValue = totalStakingBnb + totalSubBnbValue + lendingDeposit
-  const totalEarnings = pendingYield + (lendingYieldEarned - lendingYieldClaimed)
+  const totalValue = totalStakingBnb + totalSubBnbValue
   const hasPositions = totalValue > 0 || parsedStakePositions.length > 0 || myCandidates.length > 0 || mySubscriptions.length > 0
 
   const handleClaimSubscription = (candidateId: number) => {
@@ -393,15 +368,15 @@ export default function Portfolio() {
         </div>
         <div className="card-dark">
           <p className="text-xs text-gray-400 mb-1">{t('portfolio.totalPnl')}</p>
-          <p className={cn('text-3xl font-display font-bold', totalEarnings >= 0 ? 'text-neon-green' : 'text-neon-red')}>
-            {totalEarnings >= 0 ? '+' : ''}{formatUsdc(totalEarnings)} {nativeSymbol}
+          <p className="text-3xl font-display font-bold text-neon-green">
+            {formatUsdc(0)} {nativeSymbol}
           </p>
-          <span className={cn('text-sm font-medium', totalEarnings >= 0 ? 'text-neon-green' : 'text-neon-red')}>{t('portfolio.earningsLabel')}</span>
+          <span className="text-sm font-medium text-neon-green">{t('portfolio.earningsLabel')}</span>
         </div>
         <div className="card-dark">
           <p className="text-xs text-gray-400 mb-1">{t('portfolio.activePositions')}</p>
           <p className="text-3xl font-display font-bold text-white">
-            {parsedStakePositions.filter(p => !p.isWithdrawn).length + (lendingDeposit > 0 ? 1 : 0) + (feeStakedDoge > 0 ? 1 : 0) + myCandidates.length + mySubscriptions.filter(s => s.isActive && !s.hasClaimed && !s.hasRefunded).length}
+            {parsedStakePositions.filter(p => !p.isWithdrawn).length + (feeStakedDoge > 0 ? 1 : 0) + myCandidates.length + mySubscriptions.filter(s => s.isActive && !s.hasClaimed && !s.hasRefunded).length}
           </p>
           <p className="text-sm text-gray-400 mt-1">{t('portfolio.tokensHeld')}</p>
         </div>
@@ -634,27 +609,10 @@ export default function Portfolio() {
       <div className="card-dark">
         <h2 className="font-display font-semibold text-lg flex items-center gap-2 mb-4">
           <Landmark className="w-5 h-5 text-neon-purple" />
-          {t('portfolio.lendingPositions')}
+          {t('nav.perpetual')}
         </h2>
-        {lendingDeposit > 0 || feeStakedDoge > 0 ? (
+        {feeStakedDoge > 0 ? (
           <div className="space-y-3">
-            {lendingDeposit > 0 && (
-              <div className="bg-dark-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-neon-purple/20 flex items-center justify-center text-sm font-bold text-neon-purple">B</div>
-                    <div>
-                      <p className="font-display font-semibold">{nativeSymbol} {t('portfolio.depositLabel')}</p>
-                      <p className="text-xs text-gray-400">{t('portfolio.longPoolLabel')}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-display font-bold">{formatUsdc(lendingDeposit)} {nativeSymbol}</p>
-                    <p className="text-xs text-neon-green">+{formatUsdc(pendingYield)} {nativeSymbol} {t('portfolio.pendingLabel')}</p>
-                  </div>
-                </div>
-              </div>
-            )}
             {feeStakedDoge > 0 && (
               <div className="bg-dark-700 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -674,16 +632,15 @@ export default function Portfolio() {
                 </div>
               </div>
             )}
-            <Link to="/lend" className="inline-flex items-center gap-1 text-neon-green text-sm hover:underline">
+            <Link to="/perpetual" className="inline-flex items-center gap-1 text-neon-green text-sm hover:underline">
               {t('common.detail')} <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
         ) : (
           <div className="bg-dark-700 rounded-lg p-8 text-center">
             <Landmark className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400 mb-2">{t('portfolio.noLending')}</p>
-            <p className="text-sm text-gray-500 mb-4">{t('portfolio.noLendingDesc')}</p>
-            <Link to="/lend" className="btn-primary inline-block">{t('portfolio.goLend')}</Link>
+            <p className="text-gray-400 mb-2">{t('nav.perpetual')}</p>
+            <Link to="/perpetual" className="btn-primary inline-block">{t('nav.perpetual')}</Link>
           </div>
         )}
       </div>
@@ -703,8 +660,8 @@ export default function Portfolio() {
             )}
           </div>
           <div className="bg-dark-700 rounded-lg p-4">
-            <p className="text-xs text-gray-400 mb-1">{t('portfolio.lendingInterest')}</p>
-            <p className="text-xl font-display font-bold text-neon-purple">{formatUsdc(pendingYield)} {nativeSymbol}</p>
+            <p className="text-xs text-gray-400 mb-1">{t('nav.perpetual')}</p>
+            <p className="text-xl font-display font-bold text-neon-purple">0 {nativeSymbol}</p>
           </div>
           <div className="bg-dark-700 rounded-lg p-4">
             <p className="text-xs text-gray-400 mb-1">{t('portfolio.subscriptionsLabel')}</p>

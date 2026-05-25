@@ -15,7 +15,7 @@ export default function Sidebar() {
     { label: t('nav.launch'), icon: Rocket, path: '/launch' },
     { label: t('nav.submitToken'), icon: PlusCircle, path: '/create' },
     { label: t('nav.subscribeStake'), icon: Vote, path: '/dao' },
-    { label: t('nav.lending'), icon: Landmark, path: '/lend' },
+    { label: t('nav.perpetual'), icon: Landmark, path: '/perpetual' },
     { label: t('nav.portfolio'), icon: Wallet, path: '/portfolio' },
     { label: t('nav.howToPlay'), icon: BookOpen, path: '/guide' },
   ]
