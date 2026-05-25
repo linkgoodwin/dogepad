@@ -571,6 +571,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     function _processQueueInternal() internal {
         uint256 today = _today();
         if (dayLaunchCount[today] >= maxLaunchsPerDay) return;
+        if ((block.timestamp % EPOCH_DURATION) / 1 hours < launchHour) return;
 
         _cleanupExpiredQueuedCandidates();
 
