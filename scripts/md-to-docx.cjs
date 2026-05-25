@@ -160,14 +160,14 @@ function buildArchitectureDiagram(cs) {
   });
   const row5 = new TableRow({
     children: [
-      boxCell('LongPool', 'BNB借贷池 (20%BNB)', 2500, layerShading.l3),
+      boxCell('PerpetualPool', '永续借贷池 (20%BNB+10%Token)', 2500, layerShading.l3),
       boxCell('BuyAndBurnEngine', 'FAIR销毁引擎 (10%BNB)', 2500, layerShading.l3),
       boxCell('FeeDistributor', '费用分配 (5%BNB+税)', 2500, layerShading.l3),
     ],
   });
   const row6 = new TableRow({
     children: [
-      boxCell('ShortPool', 'Token借贷/做空 (10%Token)', 2500, layerShading.l3),
+      emptyCell(2500),
       boxCell('PriceOracle', 'TWAP价格预言机', 2500, layerShading.l3),
       boxCell('CreatorRewardManager', '创作者归属管理', 2500, layerShading.l3),
     ],

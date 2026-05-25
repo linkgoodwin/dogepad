@@ -171,42 +171,23 @@ async function main() {
   const feeDistAddr = feeDist.address;
   console.log("FeeDistributor:", feeDistAddr, "(fairToken=ZeroAddress, pending DOGE token)");
 
-  console.log("\n--- Phase 5: Pools ---");
+  console.log("\n--- Phase 5: PerpetualPool ---");
 
-  const LongPool = getFactory("LongPool");
-  const longPool = await LongPool.deploy(expRateModelAddr, linRateModelAddr, priceOracleAddr, deployOverrides);
-  await longPool.deployed();
-  const longPoolAddr = longPool.address;
-  console.log("LongPool:", longPoolAddr);
+  const PerpetualPool = getFactory("PerpetualPool");
+  const perpetualPool = await PerpetualPool.deploy(priceOracleAddr, burnEngineAddr, deployerAddress, deployOverrides);
+  await perpetualPool.deployed();
+  const perpetualPoolAddr = perpetualPool.address;
+  console.log("PerpetualPool:", perpetualPoolAddr);
 
-  const ShortPool = getFactory("ShortPool");
-  const shortPool = await ShortPool.deploy(
-    expRateModelAddr,
-    linRateModelAddr,
-    priceOracleAddr,
-    burnEngineAddr,
-    longPoolAddr,
-    deployerAddress,
-    deployOverrides
-  );
-  await shortPool.deployed();
-  const shortPoolAddr = shortPool.address;
-  console.log("ShortPool:", shortPoolAddr, "(platformTreasury=temp:deployer)");
-
-  await bondingCurve.setPools(longPoolAddr, shortPoolAddr, txOverrides);
-  console.log("  -> BondingCurve.pools set");
+  await bondingCurve.setPerpetualPool(perpetualPoolAddr, txOverrides);
+  console.log("  -> BondingCurve.perpetualPool set");
 
   await bondingCurve.setBuyAndBurnEngine(burnEngineAddr, txOverrides);
   await bondingCurve.setPriceOracle(priceOracleAddr, txOverrides);
   console.log("  -> BondingCurve.burnEngine + priceOracle set");
 
-  await longPool.setBurnEngine(burnEngineAddr, txOverrides);
-  await longPool.setBondingCurve(bondingCurveAddr, txOverrides);
-  await longPool.setShortPool(shortPoolAddr, txOverrides);
-  console.log("  -> LongPool.burnEngine + bondingCurve + shortPool set");
-
-  await shortPool.setBondingCurve(bondingCurveAddr, txOverrides);
-  console.log("  -> ShortPool.bondingCurve set");
+  await perpetualPool.setBondingCurve(bondingCurveAddr, txOverrides);
+  console.log("  -> PerpetualPool.bondingCurve set");
 
   console.log("\n--- Phase 6: LaunchDAO ---");
 
@@ -239,13 +220,12 @@ async function main() {
   await launchDao.setFeeDistributor(feeDistAddr, txOverrides);
   console.log("  -> LaunchDAO.feeDistributor updated:", feeDistAddr);
 
-  await shortPool.setPlatformTreasury(feeDistAddr, txOverrides);
-  console.log("  -> ShortPool.platformTreasury updated:", feeDistAddr);
+  await perpetualPool.setPlatformTreasury(feeDistAddr, txOverrides);
+  console.log("  -> PerpetualPool.platformTreasury updated:", feeDistAddr);
 
   await priceOracle.setAuthorizedUpdater(bondingCurveAddr, true, txOverrides);
-  await priceOracle.setAuthorizedUpdater(longPoolAddr, true, txOverrides);
-  await priceOracle.setAuthorizedUpdater(shortPoolAddr, true, txOverrides);
-  console.log("  -> PriceOracle: updaters authorized (bondingCurve, longPool, shortPool)");
+  await priceOracle.setAuthorizedUpdater(perpetualPoolAddr, true, txOverrides);
+  console.log("  -> PriceOracle: updaters authorized (bondingCurve, perpetualPool)");
 
   console.log("\n========================================");
   console.log("  Writing addresses to .env ...");
@@ -255,8 +235,7 @@ async function main() {
 
   setEnvValue(`${prefix}_BONDING_CURVE_ADDRESS`, bondingCurveAddr);
   setEnvValue(`${prefix}_FACTORY_ADDRESS`, factoryAddr);
-  setEnvValue(`${prefix}_LONG_POOL_ADDRESS`, longPoolAddr);
-  setEnvValue(`${prefix}_SHORT_POOL_ADDRESS`, shortPoolAddr);
+  setEnvValue(`${prefix}_PERPETUAL_POOL_ADDRESS`, perpetualPoolAddr);
   setEnvValue(`${prefix}_BUY_AND_BURN_ADDRESS`, burnEngineAddr);
   setEnvValue(`${prefix}_LAUNCH_DAO_ADDRESS`, launchDaoAddr);
   setEnvValue(`${prefix}_PRICE_ORACLE_ADDRESS`, priceOracleAddr);
@@ -280,8 +259,7 @@ async function main() {
     linearRateModel: linRateModelAddr,
     bondingCurve: bondingCurveAddr,
     bondingCurveFactory: factoryAddr,
-    longPool: longPoolAddr,
-    shortPool: shortPoolAddr,
+    perpetualPool: perpetualPoolAddr,
     buyAndBurnEngine: burnEngineAddr,
     launchDao: launchDaoAddr,
     feeDistributor: feeDistAddr,

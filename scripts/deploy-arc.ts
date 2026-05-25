@@ -117,24 +117,20 @@ async function main() {
 
   const dexLister = await deploy("DexLister", DEX_ROUTER, deployerAddress, true, WUSDC_ARC_TESTNET);
 
-  console.log("\n--- Phase 4: Pools ---");
+  console.log("\n--- Phase 4: PerpetualPool ---");
 
-  const longPool = await deploy("LongPool", expRateModel.address, linRateModel.address, priceOracle.address);
-  const shortPool = await deploy("ShortPool", expRateModel.address, linRateModel.address, priceOracle.address, burnEngine.address, longPool.address, deployerAddress);
+  const perpetualPool = await deploy("PerpetualPool", priceOracle.address, burnEngine.address, deployerAddress);
 
   console.log("\n--- Phase 5: FeeDistributor ---");
 
-  const feeDist = await deploy("FeeDistributor", CORRECT_DOGE_TOKEN, DEX_ROUTER, burnEngine.address, ethers.constants.AddressZero, longPool.address);
+  const feeDist = await deploy("FeeDistributor", CORRECT_DOGE_TOKEN, DEX_ROUTER, burnEngine.address, ethers.constants.AddressZero, perpetualPool.address);
 
-  await tx("BondingCurve.setPools", () => bondingCurve.setPools(longPool.address, shortPool.address, txOverrides));
+  await tx("BondingCurve.setPerpetualPool", () => bondingCurve.setPerpetualPool(perpetualPool.address, txOverrides));
   await tx("BondingCurve.setBuyAndBurnEngine", () => bondingCurve.setBuyAndBurnEngine(burnEngine.address, txOverrides));
   await tx("BondingCurve.setPriceOracle", () => bondingCurve.setPriceOracle(priceOracle.address, txOverrides));
 
-  await tx("LongPool.setBurnEngine", () => longPool.setBurnEngine(burnEngine.address, txOverrides));
-  await tx("LongPool.setBondingCurve", () => longPool.setBondingCurve(bondingCurve.address, txOverrides));
-  await tx("LongPool.setShortPool", () => longPool.setShortPool(shortPool.address, txOverrides));
-
-  await tx("ShortPool.setBondingCurve", () => shortPool.setBondingCurve(bondingCurve.address, txOverrides));
+  await tx("PerpetualPool.setBondingCurve", () => perpetualPool.setBondingCurve(bondingCurve.address, txOverrides));
+  await tx("PerpetualPool.setDexLister", () => perpetualPool.setDexLister(dexLister.address, txOverrides));
 
   console.log("\n--- Phase 6: LaunchDAO ---");
 
@@ -154,17 +150,16 @@ async function main() {
   await tx("BondingCurve.setFeeDistributor", () => bondingCurve.setFeeDistributor(feeDist.address, txOverrides));
   await tx("BondingCurve.setDexLister", () => bondingCurve.setDexLister(dexLister.address, txOverrides));
   await tx("LaunchDAO.setFeeDistributor", () => launchDao.setFeeDistributor(feeDist.address, txOverrides));
-  await tx("ShortPool.setPlatformTreasury", () => shortPool.setPlatformTreasury(feeDist.address, txOverrides));
+  await tx("PerpetualPool.setPlatformTreasury", () => perpetualPool.setPlatformTreasury(feeDist.address, txOverrides));
 
-  await tx("DexLister.setPools", () => dexLister.setPools(longPool.address, shortPool.address, txOverrides));
+  await tx("DexLister.setPerpetualPool", () => dexLister.setPerpetualPool(perpetualPool.address, txOverrides));
   await tx("DexLister.setFeeDistributor", () => dexLister.setFeeDistributor(feeDist.address, txOverrides));
   await tx("DexLister.setBuyAndBurnEngine", () => dexLister.setBuyAndBurnEngine(burnEngine.address, txOverrides));
   await tx("DexLister.setCreatorRewardManager", () => dexLister.setCreatorRewardManager(creatorRewardMgr.address, txOverrides));
   await tx("DexLister.setBondingCurve", () => dexLister.setBondingCurve(bondingCurve.address, txOverrides));
 
   await tx("PriceOracle.authorize(bondingCurve)", () => priceOracle.setAuthorizedUpdater(bondingCurve.address, true, txOverrides));
-  await tx("PriceOracle.authorize(longPool)", () => priceOracle.setAuthorizedUpdater(longPool.address, true, txOverrides));
-  await tx("PriceOracle.authorize(shortPool)", () => priceOracle.setAuthorizedUpdater(shortPool.address, true, txOverrides));
+  await tx("PriceOracle.authorize(perpetualPool)", () => priceOracle.setAuthorizedUpdater(perpetualPool.address, true, txOverrides));
 
   console.log("\n========================================");
   console.log("  Writing addresses to .env ...");
@@ -176,8 +171,7 @@ async function main() {
   setEnvValue(`${prefix}_FACTORY_ADDRESS`, factory.address);
   setEnvValue(`${prefix}_SIMPLE_FACTORY_ADDRESS`, simpleFactory.address);
   setEnvValue(`${prefix}_SIMPLE_ROUTER_ADDRESS`, simpleRouter.address);
-  setEnvValue(`${prefix}_LONG_POOL_ADDRESS`, longPool.address);
-  setEnvValue(`${prefix}_SHORT_POOL_ADDRESS`, shortPool.address);
+  setEnvValue(`${prefix}_PERPETUAL_POOL_ADDRESS`, perpetualPool.address);
   setEnvValue(`${prefix}_BUY_AND_BURN_ADDRESS`, burnEngine.address);
   setEnvValue(`${prefix}_DEX_LISTER_ADDRESS`, dexLister.address);
   setEnvValue(`${prefix}_LAUNCH_DAO_ADDRESS`, launchDao.address);
@@ -202,8 +196,7 @@ async function main() {
     simpleRouter: simpleRouter.address,
     bondingCurve: bondingCurve.address,
     bondingCurveFactory: factory.address,
-    longPool: longPool.address,
-    shortPool: shortPool.address,
+    perpetualPool: perpetualPool.address,
     buyAndBurnEngine: burnEngine.address,
     dexLister: dexLister.address,
     launchDao: launchDao.address,

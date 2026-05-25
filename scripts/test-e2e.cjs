@@ -44,7 +44,7 @@ async function main() {
   const simpleRouterAddr = process.env.VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS;
   const simpleFactoryAddr = process.env.VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS;
   const creatorRewardMgrAddr = process.env.VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS;
-  const shortPoolAddr = process.env.VITE_ARC_TESTNET_SHORT_POOL_ADDRESS;
+  const perpetualPoolAddr = process.env.VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS;
 
   const bcArtifact = getArtifact("BondingCurve");
   const bc = new ethers.Contract(bondingCurveAddr, bcArtifact.abi, wallet);
@@ -64,8 +64,8 @@ async function main() {
   const crmArtifact = getArtifact("CreatorRewardManager");
   const crm = new ethers.Contract(creatorRewardMgrAddr, crmArtifact.abi, wallet);
 
-  const spArtifact = getArtifact("ShortPool");
-  const sp = new ethers.Contract(shortPoolAddr, spArtifact.abi, wallet);
+  const spArtifact = getArtifact("PerpetualPool");
+  const sp = new ethers.Contract(perpetualPoolAddr, spArtifact.abi, wallet);
 
   const tokenArtifact = getArtifact("BondingCurveToken");
 

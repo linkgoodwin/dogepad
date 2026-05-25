@@ -36,7 +36,7 @@ async function main() {
     dexRouter: "0x73742278c31a76dBb0D2587d03ef92E6E2141023",
     buyAndBurnEngine: "0xBfEa6640F909D086363B679768F8DCDbb73A2625",
     wrappedNative: "0x0000000000000000000000000000000000000000",
-    longPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
+    perpetualPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
   };
 
   console.log("Deploying FeeDistributor with:");
@@ -44,7 +44,7 @@ async function main() {
   console.log("  dexRouter:", existingAddresses.dexRouter);
   console.log("  buyAndBurnEngine:", existingAddresses.buyAndBurnEngine);
   console.log("  wrappedNative:", existingAddresses.wrappedNative);
-  console.log("  longPool:", existingAddresses.longPool);
+  console.log("  perpetualPool:", existingAddresses.perpetualPool);
   console.log("");
 
   console.log("Deploying...");
@@ -53,7 +53,7 @@ async function main() {
     existingAddresses.dexRouter,
     existingAddresses.buyAndBurnEngine,
     existingAddresses.wrappedNative,
-    existingAddresses.longPool,
+    existingAddresses.perpetualPool,
     { gasPrice: ethers.utils.parseUnits("2", "gwei"), gasLimit: 6000000 }
   );
 

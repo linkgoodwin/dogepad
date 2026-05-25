@@ -8,12 +8,12 @@ const ARC_RPC = "https://arc-testnet.drpc.org";
 
 const FEE_DISTRIBUTOR_ABI = [
   { inputs: [{ internalType: "address", name: "_dogeToken", type: "address" }], name: "setDogeToken", outputs: [], stateMutability: "nonpayable", type: "function" },
-  { inputs: [{ internalType: "address", name: "_longPool", type: "address" }], name: "setLongPool", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "_perpetualPool", type: "address" }], name: "setPerpetualPool", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ internalType: "uint256", name: "_dividendRatio", type: "uint256" }], name: "setDividendRatio", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ internalType: "uint256", name: "_burnRatio", type: "uint256" }], name: "setBurnRatio", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ internalType: "uint256", name: "_lendingPoolRatio", type: "uint256" }], name: "setLendingPoolRatio", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [], name: "dogeToken", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "longPool", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
+  { inputs: [], name: "perpetualPool", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
   { inputs: [], name: "dividendRatio", outputs: [{ internalType: "uint256", name: "", type: "uint256" }], stateMutability: "view", type: "function" },
   { inputs: [], name: "burnRatio", outputs: [{ internalType: "uint256", name: "", type: "uint256" }], stateMutability: "view", type: "function" },
   { inputs: [], name: "lendingPoolRatio", outputs: [{ internalType: "uint256", name: "", type: "uint256" }], stateMutability: "view", type: "function" },
@@ -38,14 +38,14 @@ async function main() {
   console.log("");
 
   const feeDistributorAddress = "0x7D4041397748F334Ed35077a2D89dB73f7D2D093";
-  const longPoolAddress = "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62";
+  const perpetualPoolAddress = "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62";
   const dogeTokenAddress = "0x3fa820C7b7f2337E572f77D5381Bc3a5A3AaD0C3";
 
   const feeDistributor = new ethers.Contract(feeDistributorAddress, FEE_DISTRIBUTOR_ABI, wallet);
 
   console.log("Current configuration:");
   console.log("  dogeToken:", await feeDistributor.dogeToken());
-  console.log("  longPool:", await feeDistributor.longPool());
+  console.log("  perpetualPool:", await feeDistributor.perpetualPool());
   console.log("  dividendRatio:", ethers.utils.formatEther(await feeDistributor.dividendRatio()), " (30% expected)");
   console.log("  burnRatio:", ethers.utils.formatEther(await feeDistributor.burnRatio()), " (20% expected)");
   console.log("  lendingPoolRatio:", ethers.utils.formatEther(await feeDistributor.lendingPoolRatio()), " (50% expected)");
@@ -64,13 +64,13 @@ async function main() {
     console.log("  dogeToken already set");
   }
 
-  if ((await feeDistributor.longPool()).toLowerCase() !== longPoolAddress.toLowerCase()) {
-    console.log("  Setting longPool...");
-    const tx = await feeDistributor.setLongPool(longPoolAddress, txOverrides);
+  if ((await feeDistributor.perpetualPool()).toLowerCase() !== perpetualPoolAddress.toLowerCase()) {
+    console.log("  Setting perpetualPool...");
+    const tx = await feeDistributor.setPerpetualPool(perpetualPoolAddress, txOverrides);
     await tx.wait();
     console.log("  ✓ Done");
   } else {
-    console.log("  longPool already set");
+    console.log("  perpetualPool already set");
   }
 
   const targetDividendRatio = ethers.utils.parseEther("0.3");
@@ -110,7 +110,7 @@ async function main() {
   console.log("");
   console.log("New configuration:");
   console.log("  dogeToken:", await feeDistributor.dogeToken());
-  console.log("  longPool:", await feeDistributor.longPool());
+  console.log("  perpetualPool:", await feeDistributor.perpetualPool());
   console.log("  dividendRatio:", (ethers.utils.formatEther(await feeDistributor.dividendRatio()) * 100).toFixed(0), "%");
   console.log("  burnRatio:", (ethers.utils.formatEther(await feeDistributor.burnRatio()) * 100).toFixed(0), "%");
   console.log("  lendingPoolRatio:", (ethers.utils.formatEther(await feeDistributor.lendingPoolRatio()) * 100).toFixed(0), "%");

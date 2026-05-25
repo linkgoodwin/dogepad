@@ -12,7 +12,7 @@ const existingAddresses = {
   dexRouter: "0x73742278c31a76dBb0D2587d03ef92E6E2141023",
   buyAndBurnEngine: "0xBfEa6640F909D086363B679768F8DCDbb73A2625",
   wrappedNative: "0x0000000000000000000000000000000000000000",
-  longPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
+  perpetualPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
   bondingCurve: "0x8a26D257fdbb71ab2D3A567E26aB6F6c7C46f0EA",
   launchDAO: "0x4819808056bcB9E42fF3c52f4ee07D988d03E383",
 };
@@ -38,7 +38,7 @@ async function main() {
     existingAddresses.dexRouter,
     existingAddresses.buyAndBurnEngine,
     existingAddresses.wrappedNative,
-    existingAddresses.longPool,
+    existingAddresses.perpetualPool,
     { gasPrice: ethers.utils.parseUnits('50', 'gwei') }
   );
 

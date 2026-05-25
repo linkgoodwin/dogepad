@@ -10,8 +10,7 @@ const existingAddresses = {
   expRateModel: "0xBa4324B0611c46D5E0caEd703242C79d3153630E",
   linRateModel: "0x0Cd6685C8d215386d319c86A47DeE81bEc0DDBe8",
   factory: "0x506957C3c82D449a6FF8Ec4EF23296F49Ca87436",
-  longPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
-  shortPool: "0x6Bcb9A91c9328307868B268c9b7207f293b086DA",
+  perpetualPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
   buyAndBurnEngine: "0xBfEa6640F909D086363B679768F8DCDbb73A2625",
   feeDistributor: "0xa52f1661Ac55D4DfD1D50C7e5451694A8b9B4F80",
   creatorRewardManager: "0x4AE1d700eE004f6A19e5fb6B3B0ADE04470bFeBb",
@@ -72,7 +71,7 @@ async function main() {
 
   console.log("\n--- Wiring BondingCurve ---");
   await tx("setFactory", () => bondingCurve.setFactory(existingAddresses.factory, txOverrides));
-  await tx("setPools", () => bondingCurve.setPools(existingAddresses.longPool, existingAddresses.shortPool, txOverrides));
+  await tx("setPerpetualPool", () => bondingCurve.setPerpetualPool(existingAddresses.perpetualPool, txOverrides));
   await tx("setBuyAndBurnEngine", () => bondingCurve.setBuyAndBurnEngine(existingAddresses.buyAndBurnEngine, txOverrides));
   await tx("setPriceOracle", () => bondingCurve.setPriceOracle(existingAddresses.priceOracle, txOverrides));
   await tx("setLaunchDao", () => bondingCurve.setLaunchDao(launchDao.address, txOverrides));
@@ -83,15 +82,10 @@ async function main() {
   console.log("\n--- Wiring LaunchDAO ---");
   await tx("setFeeDistributor", () => launchDao.setFeeDistributor(existingAddresses.feeDistributor, txOverrides));
 
-  console.log("\n--- Wiring LongPool ---");
-  const longPoolArtifact = getArtifact("LongPool");
-  const longPool = new ethers.Contract(existingAddresses.longPool, longPoolArtifact.abi, wallet);
-  await tx("setBondingCurve", () => longPool.setBondingCurve(bondingCurve.address, txOverrides));
-
-  console.log("\n--- Wiring ShortPool ---");
-  const shortPoolArtifact = getArtifact("ShortPool");
-  const shortPool = new ethers.Contract(existingAddresses.shortPool, shortPoolArtifact.abi, wallet);
-  await tx("setBondingCurve", () => shortPool.setBondingCurve(bondingCurve.address, txOverrides));
+  console.log("\n--- Wiring PerpetualPool ---");
+  const perpetualPoolArtifact = getArtifact("PerpetualPool");
+  const perpetualPool = new ethers.Contract(existingAddresses.perpetualPool, perpetualPoolArtifact.abi, wallet);
+  await tx("setBondingCurve", () => perpetualPool.setBondingCurve(bondingCurve.address, txOverrides));
 
   console.log("\n--- Wiring PriceOracle ---");
   const oracleArtifact = getArtifact("PriceOracle");

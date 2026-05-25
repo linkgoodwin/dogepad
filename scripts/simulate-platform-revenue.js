@@ -10,8 +10,8 @@ const CREATION_FEE = 10n ** 17n;
 const TOTAL_SUPPLY = 1000000000n * PP;
 
 const LP_RATIO = 65;
-const LONG_POOL_RATIO = 20;
-const SHORT_POOL_TOKEN_RATIO = 10;
+const PERP_POOL_RATIO = 20;
+const PERP_POOL_TOKEN_RATIO = 10;
 const BURN_ENGINE_RATIO = 10;
 const PLATFORM_RATIO = 5;
 
@@ -124,15 +124,15 @@ function simulate(incentiveCount) {
 
   const lpBnb = (reserveBnb * BigInt(LP_RATIO)) / 100n;
   const lpTokens = (totalTokensInCurve * BigInt(LP_RATIO)) / 100n;
-  const longPoolBnb = (reserveBnb * BigInt(LONG_POOL_RATIO)) / 100n;
-  const shortPoolTokens = (totalTokensInCurve * BigInt(SHORT_POOL_TOKEN_RATIO)) / 100n;
+  const perpPoolBnb = (reserveBnb * BigInt(PERP_POOL_RATIO)) / 100n;
+  const perpPoolTokens = (totalTokensInCurve * BigInt(PERP_POOL_TOKEN_RATIO)) / 100n;
   const burnEngineBnb = (reserveBnb * BigInt(BURN_ENGINE_RATIO)) / 100n;
   const platformBnb = (reserveBnb * BigInt(PLATFORM_RATIO)) / 100n;
 
-  const accountedBnb = lpBnb + longPoolBnb + burnEngineBnb + platformBnb;
-  const longPoolBnbActual = longPoolBnb + (reserveBnb - accountedBnb);
+  const accountedBnb = lpBnb + perpPoolBnb + burnEngineBnb + platformBnb;
+  const perpPoolBnbActual = perpPoolBnb + (reserveBnb - accountedBnb);
 
-  const accountedTokens = lpTokens + shortPoolTokens + creatorTokens;
+  const accountedTokens = lpTokens + perpPoolTokens + creatorTokens;
   const burnedTokens = totalTokensInCurve - accountedTokens;
 
   const platformTaxShareBps = 10000n - creatorTaxBps;
@@ -158,8 +158,8 @@ function simulate(incentiveCount) {
     creatorTokens,
     lpBnb,
     lpTokens,
-    longPoolBnb: longPoolBnbActual,
-    shortPoolTokens,
+    perpPoolBnb: perpPoolBnbActual,
+    perpPoolTokens,
     burnEngineBnb,
     platformBnb,
     burnedTokens,
@@ -199,14 +199,14 @@ for (const count of [1, 2, 3]) {
 
   console.log("  --- DEX Listing BNB Distribution ---");
   console.log(`  LP Pool (65%):                 ${fmtBnb(r.lpBnb)} BNB ($${fmtUsd(r.lpBnb)})`);
-  console.log(`  Long Pool (20%+):              ${fmtBnb(r.longPoolBnb)} BNB ($${fmtUsd(r.longPoolBnb)})`);
+  console.log(`  PerpetualPool (20%+):          ${fmtBnb(r.perpPoolBnb)} BNB ($${fmtUsd(r.perpPoolBnb)})`);
   console.log(`  Burn Engine (10%):             ${fmtBnb(r.burnEngineBnb)} BNB ($${fmtUsd(r.burnEngineBnb)})`);
   console.log(`  Platform (5%):                 ${fmtBnb(r.platformBnb)} BNB ($${fmtUsd(r.platformBnb)})`);
   console.log();
 
   console.log("  --- DEX Listing Token Distribution ---");
   console.log(`  LP Pool (65%):                 ${fmtTok(r.lpTokens)} tokens`);
-  console.log(`  Short Pool (10%):              ${fmtTok(r.shortPoolTokens)} tokens`);
+  console.log(`  PerpetualPool (10%):           ${fmtTok(r.perpPoolTokens)} tokens`);
   console.log(`  Creator tokens (${fmtPct(r.creatorTokenBps, 10000n)}%):       ${fmtTok(r.creatorTokens)} tokens (vested)`);
   console.log(`  Burned:                        ${fmtTok(r.burnedTokens)} tokens`);
   console.log();
@@ -249,9 +249,9 @@ for (const count of [1, 2, 3]) {
   console.log(`  3. Burn Engine (benefits FAIR holders):`);
   console.log(`     ${fmtBnb(r.burnEngineBnb)} BNB ($${fmtUsd(r.burnEngineBnb)}) used to buy & burn FAIR`);
   console.log();
-  console.log(`  4. Long Pool / Short Pool:`);
-  console.log(`     Long Pool: ${fmtBnb(r.longPoolBnb)} BNB ($${fmtUsd(r.longPoolBnb)})`);
-  console.log(`     Short Pool: ${fmtTok(r.shortPoolTokens)} tokens`);
+  console.log(`  4. PerpetualPool:`);
+  console.log(`     PerpetualPool BNB: ${fmtBnb(r.perpPoolBnb)} BNB ($${fmtUsd(r.perpPoolBnb)})`);
+  console.log(`     PerpetualPool Tokens: ${fmtTok(r.perpPoolTokens)} tokens`);
   console.log(`     These support the lending system and generate fees`);
   console.log();
 }

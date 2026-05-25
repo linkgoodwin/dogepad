@@ -8,8 +8,7 @@ const BONDING_CURVE = "0xC5D85fF0b336f5a1B1ae650ebd01851894e6158c";
 const DEX_LISTER = "0xAB2581567d645C3d8F1EaF86FFCA34F8Cd29839A";
 const BUY_AND_BURN = "0x0000000000000000000000000000000000000000";
 const FEE_DISTRIBUTOR = "0xa52f1661Ac55D4DfD1D50C7e5451694A8b9B4F80";
-const LONG_POOL = "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62";
-const SHORT_POOL = "0x6Bcb9A91c9328307868B268c9b7207f293b086DA";
+const PERPETUAL_POOL = "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62";
 const LAUNCH_DAO = "0x98C056A4b5d72E0B4f7e9b6A62f740983D767D2f";
 const CREATOR_REWARD_MANAGER = "0x0000000000000000000000000000000000000000";
 
@@ -30,13 +29,12 @@ const DEX_LISTER_ABI = [
   "function baseAsset() view returns (address)",
   "function dexRouter() view returns (address)",
   "function bondingCurve() view returns (address)",
-  "function longPool() view returns (address)",
-  "function shortPool() view returns (address)",
+  "function perpetualPool() view returns (address)",
   "function feeDistributor() view returns (address)",
   "function buyAndBurnEngine() view returns (address)",
   "function creatorRewardManager() view returns (address)",
   "function setDexRouterConfig(address _dexRouter, bool _isXyloRouter, address _baseAsset)",
-  "function setPools(address _longPool, address _shortPool)",
+  "function setPerpetualPool(address _perpetualPool)",
   "function setFeeDistributor(address _feeDistributor)",
   "function setBuyAndBurnEngine(address _engine)",
   "function setCreatorRewardManager(address _manager)",
@@ -122,8 +120,7 @@ async function main() {
   const dlIsXylo = await dl.isXyloRouter();
   const dlBaseAsset = await dl.baseAsset();
   const dlBondingCurve = await dl.bondingCurve();
-  const dlLongPool = await dl.longPool();
-  const dlShortPool = await dl.shortPool();
+  const dlPerpetualPool = await dl.perpetualPool();
   const dlFeeDistributor = await dl.feeDistributor();
   const dlBuyAndBurn = await dl.buyAndBurnEngine();
   const dlCreatorReward = await dl.creatorRewardManager();
@@ -142,8 +139,8 @@ async function main() {
   if (dlBondingCurve !== BONDING_CURVE) {
     await tx("DexLister.setBondingCurve", () => dl.setBondingCurve(BONDING_CURVE, overrides));
   }
-  if (dlLongPool !== LONG_POOL || dlShortPool !== SHORT_POOL) {
-    await tx("DexLister.setPools", () => dl.setPools(LONG_POOL, SHORT_POOL, overrides));
+  if (dlPerpetualPool !== PERPETUAL_POOL) {
+    await tx("DexLister.setPerpetualPool", () => dl.setPerpetualPool(PERPETUAL_POOL, overrides));
   }
   if (dlFeeDistributor !== FEE_DISTRIBUTOR) {
     await tx("DexLister.setFeeDistributor", () => dl.setFeeDistributor(FEE_DISTRIBUTOR, overrides));

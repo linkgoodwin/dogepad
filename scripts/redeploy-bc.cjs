@@ -8,8 +8,7 @@ const WUSDC = "0x911b4000D3422F482F4062a913885f7b035382Df";
 
 const EXISTING = {
   factory: "0x506957C3c82D449a6FF8Ec4EF23296F49Ca87436",
-  longPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
-  shortPool: "0x6Bcb9A91c9328307868B268c9b7207f293b086DA",
+  perpetualPool: "0xD3C201e87e6c98A23b240Ad5a39092B2C8488B62",
   buyAndBurnEngine: "0xBfEa6640F909D086363B679768F8DCDbb73A2625",
   feeDistributor: "0xa52f1661Ac55D4DfD1D50C7e5451694A8b9B4F80",
   priceOracle: "0x5EC74d4Bf19fd1482c942CF2Ac8757E09E8b79b5",
@@ -102,7 +101,7 @@ async function main() {
   console.log("\n--- Phase 4: Wire BondingCurve ---");
   await sendTx(bondingCurve, "setFactory", [EXISTING.factory], "setFactory");
   await sendTx(bondingCurve, "setLaunchDao", [launchDao.address], "setLaunchDao");
-  await sendTx(bondingCurve, "setPools", [EXISTING.longPool, EXISTING.shortPool], "setPools");
+  await sendTx(bondingCurve, "setPerpetualPool", [EXISTING.perpetualPool], "setPerpetualPool");
   await sendTx(bondingCurve, "setBuyAndBurnEngine", [EXISTING.buyAndBurnEngine], "setBuyAndBurnEngine");
   await sendTx(bondingCurve, "setPriceOracle", [EXISTING.priceOracle], "setPriceOracle");
   await sendTx(bondingCurve, "setCreatorRewardManager", [EXISTING.creatorRewardManager], "setCreatorRewardManager");
@@ -110,7 +109,7 @@ async function main() {
   await sendTx(bondingCurve, "setDexLister", [dexLister.address], "setDexLister");
 
   console.log("\n--- Phase 5: Wire DexLister ---");
-  await sendTx(dexLister, "setPools", [EXISTING.longPool, EXISTING.shortPool], "DexLister.setPools");
+  await sendTx(dexLister, "setPerpetualPool", [EXISTING.perpetualPool], "DexLister.setPerpetualPool");
   await sendTx(dexLister, "setBuyAndBurnEngine", [EXISTING.buyAndBurnEngine], "DexLister.setBuyAndBurnEngine");
   await sendTx(dexLister, "setCreatorRewardManager", [EXISTING.creatorRewardManager], "DexLister.setCreatorRewardManager");
   await sendTx(dexLister, "setBondingCurve", [bondingCurve.address], "DexLister.setBondingCurve");
@@ -119,13 +118,9 @@ async function main() {
   await sendTx(launchDao, "setFeeDistributor", [EXISTING.feeDistributor], "LaunchDAO.setFeeDistributor");
 
   console.log("\n--- Phase 7: Update other contracts ---");
-  const longPoolArtifact = getArtifact("LongPool");
-  const longPool = new ethers.Contract(EXISTING.longPool, longPoolArtifact.abi, w);
-  await sendTx(longPool, "setBondingCurve", [bondingCurve.address], "LongPool.setBondingCurve");
-
-  const shortPoolArtifact = getArtifact("ShortPool");
-  const shortPool = new ethers.Contract(EXISTING.shortPool, shortPoolArtifact.abi, w);
-  await sendTx(shortPool, "setBondingCurve", [bondingCurve.address], "ShortPool.setBondingCurve");
+  const perpetualPoolArtifact = getArtifact("PerpetualPool");
+  const perpetualPool = new ethers.Contract(EXISTING.perpetualPool, perpetualPoolArtifact.abi, w);
+  await sendTx(perpetualPool, "setBondingCurve", [bondingCurve.address], "PerpetualPool.setBondingCurve");
 
   const burnArtifact = getArtifact("BuyAndBurnEngine");
   const burnEngine = new ethers.Contract(EXISTING.buyAndBurnEngine, burnArtifact.abi, w);

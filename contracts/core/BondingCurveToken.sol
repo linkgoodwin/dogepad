@@ -130,7 +130,7 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function _update(address from, address to, uint256 value) internal override {
-        if (!skipHoldingLimit && !isExcludedFromHoldingLimit[to] && to != address(0) && to != address(this) && dexPair != address(0)) {
+        if (!skipHoldingLimit && !isExcludedFromHoldingLimit[to] && to != address(0) && to != address(this) && dexPair == address(0)) {
             uint256 circulatingSupply = totalSupply() - balanceOf(address(this));
             uint256 maxHold = (circulatingSupply * maxHoldingPercent) / 100;
             if (maxHold > 0) {

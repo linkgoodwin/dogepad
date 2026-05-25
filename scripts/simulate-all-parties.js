@@ -9,8 +9,8 @@ const TOTAL_SUPPLY = 1000000000n;
 
 const CREATION_FEE = 10n ** 17n;
 const LP_RATIO = 65;
-const LONG_POOL_RATIO = 20;
-const SHORT_POOL_TOKEN_RATIO = 10;
+const PERP_POOL_RATIO = 20;
+const PERP_POOL_TOKEN_RATIO = 10;
 const BURN_ENGINE_RATIO = 10;
 const PLATFORM_RATIO = 5;
 
@@ -106,12 +106,12 @@ const mcAtDex = priceAtDex * Number(TOTAL_SUPPLY) * BNB_USD;
 
 const lpBnb = (reserveBnb * BigInt(LP_RATIO)) / 100n;
 const lpTokens = (totalTokensInCurve * BigInt(LP_RATIO)) / 100n;
-const longPoolBnb = (reserveBnb * BigInt(LONG_POOL_RATIO)) / 100n;
-const shortPoolTokens = (totalTokensInCurve * BigInt(SHORT_POOL_TOKEN_RATIO)) / 100n;
+const perpPoolBnb = (reserveBnb * BigInt(PERP_POOL_RATIO)) / 100n;
+const perpPoolTokens = (totalTokensInCurve * BigInt(PERP_POOL_TOKEN_RATIO)) / 100n;
 const burnEngineBnb = (reserveBnb * BigInt(BURN_ENGINE_RATIO)) / 100n;
 const platformBnb = (reserveBnb * BigInt(PLATFORM_RATIO)) / 100n;
-const accountedBnb = lpBnb + longPoolBnb + burnEngineBnb + platformBnb;
-const longPoolBnbActual = longPoolBnb + (reserveBnb - accountedBnb);
+const accountedBnb = lpBnb + perpPoolBnb + burnEngineBnb + platformBnb;
+const perpPoolBnbActual = perpPoolBnb + (reserveBnb - accountedBnb);
 
 const targetPriceBnb = TARGET_PRICE_USD / BNB_USD;
 const myTokensValueBnbAtTarget = Number(myTokens) / Number(PP) * targetPriceBnb;
@@ -216,8 +216,8 @@ console.log(`  每月(30个币):   ${(Number(fmtBnb(burnEngineBnb)) * 30).toFixe
 console.log();
 
 console.log(`  【借贷系统资金池】`);
-console.log(`  Long Pool:  ${fmtBnb(longPoolBnbActual)} BNB ($${fmtUsd(longPoolBnbActual)})`);
-console.log(`  Short Pool: ${fmtTok(shortPoolTokens)} tokens`);
+console.log(`  PerpetualPool:  ${fmtBnb(perpPoolBnbActual)} BNB ($${fmtUsd(perpPoolBnbActual)})`);
+console.log(`  PerpetualPool Tokens: ${fmtTok(perpPoolTokens)} tokens`);
 console.log();
 
 console.log("─".repeat(78));

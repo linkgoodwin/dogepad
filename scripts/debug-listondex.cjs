@@ -69,24 +69,24 @@ async function main() {
   console.log("token.skipHoldingLimit:", skipHoldingLimit);
 
   const lpTokenRatio = await dl.lpTokenRatio();
-  const shortPoolTokenRatio = await dl.shortPoolTokenRatio();
+  const perpPoolTokenRatio = await dl.perpPoolTokenRatio();
   const lpUsdcRatio = await dl.lpUsdcRatio();
   console.log("\nDexLister ratios:");
   console.log("  lpTokenRatio:", lpTokenRatio.toString());
-  console.log("  shortPoolTokenRatio:", shortPoolTokenRatio.toString());
+  console.log("  perpPoolTokenRatio:", perpPoolTokenRatio.toString());
   console.log("  lpUsdcRatio:", lpUsdcRatio.toString());
 
   const totalTokens = tokenBalance;
   const totalUsdc = info.reserveUsdc;
   const lpTokens = totalTokens.mul(lpTokenRatio).div(100);
-  const shortPoolTokens = totalTokens.mul(shortPoolTokenRatio).div(100);
+  const perpPoolTokens = totalTokens.mul(perpPoolTokenRatio).div(100);
   const lpUsdc = totalUsdc.mul(lpUsdcRatio).div(100);
 
   console.log("\nCalculated amounts:");
   console.log("  totalTokens:", ethers.utils.formatEther(totalTokens));
   console.log("  totalUsdc:", ethers.utils.formatEther(totalUsdc));
   console.log("  lpTokens:", ethers.utils.formatEther(lpTokens));
-  console.log("  shortPoolTokens:", ethers.utils.formatEther(shortPoolTokens));
+  console.log("  perpPoolTokens:", ethers.utils.formatEther(perpPoolTokens));
   console.log("  lpUsdc:", ethers.utils.formatEther(lpUsdc));
 
   console.log("\n--- Trying static call for listOnDex ---");
