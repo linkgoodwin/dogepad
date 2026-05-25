@@ -55,7 +55,7 @@ contract SimplePair is ERC20, Ownable {
         uint256 _totalSupply = totalSupply();
         if (_totalSupply == 0) {
             liquidity = _sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
-            _mint(address(0), MINIMUM_LIQUIDITY);
+            _mint(0x000000000000000000000000000000000000dEaD, MINIMUM_LIQUIDITY);
         } else {
             liquidity = _min(
                 (amount0 * _totalSupply) / reserve0_,

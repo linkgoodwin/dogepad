@@ -39,6 +39,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
     address public longPool;
     address public platformTreasury;
     address public bondingCurve;
+    address public dexLister;
 
     mapping(address => uint256) public lastInteractionBlock;
     mapping(address => mapping(address => ShortPosition)) public positions;
@@ -75,7 +76,7 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
     }
 
     function depositTokens(address token, uint256 amount) external {
-        require(msg.sender == bondingCurve || msg.sender == owner(), "not authorized");
+        require(msg.sender == bondingCurve || msg.sender == dexLister || msg.sender == owner(), "not authorized");
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         tokenAvailable[token] += amount;
     }
@@ -279,6 +280,10 @@ contract ShortPool is ReentrancyGuard, Pausable, Ownable {
 
     function setBondingCurve(address _bondingCurve) external onlyOwner {
         bondingCurve = _bondingCurve;
+    }
+
+    function setDexLister(address _dexLister) external onlyOwner {
+        dexLister = _dexLister;
     }
 
     function setEarlyRateModel(address _model) external onlyOwner {

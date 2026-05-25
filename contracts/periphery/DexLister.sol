@@ -156,6 +156,8 @@ contract DexLister is Ownable {
         if (msg.sender != bondingCurve && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
         uint256 lpUsdc = (p.totalUsdc * lpUsdcRatio) / 100;
 
+        IERC20(p.token).safeTransferFrom(msg.sender, address(this), p.lpTokens + p.shortPoolTokens + p.creatorTokens);
+
         BondingCurveToken(p.token).setSkipHoldingLimit(true);
 
         IERC20(p.token).forceApprove(dexRouter, p.lpTokens);
@@ -188,8 +190,6 @@ contract DexLister is Ownable {
         if (lpToken != address(0)) {
             BondingCurveToken(p.token).setDexPair(lpToken);
         }
-
-        BondingCurveToken(p.token).setSkipHoldingLimit(false);
 
         if (p.incentiveCount > 0 && p.wantTaxShare) {
             uint256 creatorTaxBps = (BASE_TAX_SHARE_BPS * p.multiplier) / 10000;
@@ -237,6 +237,8 @@ contract DexLister is Ownable {
         if (actualRemaining > 0) {
             BondingCurveToken(p.token).burn(actualRemaining);
         }
+
+        BondingCurveToken(p.token).setSkipHoldingLimit(false);
 
         emit DexListed(p.token, lpUsdc, p.lpTokens);
     }

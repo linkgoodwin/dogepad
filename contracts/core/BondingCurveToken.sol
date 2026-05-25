@@ -74,7 +74,7 @@ contract BondingCurveToken is ERC20, Ownable {
 
     function burn(uint256 amount) external {
         require(
-            msg.sender == bondingCurve || msg.sender == buyAndBurnEngine,
+            msg.sender == bondingCurve || msg.sender == buyAndBurnEngine || msg.sender == dexLister,
             "not authorized"
         );
         _burn(msg.sender, amount);

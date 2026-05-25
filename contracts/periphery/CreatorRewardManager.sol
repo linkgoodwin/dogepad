@@ -20,6 +20,7 @@ contract CreatorRewardManager is Ownable, ReentrancyGuard, Pausable {
     }
 
     address public bondingCurve;
+    address public dexLister;
 
     mapping(address => mapping(address => VestingSchedule)) public vestings;
     mapping(address => uint256) public totalVestedAmount;
@@ -27,8 +28,8 @@ contract CreatorRewardManager is Ownable, ReentrancyGuard, Pausable {
     event VestingCreated(address indexed asset, address indexed beneficiary, uint256 amount, uint256 cliffEnd, uint256 vestingEnd);
     event VestedTokensClaimed(address indexed asset, address indexed beneficiary, uint256 amount);
 
-    modifier onlyBondingCurve() {
-        require(msg.sender == bondingCurve, "only bonding curve");
+    modifier onlyBondingCurveOrDexLister() {
+        require(msg.sender == bondingCurve || msg.sender == dexLister, "only bonding curve");
         _;
     }
 
@@ -40,13 +41,17 @@ contract CreatorRewardManager is Ownable, ReentrancyGuard, Pausable {
         bondingCurve = _bondingCurve;
     }
 
+    function setDexLister(address _dexLister) external onlyOwner {
+        dexLister = _dexLister;
+    }
+
     function createVesting(
         address asset,
         address beneficiary,
         uint256 amount,
         uint256 cliffDuration,
         uint256 vestingDuration
-    ) external onlyBondingCurve {
+    ) external onlyBondingCurveOrDexLister {
         require(amount > 0, "zero amount");
         require(beneficiary != address(0), "zero beneficiary");
         require(vestingDuration >= cliffDuration, "vesting < cliff");

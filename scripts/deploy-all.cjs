@@ -145,6 +145,9 @@ async function main() {
   await tx("DexLister.setCreatorRewardManager", () => dexLister.setCreatorRewardManager(creatorRewardMgr.address, txOverrides));
   await tx("DexLister.setBondingCurve", () => dexLister.setBondingCurve(bondingCurve.address, txOverrides));
 
+  await tx("CreatorRewardManager.setDexLister", () => creatorRewardMgr.setDexLister(dexLister.address, txOverrides));
+  await tx("ShortPool.setDexLister", () => shortPool.setDexLister(dexLister.address, txOverrides));
+
   await tx("PriceOracle.authorize(bondingCurve)", () => priceOracle.setAuthorizedUpdater(bondingCurve.address, true, txOverrides));
   await tx("PriceOracle.authorize(longPool)", () => priceOracle.setAuthorizedUpdater(longPool.address, true, txOverrides));
   await tx("PriceOracle.authorize(shortPool)", () => priceOracle.setAuthorizedUpdater(shortPool.address, true, txOverrides));
