@@ -12,6 +12,7 @@ contract BondingCurveToken is ERC20, Ownable {
     address public taxReceiver;
     address public bondingCurve;
     address public buyAndBurnEngine;
+    address public dexLister;
     address public creatorTaxReceiver;
     uint256 public creatorTaxBps;
     address public dexPair;
@@ -55,6 +56,12 @@ contract BondingCurveToken is ERC20, Ownable {
         isExcludedFromHoldingLimit[_engine] = true;
     }
 
+    function setDexLister(address _dexLister) external onlyOwner {
+        dexLister = _dexLister;
+        isExcludedFromTax[_dexLister] = true;
+        isExcludedFromHoldingLimit[_dexLister] = true;
+    }
+
     function buyFromCurve(address to, uint256 amount) external {
         require(msg.sender == bondingCurve, "only bonding curve");
         _update(address(this), to, amount);
@@ -90,7 +97,7 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function setCreatorTaxReceiver(address _creatorTaxReceiver, uint256 _creatorTaxBps) external {
-        require(msg.sender == bondingCurve, "only bonding curve");
+        require(msg.sender == bondingCurve || msg.sender == dexLister, "only bonding curve");
         require(_creatorTaxBps <= 5000, "max 50%");
         creatorTaxReceiver = _creatorTaxReceiver;
         creatorTaxBps = _creatorTaxBps;
@@ -101,7 +108,7 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function setDexPair(address _dexPair) external {
-        require(msg.sender == bondingCurve, "only bonding curve");
+        require(msg.sender == bondingCurve || msg.sender == dexLister, "only bonding curve");
         dexPair = _dexPair;
         if (_dexPair != address(0)) {
             isExcludedFromHoldingLimit[_dexPair] = true;
@@ -110,7 +117,7 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function setSkipHoldingLimit(bool skip) external {
-        require(msg.sender == bondingCurve, "only bonding curve");
+        require(msg.sender == bondingCurve || msg.sender == dexLister, "only bonding curve");
         skipHoldingLimit = skip;
     }
 

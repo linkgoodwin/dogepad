@@ -263,6 +263,11 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.totalRightsVotes += weight;
 
         emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
+
+        if (c.status == CandidateStatus.Active && c.totalSubUsdc >= LAUNCH_THRESHOLD) {
+            _enqueueCandidate(candidateId);
+        }
+
         _processQueueInternal();
     }
 
@@ -566,7 +571,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     function _processQueueInternal() internal {
         uint256 today = _today();
         if (dayLaunchCount[today] >= maxLaunchsPerDay) return;
-        if ((block.timestamp % EPOCH_DURATION) / 1 hours < launchHour) return;
 
         _cleanupExpiredQueuedCandidates();
 

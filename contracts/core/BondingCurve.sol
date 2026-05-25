@@ -235,6 +235,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
             token.setBuyAndBurnEngine(buyAndBurnEngine);
         }
 
+        if (dexLister != address(0)) {
+            token.setDexLister(dexLister);
+        }
+
         if (voterPool != address(0)) {
             token.excludeFromTax(voterPool);
             token.excludeFromHoldingLimit(voterPool);
@@ -388,9 +392,15 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
         info.isListedOnDex = true;
         emit DexListingReady(token);
+
+        _listOnDexInternal(token);
     }
 
     function listOnDex(address token) external nonReentrant whenNotPaused {
+        _listOnDexInternal(token);
+    }
+
+    function _listOnDexInternal(address token) internal {
         TokenInfo storage info = tokens[token];
         if (!info.isListedOnDex) revert NotReadyForListing();
         if (info.reserveUsdc == 0) revert AlreadyDexListed();
