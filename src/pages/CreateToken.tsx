@@ -9,9 +9,9 @@ import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, isTestnet, getNetwor
 import { useTargetChainId } from '@/hooks/useNetwork'
 
 const DURATION_TIERS = [
-  { value: 0, feeBnb: 3, labelKey: 'create.tier3Days' as const, descKey: 'create.tier3Desc' as const },
-  { value: 1, feeBnb: 5, labelKey: 'create.tier7Days' as const, descKey: 'create.tier7Desc' as const },
-  { value: 2, feeBnb: 10, labelKey: 'create.tier30Days' as const, descKey: 'create.tier30Desc' as const },
+  { value: 0, feeBnb: 0.1, labelKey: 'create.tier3Days' as const, descKey: 'create.tier3Desc' as const },
+  { value: 1, feeBnb: 0.5, labelKey: 'create.tier7Days' as const, descKey: 'create.tier7Desc' as const },
+  { value: 2, feeBnb: 1, labelKey: 'create.tier30Days' as const, descKey: 'create.tier30Desc' as const },
 ]
 
 export default function CreateToken() {

@@ -68,9 +68,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant TIER_1_DURATION = 3 days;
     uint256 public constant TIER_7_DURATION = 7 days;
     uint256 public constant TIER_30_DURATION = 30 days;
-    uint256 public constant TIER_1_FEE = 3 ether;
-    uint256 public constant TIER_7_FEE = 5 ether;
-    uint256 public constant TIER_30_FEE = 10 ether;
+    uint256 public constant TIER_1_FEE = 0.1 ether;
+    uint256 public constant TIER_7_FEE = 0.5 ether;
+    uint256 public constant TIER_30_FEE = 1 ether;
 
     enum CandidateStatus { Active, Queued, Expired, GracePeriod, Recyclable, Launched }
     enum DurationTier { Day3, Day7, Day30 }
