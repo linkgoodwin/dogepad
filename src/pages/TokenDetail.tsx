@@ -402,7 +402,7 @@ export default function TokenDetail() {
 
   const formatBnb = (val: number) => formatUsdc(val)
   const reserveBnb = tokenData ? Number(formatEther(tokenData.reserveUsdc)) : 0
-  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 20
+  const dexThreshold = tokenData ? Number(formatEther(tokenData.dexListingThreshold)) : 5
   const progress = Math.min((reserveBnb / dexThreshold) * 100, 100)
 
   return (
