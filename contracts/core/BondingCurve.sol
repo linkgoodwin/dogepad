@@ -84,7 +84,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     address public creatorRewardManager;
     address payable public dexLister;
     uint256 public creationFee = 0.1 ether;
-    uint256 public defaultDexThreshold = 20 ether;
+    uint256 public defaultDexThreshold = 5 ether;
     bool public daoOnlyLaunch = false;
 
     uint256 public maturityThreshold = 100 ether;
