@@ -90,7 +90,7 @@ export default function KLineChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const volumeSeriesRef = useRef<any>(null)
 
   useEffect(() => {
     if (!chartContainerRef.current) return
