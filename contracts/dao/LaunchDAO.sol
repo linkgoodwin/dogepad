@@ -647,6 +647,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             c.launchedToken = token;
             c.launchedTokenSupply = tokensReceived;
 
+            _distributeLaunchedTokens(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
+
             try IBondingCurveLaunch(bondingCurve).listOnDex(token) {} catch {}
 
             queueHead++;
@@ -666,6 +668,45 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function processQueue() external nonReentrant {
         _processQueueInternal();
+    }
+
+    function _distributeLaunchedTokens(
+        uint256 candidateId,
+        address token,
+        uint256 usdcUsed,
+        uint256 tokensReceived,
+        uint256 excessUsdc
+    ) internal {
+        if (tokensReceived == 0 || usdcUsed == 0) return;
+
+        address[] storage supporters = candidateSupporters[candidateId];
+        for (uint256 i = 0; i < supporters.length; i++) {
+            address supporter = supporters[i];
+            Subscription storage sub = userSubscriptions[supporter][candidateId];
+            if (!sub.isActive || sub.hasClaimed) continue;
+
+            sub.hasClaimed = true;
+
+            uint256 userUsdcUsed = sub.usdcAmount;
+            uint256 userExcessUsdc = 0;
+            if (excessUsdc > 0 && candidates[candidateId].totalSubUsdc > 0) {
+                userExcessUsdc = (sub.usdcAmount * excessUsdc) / candidates[candidateId].totalSubUsdc;
+                userUsdcUsed = sub.usdcAmount > userExcessUsdc ? sub.usdcAmount - userExcessUsdc : 0;
+            }
+
+            uint256 share = (userUsdcUsed * tokensReceived) / usdcUsed;
+
+            if (share > 0) {
+                IERC20(token).safeTransfer(supporter, share);
+            }
+
+            if (userExcessUsdc > 0) {
+                (bool success, ) = payable(supporter).call{value: userExcessUsdc}("");
+                require(success, "refund failed");
+            }
+
+            emit SubscriptionClaimed(supporter, candidateId, token, share);
+        }
     }
 
     function claimSubscription(uint256 candidateId) external nonReentrant {

@@ -406,7 +406,8 @@ export default function Portfolio() {
                         </p>
                         <div className="flex items-center gap-2 text-xs">
                           <span className={cn('font-medium', statusInfo.color)}>{t(statusInfo.labelKey)}</span>
-                          {s.hasClaimed && <span className="text-neon-green">{t('portfolio.claimed')}</span>}
+                          {s.hasClaimed && s.wasLaunched && <span className="text-neon-green">{t('portfolio.autoDistributed')}</span>}
+                          {s.hasClaimed && !s.wasLaunched && <span className="text-neon-green">{t('portfolio.claimed')}</span>}
                           {s.hasRefunded && <span className="text-neon-yellow">{t('portfolio.refunded')}</span>}
                         </div>
                       </div>

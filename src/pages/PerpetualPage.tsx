@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { ethers } from 'ethers'
 import { getContractAddress, DEFAULT_CHAIN_ID } from '../config/contracts'
 import KLineChart from '../components/KLineChart'
 import { useKLineData } from '../hooks/useKLineData'
 import { KLineSource } from '../hooks/useKLineData'
+import { useT } from '@/i18n/useT'
 
 const PERP_ABI = [
   'function openPosition(address token, bool isLong, uint256 marginUsdc, uint256 leverage) payable',
@@ -15,12 +16,27 @@ const PERP_ABI = [
   'function getOpenInterest(address token) view returns (uint256 longOI, uint256 shortOI)',
   'function getMarkPrice(address token) view returns (uint256)',
   'function getNextFundingTime(address token) view returns (uint256)',
+  'function getListedTokens() view returns (address[])',
+  'function defaultToken() view returns (address)',
+  'function isTokenListedForPerp(address) view returns (bool)',
 ]
 
 const ORACLE_ABI = ['function getPrice(address token) view returns (uint256)']
 
+const ERC20_ABI = [
+  'function symbol() view returns (string)',
+  'function name() view returns (string)',
+]
+
+interface TokenOption {
+  address: string
+  symbol: string
+  name: string
+}
+
 export default function PerpetualPage() {
   const { address } = useAccount()
+  const t = useT()
   const chainId = DEFAULT_CHAIN_ID
 
   const getSigner = async () => {
@@ -34,7 +50,8 @@ export default function PerpetualPage() {
     return new ethers.providers.JsonRpcProvider('https://rpc.testnet.arc.network')
   }
 
-  const [tokenAddress, setTokenAddress] = useState('')
+  const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([])
+  const [selectedToken, setSelectedToken] = useState('')
   const [isLong, setIsLong] = useState(true)
   const [margin, setMargin] = useState('0.1')
   const [leverage, setLeverage] = useState('5')
@@ -47,7 +64,7 @@ export default function PerpetualPage() {
   const [klineSource, setKlineSource] = useState<KLineSource>('perpetual')
 
   const { klineData, loading: klineLoading, refresh: refreshKline } = useKLineData(
-    tokenAddress,
+    selectedToken,
     klineSource,
     60_000
   )
@@ -55,12 +72,47 @@ export default function PerpetualPage() {
   const perpPool = getContractAddress(chainId, 'perpetualPool')
   const priceOracle = getContractAddress(chainId, 'priceOracle')
 
-  const fetchPosition = async () => {
-    if (!perpPool || !tokenAddress || !address) return
+  const fetchTokenList = useCallback(async () => {
+    if (!perpPool) return
     try {
       const provider = getProvider()
       const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
-      const pos = await contract.getPosition(address, tokenAddress)
+      const [listedTokens, defaultTokenAddr] = await Promise.all([
+        contract.getListedTokens(),
+        contract.defaultToken(),
+      ])
+
+      const options: TokenOption[] = []
+      for (const tokenAddr of listedTokens) {
+        try {
+          const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider)
+          const [symbol, name] = await Promise.all([token.symbol(), token.name()])
+          options.push({ address: tokenAddr, symbol, name })
+        } catch {
+          options.push({ address: tokenAddr, symbol: tokenAddr.slice(0, 6) + '...', name: 'Unknown' })
+        }
+      }
+
+      setTokenOptions(options)
+      if (!selectedToken && options.length > 0) {
+        const defaultOpt = options.find(o => o.address.toLowerCase() === defaultTokenAddr.toLowerCase())
+        setSelectedToken(defaultOpt ? defaultOpt.address : options[0].address)
+      }
+    } catch (err) {
+      console.error('Fetch token list failed:', err)
+    }
+  }, [perpPool, selectedToken])
+
+  useEffect(() => {
+    fetchTokenList()
+  }, [fetchTokenList])
+
+  const fetchPosition = async () => {
+    if (!perpPool || !selectedToken || !address) return
+    try {
+      const provider = getProvider()
+      const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
+      const pos = await contract.getPosition(address, selectedToken)
       setPosition({
         margin: ethers.utils.formatEther(pos.margin),
         size: ethers.utils.formatEther(pos.size),
@@ -70,14 +122,14 @@ export default function PerpetualPage() {
       })
 
       if (pos.isActive) {
-        const ratio = await contract.getMarginRatio(address, tokenAddress)
+        const ratio = await contract.getMarginRatio(address, selectedToken)
         setMarginRatio((parseFloat(ethers.utils.formatEther(ratio)) * 100).toFixed(2) + '%')
 
-        const pnlVal = await contract.getPnl(address, tokenAddress)
+        const pnlVal = await contract.getPnl(address, selectedToken)
         setPnl(ethers.utils.formatEther(pnlVal))
       }
 
-      const oi = await contract.getOpenInterest(tokenAddress)
+      const oi = await contract.getOpenInterest(selectedToken)
       setOpenInterest({
         long: ethers.utils.formatEther(oi.longOI),
         short: ethers.utils.formatEther(oi.shortOI),
@@ -88,19 +140,26 @@ export default function PerpetualPage() {
   }
 
   const fetchMarkPrice = async () => {
-    if (!priceOracle || !tokenAddress) return
+    if (!priceOracle || !selectedToken) return
     try {
       const provider = getProvider()
       const oracle = new ethers.Contract(priceOracle, ORACLE_ABI, provider)
-      const price = await oracle.getPrice(tokenAddress)
+      const price = await oracle.getPrice(selectedToken)
       setMarkPrice(ethers.utils.formatEther(price))
     } catch (err) {
       console.error('Fetch price failed:', err)
     }
   }
 
+  useEffect(() => {
+    if (selectedToken) {
+      fetchMarkPrice()
+      fetchPosition()
+    }
+  }, [selectedToken, address])
+
   const handleOpenPosition = async () => {
-    if (!perpPool || !tokenAddress) return
+    if (!perpPool || !selectedToken) return
     setLoading(true)
     try {
       const signer = await getSigner()
@@ -108,7 +167,7 @@ export default function PerpetualPage() {
       const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
       const marginUsdc = ethers.utils.parseEther(margin)
       const leverageVal = ethers.utils.parseEther(leverage)
-      const tx = await contract.openPosition(tokenAddress, isLong, marginUsdc, leverageVal, {
+      const tx = await contract.openPosition(selectedToken, isLong, marginUsdc, leverageVal, {
         value: marginUsdc,
         gasLimit: 500_000,
       })
@@ -124,13 +183,13 @@ export default function PerpetualPage() {
   }
 
   const handleClosePosition = async () => {
-    if (!perpPool || !tokenAddress) return
+    if (!perpPool || !selectedToken) return
     setLoading(true)
     try {
       const signer = await getSigner()
       if (!signer) return
       const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
-      const tx = await contract.closePosition(tokenAddress, { gasLimit: 500_000 })
+      const tx = await contract.closePosition(selectedToken, { gasLimit: 500_000 })
       await tx.wait()
       setPosition(null)
       setPnl('-')
@@ -145,10 +204,12 @@ export default function PerpetualPage() {
     }
   }
 
+  const selectedOption = tokenOptions.find(o => o.address === selectedToken)
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Perpetual Trading</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('perp.title')}</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 space-y-4">
@@ -216,14 +277,26 @@ export default function PerpetualPage() {
               <h3 className="text-sm font-semibold text-slate-400 mb-3">Open Position</h3>
 
               <div className="mb-3">
-                <label className="text-xs text-slate-500">Token Address</label>
-                <input
-                  type="text"
-                  value={tokenAddress}
-                  onChange={(e) => setTokenAddress(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm font-mono border border-slate-700 focus:border-indigo-500 focus:outline-none"
-                />
+                <label className="text-xs text-slate-500">{t('perp.selectToken')}</label>
+                <select
+                  value={selectedToken}
+                  onChange={(e) => setSelectedToken(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm border border-slate-700 focus:border-indigo-500 focus:outline-none"
+                >
+                  {tokenOptions.length === 0 && (
+                    <option value="">No tokens available</option>
+                  )}
+                  {tokenOptions.map((opt) => (
+                    <option key={opt.address} value={opt.address}>
+                      {opt.symbol} ({opt.name})
+                    </option>
+                  ))}
+                </select>
+                {selectedOption && (
+                  <div className="text-xs text-slate-600 mt-1 font-mono truncate">
+                    {selectedToken}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 mb-3">
@@ -304,7 +377,7 @@ export default function PerpetualPage() {
 
               <button
                 onClick={handleOpenPosition}
-                disabled={loading || !tokenAddress}
+                disabled={loading || !selectedToken}
                 className={`w-full py-3 rounded-lg font-semibold text-sm ${
                   isLong
                     ? 'bg-green-600 hover:bg-green-700 disabled:bg-green-900'

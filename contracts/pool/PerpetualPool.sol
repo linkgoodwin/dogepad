@@ -54,6 +54,13 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
 
     uint256 public totalInsuranceFund;
 
+    address[] public listedTokens;
+    mapping(address => bool) public isTokenListedForPerp;
+    address public defaultToken;
+
+    event TokenListedForPerp(address indexed token);
+    event TokenDelistedForPerp(address indexed token);
+
     event PositionOpened(
         address indexed token,
         address indexed user,
@@ -101,6 +108,7 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
         require(leverage >= 1e18 && leverage <= MAX_LEVERAGE, "invalid leverage");
         require(msg.value >= marginUsdc, "insufficient margin");
         require(marginUsdc > 0, "zero margin");
+        require(isTokenListedForPerp[token], "token not listed for perp");
 
         Position storage pos = positions[msg.sender][token];
         require(!pos.isActive, "close existing position first");
@@ -405,6 +413,44 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     function setLiquidatorIncentiveBps(uint256 _bps) external onlyOwner {
         require(_bps <= 1000, "too high");
         liquidatorIncentiveBps = _bps;
+    }
+
+    function listTokenForPerp(address token) external onlyOwner {
+        require(token != address(0), "zero address");
+        require(!isTokenListedForPerp[token], "already listed");
+        isTokenListedForPerp[token] = true;
+        listedTokens.push(token);
+        if (defaultToken == address(0)) {
+            defaultToken = token;
+        }
+        emit TokenListedForPerp(token);
+    }
+
+    function delistTokenForPerp(address token) external onlyOwner {
+        require(isTokenListedForPerp[token], "not listed");
+        require(token != defaultToken, "cannot delist default");
+        isTokenListedForPerp[token] = false;
+        for (uint256 i = 0; i < listedTokens.length; i++) {
+            if (listedTokens[i] == token) {
+                listedTokens[i] = listedTokens[listedTokens.length - 1];
+                listedTokens.pop();
+                break;
+            }
+        }
+        emit TokenDelistedForPerp(token);
+    }
+
+    function setDefaultToken(address token) external onlyOwner {
+        require(isTokenListedForPerp[token], "not listed");
+        defaultToken = token;
+    }
+
+    function getListedTokens() external view returns (address[] memory) {
+        return listedTokens;
+    }
+
+    function getListedTokensCount() external view returns (uint256) {
+        return listedTokens.length;
     }
 
     receive() external payable {}
