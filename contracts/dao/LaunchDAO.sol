@@ -697,6 +697,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             uint256 share = (userUsdcUsed * tokensReceived) / usdcUsed;
 
             if (share > 0) {
+                try IBondingCurveTokenExclude(token).excludeFromHoldingLimit(supporter) {} catch {}
                 IERC20(token).safeTransfer(supporter, share);
             }
 
