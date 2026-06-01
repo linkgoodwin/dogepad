@@ -29,6 +29,10 @@ interface IBondingCurveTokenExclude {
     function excludeFromHoldingLimit(address account) external;
 }
 
+interface IBondingCurveTokenHoldingLimit {
+    function maxHoldingPercent() external view returns (uint256);
+}
+
 contract LaunchDAO is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
@@ -679,13 +683,13 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     ) internal {
         if (tokensReceived == 0 || usdcUsed == 0) return;
 
+        address proposer = candidates[candidateId].proposer;
+
         address[] storage supporters = candidateSupporters[candidateId];
         for (uint256 i = 0; i < supporters.length; i++) {
             address supporter = supporters[i];
             Subscription storage sub = userSubscriptions[supporter][candidateId];
             if (!sub.isActive || sub.hasClaimed) continue;
-
-            sub.hasClaimed = true;
 
             uint256 userUsdcUsed = sub.usdcAmount;
             uint256 userExcessUsdc = 0;
@@ -695,10 +699,36 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             }
 
             uint256 share = (userUsdcUsed * tokensReceived) / usdcUsed;
+            uint256 actualTransfer = share;
 
             if (share > 0) {
-                try IBondingCurveTokenExclude(token).excludeFromHoldingLimit(supporter) {} catch {}
-                IERC20(token).safeTransfer(supporter, share);
+                if (supporter == proposer) {
+                    try IBondingCurveTokenExclude(token).excludeFromHoldingLimit(supporter) {} catch {}
+                } else {
+                    try IBondingCurveTokenHoldingLimit(token).maxHoldingPercent() returns (uint256 holdPercent) {
+                        if (holdPercent > 0) {
+                            uint256 circulatingSupply = IERC20(token).totalSupply() - IERC20(token).balanceOf(token);
+                            uint256 maxHold = (circulatingSupply * holdPercent) / 100;
+                            uint256 currentBalance = IERC20(token).balanceOf(supporter);
+                            if (maxHold > currentBalance) {
+                                uint256 maxTransferable = maxHold - currentBalance;
+                                if (actualTransfer > maxTransferable) {
+                                    actualTransfer = maxTransferable;
+                                }
+                            } else {
+                                actualTransfer = 0;
+                            }
+                        }
+                    } catch {}
+                }
+
+                if (actualTransfer > 0) {
+                    IERC20(token).safeTransfer(supporter, actualTransfer);
+                }
+            }
+
+            if (actualTransfer >= share) {
+                sub.hasClaimed = true;
             }
 
             if (userExcessUsdc > 0) {
@@ -706,7 +736,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
                 require(success, "refund failed");
             }
 
-            emit SubscriptionClaimed(supporter, candidateId, token, share);
+            emit SubscriptionClaimed(supporter, candidateId, token, actualTransfer);
         }
     }
 
