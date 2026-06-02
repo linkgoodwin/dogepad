@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { formatEther, parseEther } from 'viem'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { BONDING_CURVE_ABI, getBscScanUrl } from '@/config/contracts'
+import { getContractAddress, getBscScanUrl, isZeroAddress } from '@/config/contracts'
 import { useTradeStore } from '@/stores/tradeStore'
 import { cn, formatUsdc } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
@@ -38,6 +38,16 @@ const ERC20_ABI = [
 ] as const
 
 const ROUTER_ABI = [
+  {
+    inputs: [
+      { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
+      { internalType: 'address[]', name: 'path', type: 'address[]' },
+    ],
+    name: 'getAmountsOut',
+    outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
   {
     inputs: [
       { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
@@ -122,33 +132,6 @@ const WUSDC_ABI = [
   },
 ] as const
 
-const FACTORY_ABI = [
-  {
-    type: 'function',
-    name: 'getPair',
-    stateMutability: 'view',
-    inputs: [{ type: 'address' }, { type: 'address' }],
-    outputs: [{ type: 'address' }],
-  },
-] as const
-
-const PAIR_ABI = [
-  {
-    type: 'function',
-    name: 'getReserves',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'token0',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
-] as const
-
 type BuyStep = 'idle' | 'depositing' | 'approving-wusdc' | 'swapping'
 type SellStep = 'idle' | 'approving-token' | 'swapping' | 'withdrawing'
 
@@ -161,19 +144,10 @@ interface ExternalTradePanelProps {
   onTxConfirmed?: () => void
 }
 
-function quote(amountIn: bigint, reserveIn: bigint, reserveOut: bigint): bigint {
-  if (reserveIn === BigInt(0) || reserveOut === BigInt(0) || amountIn === BigInt(0)) return BigInt(0)
-  const amountInWithFee = amountIn * BigInt(997)
-  const numerator = amountInWithFee * reserveOut
-  const denominator = reserveIn * BigInt(1000) + amountInWithFee
-  return numerator / denominator
-}
-
 export default function ExternalTradePanel({
   tokenAddress,
   tokenSymbol,
   nativeSymbol,
-  bondingCurveAddress,
   chainId,
   onTxConfirmed,
 }: ExternalTradePanelProps) {
@@ -190,84 +164,50 @@ export default function ExternalTradePanel({
   const { writeContractAsync, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
-  const { data: dexRouterData, isLoading: isDexRouterLoading } = useReadContract({
-    address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'dexRouter',
-    chainId,
-  })
+  // Use known addresses from config instead of reading from BondingCurve
+  const dexRouter = getContractAddress(chainId, 'simpleRouter') as `0x${string}` | undefined
+  const baseAsset = getContractAddress(chainId, 'simpleFactory') ? (() => {
+    // For Arc testnet, baseAsset is WUSDC. Read from BondingCurve or use known address.
+    // We know for Arc testnet the baseAsset is WUSDC at 0x911b4000D3422F482F4062a913885f7b035382Df
+    // But let's try to read it from the config or derive it
+    return undefined as `0x${string}` | undefined
+  })() : undefined
 
-  const { data: baseAssetData, isLoading: isBaseAssetLoading } = useReadContract({
+  // Read baseAsset from BondingCurve (single call, not the whole chain)
+  const bondingCurveAddress = getContractAddress(chainId, 'bondingCurve') as `0x${string}` | undefined
+  const BC_ABI_FRAGMENT = [
+    { inputs: [], name: 'baseAsset', outputs: [{ internalType: 'address', name: '', type: 'address' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'isXyloRouter', outputs: [{ internalType: 'bool', name: '', type: 'bool' }], stateMutability: 'view', type: 'function' },
+  ] as const
+
+  const { data: baseAssetData } = useReadContract({
     address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
+    abi: BC_ABI_FRAGMENT,
     functionName: 'baseAsset',
     chainId,
+    query: { enabled: !!bondingCurveAddress && !isZeroAddress(bondingCurveAddress) },
   })
 
   const { data: isXyloRouterData } = useReadContract({
     address: bondingCurveAddress,
-    abi: BONDING_CURVE_ABI,
+    abi: BC_ABI_FRAGMENT,
     functionName: 'isXyloRouter',
     chainId,
+    query: { enabled: !!bondingCurveAddress && !isZeroAddress(bondingCurveAddress) },
   })
 
-  const dexRouter = dexRouterData as `0x${string}` | undefined
-  const baseAsset = baseAssetData as `0x${string}` | undefined
+  const wusdcAddress = (baseAssetData ?? baseAsset) as `0x${string}` | undefined
   const isXyloRouter = Boolean(isXyloRouterData)
 
   const dexBuyPath = useMemo(() => {
-    if (!baseAsset || !tokenAddress) return undefined
-    return [baseAsset, tokenAddress] as `0x${string}`[]
-  }, [baseAsset, tokenAddress])
+    if (!wusdcAddress || !tokenAddress) return undefined
+    return [wusdcAddress, tokenAddress] as `0x${string}`[]
+  }, [wusdcAddress, tokenAddress])
 
   const dexSellPath = useMemo(() => {
-    if (!baseAsset || !tokenAddress) return undefined
-    return [tokenAddress, baseAsset] as `0x${string}`[]
-  }, [baseAsset, tokenAddress])
-
-  const { data: dexFactoryAddress } = useReadContract({
-    address: dexRouter,
-    abi: [{ type: 'function', name: 'factory', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-    functionName: 'factory',
-    chainId,
-    query: { enabled: !!dexRouter },
-  })
-
-  const { data: dexFactoryPair } = useReadContract({
-    address: dexFactoryAddress as `0x${string}` | undefined,
-    abi: FACTORY_ABI,
-    functionName: 'getPair',
-    args: baseAsset && tokenAddress ? [baseAsset, tokenAddress] : undefined,
-    chainId,
-    query: { enabled: !!dexFactoryAddress && !!baseAsset && !!tokenAddress },
-  })
-
-  const lpPairAddress = dexFactoryPair as `0x${string}` | undefined
-
-  const { data: pairToken0 } = useReadContract({
-    address: lpPairAddress,
-    abi: PAIR_ABI,
-    functionName: 'token0',
-    chainId,
-    query: { enabled: !!lpPairAddress },
-  })
-
-  const { data: dexReserves, isLoading: isReservesLoading } = useReadContract({
-    address: lpPairAddress,
-    abi: PAIR_ABI,
-    functionName: 'getReserves',
-    chainId,
-    query: { enabled: !!lpPairAddress },
-  })
-
-  const lpReserves = useMemo(() => {
-    if (!dexReserves || !baseAsset || !tokenAddress) return null
-    const [r0, r1] = dexReserves as [bigint, bigint, bigint]
-    const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
-    const reserveUsdc = tokenIsToken0 ? r1 : r0
-    const reserveTokens = tokenIsToken0 ? r0 : r1
-    return { reserveUsdc, reserveTokens }
-  }, [dexReserves, baseAsset, tokenAddress])
+    if (!wusdcAddress || !tokenAddress) return undefined
+    return [tokenAddress, wusdcAddress] as `0x${string}`[]
+  }, [wusdcAddress, tokenAddress])
 
   const dexBuyAmountIn = useMemo(() => {
     if (!buyAmount || Number(buyAmount) <= 0) return BigInt(0)
@@ -279,15 +219,36 @@ export default function ExternalTradePanel({
     try { return parseEther(sellAmount) } catch { return BigInt(0) }
   }, [sellAmount])
 
+  // Use getAmountsOut from Router for accurate quotes (handles tax internally)
+  const { data: buyAmountsOut } = useReadContract({
+    address: dexRouter,
+    abi: ROUTER_ABI,
+    functionName: 'getAmountsOut',
+    args: dexBuyAmountIn > BigInt(0) && dexBuyPath ? [dexBuyAmountIn, dexBuyPath] : undefined,
+    chainId,
+    query: { enabled: !!dexRouter && dexBuyAmountIn > BigInt(0) && !!dexBuyPath },
+  })
+
+  const { data: sellAmountsOut } = useReadContract({
+    address: dexRouter,
+    abi: ROUTER_ABI,
+    functionName: 'getAmountsOut',
+    args: dexSellAmountIn > BigInt(0) && dexSellPath ? [dexSellAmountIn, dexSellPath] : undefined,
+    chainId,
+    query: { enabled: !!dexRouter && dexSellAmountIn > BigInt(0) && !!dexSellPath },
+  })
+
   const dexEstimatedTokens = useMemo(() => {
-    if (!lpReserves || dexBuyAmountIn === BigInt(0)) return BigInt(0)
-    return quote(dexBuyAmountIn, lpReserves.reserveUsdc, lpReserves.reserveTokens)
-  }, [lpReserves, dexBuyAmountIn])
+    if (!buyAmountsOut) return BigInt(0)
+    const amounts = buyAmountsOut as bigint[]
+    return amounts.length >= 2 ? amounts[amounts.length - 1] : BigInt(0)
+  }, [buyAmountsOut])
 
   const dexEstimatedUsdc = useMemo(() => {
-    if (!lpReserves || dexSellAmountIn === BigInt(0)) return BigInt(0)
-    return quote(dexSellAmountIn, lpReserves.reserveTokens, lpReserves.reserveUsdc)
-  }, [lpReserves, dexSellAmountIn])
+    if (!sellAmountsOut) return BigInt(0)
+    const amounts = sellAmountsOut as bigint[]
+    return amounts.length >= 2 ? amounts[amounts.length - 1] : BigInt(0)
+  }, [sellAmountsOut])
 
   const { data: userTokenBalance, refetch: refetchBalance } = useReadContract({
     address: tokenAddress,
@@ -308,21 +269,21 @@ export default function ExternalTradePanel({
   })
 
   const { data: wusdcBalance, refetch: refetchWusdcBalance } = useReadContract({
-    address: baseAsset,
+    address: wusdcAddress,
     abi: WUSDC_ABI,
     functionName: 'balanceOf',
     args: userAddress ? [userAddress] : undefined,
     chainId,
-    query: { enabled: isXyloRouter && !!baseAsset && !!userAddress && activeTab === 'buy' },
+    query: { enabled: isXyloRouter && !!wusdcAddress && !!userAddress && activeTab === 'buy' },
   })
 
   const { data: wusdcAllowance, refetch: refetchWusdcAllowance } = useReadContract({
-    address: baseAsset,
+    address: wusdcAddress,
     abi: WUSDC_ABI,
     functionName: 'allowance',
     args: userAddress && dexRouter ? [userAddress, dexRouter] : undefined,
     chainId,
-    query: { enabled: isXyloRouter && !!baseAsset && !!dexRouter && !!userAddress && activeTab === 'buy' },
+    query: { enabled: isXyloRouter && !!wusdcAddress && !!dexRouter && !!userAddress && activeTab === 'buy' },
   })
 
   useEffect(() => {
@@ -336,13 +297,13 @@ export default function ExternalTradePanel({
   }, [isConfirmed, refetchBalance, refetchTokenAllowance, refetchWusdcBalance, refetchWusdcAllowance, onTxConfirmed])
 
   useEffect(() => {
-    if (!isConfirmed || !isXyloRouter || !baseAsset) return
+    if (!isConfirmed || !isXyloRouter || !wusdcAddress) return
     if (sellStep === 'swapping' && pendingWithdrawAmount > BigInt(0)) {
       const amount = pendingWithdrawAmount
       setPendingWithdrawAmount(BigInt(0))
       setSellStep('withdrawing')
       writeContractAsync({
-        address: baseAsset,
+        address: wusdcAddress,
         abi: WUSDC_ABI,
         functionName: 'withdraw',
         args: [amount],
@@ -354,7 +315,7 @@ export default function ExternalTradePanel({
         setSellStep('idle')
       })
     }
-  }, [isConfirmed, sellStep, pendingWithdrawAmount, isXyloRouter, baseAsset, writeContractAsync, chainId])
+  }, [isConfirmed, sellStep, pendingWithdrawAmount, isXyloRouter, wusdcAddress, writeContractAsync, chainId])
 
   useEffect(() => {
     if (!isConfirmed || !autoRunRef.current) return
@@ -393,13 +354,13 @@ export default function ExternalTradePanel({
         const minOut = (dexEstimatedTokens * slippageBps) / BigInt(10000)
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 300)
 
-        if (buyStep === 'depositing' && isXyloRouter && baseAsset) {
+        if (buyStep === 'depositing' && isXyloRouter && wusdcAddress) {
           const currentWusdc = (wusdcBalance as bigint) ?? BigInt(0)
           const depositAmt = amountIn > currentWusdc ? amountIn - currentWusdc : BigInt(0)
           if (depositAmt > BigInt(0)) {
             autoRunRef.current = true
             await writeContractAsync({
-              address: baseAsset,
+              address: wusdcAddress,
               abi: WUSDC_ABI,
               functionName: 'deposit',
               args: [],
@@ -410,12 +371,12 @@ export default function ExternalTradePanel({
           } else {
             setBuyStep('approving-wusdc')
           }
-        } else if (buyStep === 'approving-wusdc' && isXyloRouter && baseAsset) {
+        } else if (buyStep === 'approving-wusdc' && isXyloRouter && wusdcAddress) {
           const currentAllowance = (wusdcAllowance as bigint) ?? BigInt(0)
           if (currentAllowance < amountIn) {
             autoRunRef.current = true
             await writeContractAsync({
-              address: baseAsset,
+              address: wusdcAddress,
               abi: WUSDC_ABI,
               functionName: 'approve',
               args: [dexRouter!, amountIn],
@@ -571,6 +532,8 @@ export default function ExternalTradePanel({
     return num.toExponential(2)
   }
 
+  const configReady = !!dexRouter && !!wusdcAddress && !isZeroAddress(dexRouter) && !isZeroAddress(wusdcAddress)
+
   return (
     <div className="card-dark">
       <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
@@ -601,7 +564,11 @@ export default function ExternalTradePanel({
         <span className="text-xs text-neon-green font-medium">{t('tokenDetail.externalMarket')}</span>
       </div>
 
-      {activeTab === 'buy' ? (
+      {!configReady ? (
+        <div className="bg-dark-700 rounded-lg p-4 text-center">
+          <p className="text-xs text-neon-red">DEX config not available for this chain. Please check network connection.</p>
+        </div>
+      ) : activeTab === 'buy' ? (
         <div className="space-y-4">
           <div>
             <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
@@ -615,15 +582,9 @@ export default function ExternalTradePanel({
           </div>
           <div className="bg-dark-700 rounded-lg p-3">
             <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            {isDexRouterLoading || isBaseAssetLoading || isReservesLoading ? (
-              <p className="font-display font-bold text-lg text-gray-400">Loading...</p>
-            ) : !dexRouter || !baseAsset ? (
-              <p className="text-xs text-neon-red">Failed to load DEX config. Please refresh.</p>
-            ) : !lpPairAddress ? (
-              <p className="text-xs text-neon-red">DEX pair not found</p>
-            ) : (
-              <p className="font-display font-bold text-lg">{formatTokenAmount(dexEstimatedTokens)} {tokenSymbol}</p>
-            )}
+            <p className="font-display font-bold text-lg">
+              {dexEstimatedTokens > BigInt(0) ? `${formatTokenAmount(dexEstimatedTokens)} ${tokenSymbol}` : `0 ${tokenSymbol}`}
+            </p>
           </div>
           <div>
             <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
@@ -684,15 +645,9 @@ export default function ExternalTradePanel({
           </div>
           <div className="bg-dark-700 rounded-lg p-3">
             <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            {isDexRouterLoading || isBaseAssetLoading || isReservesLoading ? (
-              <p className="font-display font-bold text-lg text-gray-400">Loading...</p>
-            ) : !dexRouter || !baseAsset ? (
-              <p className="text-xs text-neon-red">Failed to load DEX config. Please refresh.</p>
-            ) : !lpPairAddress ? (
-              <p className="text-xs text-neon-red">DEX pair not found</p>
-            ) : (
-              <p className="font-display font-bold text-lg">{dexEstimatedUsdc > BigInt(0) ? formatUsdc(Number(formatEther(dexEstimatedUsdc))) : '0'} {nativeSymbol}</p>
-            )}
+            <p className="font-display font-bold text-lg">
+              {dexEstimatedUsdc > BigInt(0) ? `${formatUsdc(Number(formatEther(dexEstimatedUsdc)))} ${nativeSymbol}` : `0 ${nativeSymbol}`}
+            </p>
           </div>
           <div>
             <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
