@@ -11,6 +11,15 @@ interface IChainlinkAggregator {
     function decimals() external view returns (uint8);
 }
 
+interface ISimplePair {
+    function getReserves() external view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast);
+    function token0() external view returns (address);
+}
+
+interface ISimpleFactory {
+    function getPair(address tokenA, address tokenB) external view returns (address);
+}
+
 contract PriceOracle is Ownable {
     mapping(address => address) public chainlinkFeeds;
     mapping(address => uint256) public twapPrices;
@@ -23,21 +32,50 @@ contract PriceOracle is Ownable {
     mapping(address => uint256) public effectivePrice;
     mapping(address => bool) public authorizedUpdaters;
 
+    // DEX price source
+    address public dexFactory;
+    address public baseAsset;
+    mapping(address => address) public tokenDexPairs; // token => pair address (override)
+
+    event PriceUpdatedFromDex(address indexed token, uint256 price, uint256 reserveBase, uint256 reserveToken);
+
     constructor() Ownable(msg.sender) {}
+
+    function setDexConfig(address _dexFactory, address _baseAsset) external onlyOwner {
+        dexFactory = _dexFactory;
+        baseAsset = _baseAsset;
+    }
+
+    function setTokenDexPair(address token, address pair) external onlyOwner {
+        tokenDexPairs[token] = pair;
+    }
 
     function getPrice(address token) external view returns (uint256) {
         if (effectivePrice[token] != 0 && block.timestamp >= effectivePriceTime[token]) {
             return effectivePrice[token];
         }
-        require(twapPrices[token] > 0, "price not set");
-        require(lastUpdateTime[token] > 0 && block.timestamp - lastUpdateTime[token] <= MAX_PRICE_AGE, "stale price");
-        return twapPrices[token];
+        if (twapPrices[token] > 0 && lastUpdateTime[token] > 0 && block.timestamp - lastUpdateTime[token] <= MAX_PRICE_AGE) {
+            return twapPrices[token];
+        }
+        // Fallback: calculate price from DEX reserves
+        uint256 dexPrice = _getPriceFromDex(token);
+        require(dexPrice > 0, "stale price");
+        return dexPrice;
     }
 
     function updateTwapPrice(address token, uint256 newPrice) external {
         require(authorizedUpdaters[msg.sender], "not authorized");
         twapPrices[token] = newPrice;
         lastUpdateTime[token] = block.timestamp;
+    }
+
+    function updatePriceFromDex(address token) external returns (uint256) {
+        uint256 dexPrice = _getPriceFromDex(token);
+        require(dexPrice > 0, "no dex price");
+        twapPrices[token] = dexPrice;
+        lastUpdateTime[token] = block.timestamp;
+        emit PriceUpdatedFromDex(token, dexPrice, 0, 0);
+        return dexPrice;
     }
 
     function updateEffectivePrice(address token) external {
@@ -62,6 +100,27 @@ contract PriceOracle is Ownable {
 
     function setAuthorizedUpdater(address updater, bool authorized) external onlyOwner {
         authorizedUpdaters[updater] = authorized;
+    }
+
+    function _getPriceFromDex(address token) internal view returns (uint256) {
+        address pair = tokenDexPairs[token];
+        if (pair == address(0) && dexFactory != address(0) && baseAsset != address(0)) {
+            pair = ISimpleFactory(dexFactory).getPair(token, baseAsset);
+        }
+        if (pair == address(0)) return 0;
+
+        (uint256 reserve0, uint256 reserve1,) = ISimplePair(pair).getReserves();
+        if (reserve0 == 0 || reserve1 == 0) return 0;
+
+        address token0 = ISimplePair(pair).token0();
+        // price = baseAsset per token (in 18 decimals)
+        // If token0 == baseAsset: price = reserve0 / reserve1 * 1e18
+        // If token0 == token: price = reserve1 / reserve0 * 1e18
+        if (token0 == baseAsset) {
+            return (reserve0 * 1e18) / reserve1;
+        } else {
+            return (reserve1 * 1e18) / reserve0;
+        }
     }
 
     function _getChainlinkPrice(address token) internal view returns (uint256) {
