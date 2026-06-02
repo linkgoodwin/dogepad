@@ -207,7 +207,7 @@ export default function TokenDetail() {
 
   const { data: dexReserves } = useReadContract({
     address: lpPairAddress,
-    abi: [{ type: 'function', name: 'getReserves', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint112' }, { type: 'uint112' }, { type: 'uint32' }] }],
+    abi: [{ type: 'function', name: 'getReserves', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }] }],
     functionName: 'getReserves',
     chainId,
     query: { enabled: !!lpPairAddress && isListed },
@@ -215,10 +215,10 @@ export default function TokenDetail() {
 
   const dexLpInfo = useMemo(() => {
     if (!dexReserves || !baseAsset || !tokenAddress) return null
-    const [r0, r1] = dexReserves as [bigint, bigint, number]
+    const [r0, r1] = dexReserves as [bigint, bigint, bigint]
     const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
-    const lpUsdc = tokenIsToken0 ? Number(formatEther(BigInt(r1))) : Number(formatEther(BigInt(r0)))
-    const lpTokens = tokenIsToken0 ? Number(formatEther(BigInt(r0))) : Number(formatEther(BigInt(r1)))
+    const lpUsdc = tokenIsToken0 ? Number(formatEther(r1)) : Number(formatEther(r0))
+    const lpTokens = tokenIsToken0 ? Number(formatEther(r0)) : Number(formatEther(r1))
     return { lpUsdc, lpTokens }
   }, [dexReserves, baseAsset, tokenAddress])
 

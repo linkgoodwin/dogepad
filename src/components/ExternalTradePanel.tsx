@@ -138,7 +138,7 @@ const PAIR_ABI = [
     name: 'getReserves',
     stateMutability: 'view',
     inputs: [],
-    outputs: [{ type: 'uint112' }, { type: 'uint112' }, { type: 'uint32' }],
+    outputs: [{ type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }],
   },
   {
     type: 'function',
@@ -190,14 +190,14 @@ export default function ExternalTradePanel({
   const { writeContractAsync, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
-  const { data: dexRouterData } = useReadContract({
+  const { data: dexRouterData, isLoading: isDexRouterLoading } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'dexRouter',
     chainId,
   })
 
-  const { data: baseAssetData } = useReadContract({
+  const { data: baseAssetData, isLoading: isBaseAssetLoading } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'baseAsset',
@@ -252,7 +252,7 @@ export default function ExternalTradePanel({
     query: { enabled: !!lpPairAddress },
   })
 
-  const { data: dexReserves } = useReadContract({
+  const { data: dexReserves, isLoading: isReservesLoading } = useReadContract({
     address: lpPairAddress,
     abi: PAIR_ABI,
     functionName: 'getReserves',
@@ -262,10 +262,10 @@ export default function ExternalTradePanel({
 
   const lpReserves = useMemo(() => {
     if (!dexReserves || !baseAsset || !tokenAddress) return null
-    const [r0, r1] = dexReserves as [bigint, bigint, number]
+    const [r0, r1] = dexReserves as [bigint, bigint, bigint]
     const tokenIsToken0 = tokenAddress.toLowerCase() < baseAsset.toLowerCase()
-    const reserveUsdc = tokenIsToken0 ? BigInt(r1) : BigInt(r0)
-    const reserveTokens = tokenIsToken0 ? BigInt(r0) : BigInt(r1)
+    const reserveUsdc = tokenIsToken0 ? r1 : r0
+    const reserveTokens = tokenIsToken0 ? r0 : r1
     return { reserveUsdc, reserveTokens }
   }, [dexReserves, baseAsset, tokenAddress])
 
@@ -615,7 +615,15 @@ export default function ExternalTradePanel({
           </div>
           <div className="bg-dark-700 rounded-lg p-3">
             <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            <p className="font-display font-bold text-lg">{formatTokenAmount(dexEstimatedTokens)} {tokenSymbol}</p>
+            {isDexRouterLoading || isBaseAssetLoading || isReservesLoading ? (
+              <p className="font-display font-bold text-lg text-gray-400">Loading...</p>
+            ) : !dexRouter || !baseAsset ? (
+              <p className="text-xs text-neon-red">Failed to load DEX config. Please refresh.</p>
+            ) : !lpPairAddress ? (
+              <p className="text-xs text-neon-red">DEX pair not found</p>
+            ) : (
+              <p className="font-display font-bold text-lg">{formatTokenAmount(dexEstimatedTokens)} {tokenSymbol}</p>
+            )}
           </div>
           <div>
             <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
@@ -676,7 +684,15 @@ export default function ExternalTradePanel({
           </div>
           <div className="bg-dark-700 rounded-lg p-3">
             <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            <p className="font-display font-bold text-lg">{dexEstimatedUsdc > BigInt(0) ? formatUsdc(Number(formatEther(dexEstimatedUsdc))) : '0'} {nativeSymbol}</p>
+            {isDexRouterLoading || isBaseAssetLoading || isReservesLoading ? (
+              <p className="font-display font-bold text-lg text-gray-400">Loading...</p>
+            ) : !dexRouter || !baseAsset ? (
+              <p className="text-xs text-neon-red">Failed to load DEX config. Please refresh.</p>
+            ) : !lpPairAddress ? (
+              <p className="text-xs text-neon-red">DEX pair not found</p>
+            ) : (
+              <p className="font-display font-bold text-lg">{dexEstimatedUsdc > BigInt(0) ? formatUsdc(Number(formatEther(dexEstimatedUsdc))) : '0'} {nativeSymbol}</p>
+            )}
           </div>
           <div>
             <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
