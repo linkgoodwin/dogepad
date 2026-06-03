@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useState, useEffect, useCallback } from 'react'
+import { useAccount } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
 import { ethers } from 'ethers'
 import { getContractAddress, getBscScanUrl, isZeroAddress } from '@/config/contracts'
@@ -8,18 +8,18 @@ import { cn, formatUsdc } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
 import { AlertCircle, ArrowRightLeft } from 'lucide-react'
 
-const ERC20_ABI_FRAG = [
+const ERC20_ABI = [
   'function approve(address spender, uint256 amount) returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function balanceOf(address account) view returns (uint256)',
 ]
 
-const ROUTER_ABI_FRAG = [
+const ROUTER_ABI = [
   'function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[])',
   'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[])',
 ]
 
-const WUSDC_ABI_FRAG = [
+const WUSDC_ABI = [
   'function deposit() payable',
   'function withdraw(uint256 wad)',
   'function balanceOf(address account) view returns (uint256)',
@@ -27,13 +27,10 @@ const WUSDC_ABI_FRAG = [
   'function approve(address spender, uint256 amount) returns (bool)',
 ]
 
-const BC_ABI_FRAG = [
+const BC_ABI = [
   'function baseAsset() view returns (address)',
   'function isXyloRouter() view returns (bool)',
 ]
-
-type BuyStep = 'idle' | 'depositing' | 'approving-wusdc' | 'swapping'
-type SellStep = 'idle' | 'approving-token' | 'swapping' | 'withdrawing'
 
 interface ExternalTradePanelProps {
   tokenAddress: `0x${string}`
@@ -53,18 +50,13 @@ export default function ExternalTradePanel({
 }: ExternalTradePanelProps) {
   const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
+  const [txStatus, setTxStatus] = useState<string>('')
   const [txError, setTxError] = useState('')
-  const [buyStep, setBuyStep] = useState<BuyStep>('idle')
-  const [sellStep, setSellStep] = useState<SellStep>('idle')
-  const [pendingWithdrawAmount, setPendingWithdrawAmount] = useState<string>('0')
+  const [txSuccess, setTxSuccess] = useState(false)
   const t = useT()
   const { address: userAddress, isConnected } = useAccount()
-  const autoRunRef = useRef(false)
 
-  const { writeContractAsync, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
-
-  // DEX config from ethers direct RPC (same pattern as PerpetualPage)
+  // All state from ethers direct RPC
   const [wusdcAddress, setWusdcAddress] = useState<string>('')
   const [isXyloRouter, setIsXyloRouter] = useState(false)
   const [estimatedBuy, setEstimatedBuy] = useState<string>('0')
@@ -74,6 +66,7 @@ export default function ExternalTradePanel({
   const [tokenAllow, setTokenAllow] = useState<string>('0')
   const [wusdcAllow, setWusdcAllow] = useState<string>('0')
   const [configError, setConfigError] = useState('')
+  const [isBusy, setIsBusy] = useState(false)
 
   const dexRouter = getContractAddress(chainId, 'simpleRouter')
   const bondingCurveAddr = getContractAddress(chainId, 'bondingCurve')
@@ -82,7 +75,14 @@ export default function ExternalTradePanel({
     return new ethers.providers.JsonRpcProvider('https://rpc.testnet.arc.network')
   }, [])
 
-  // Load DEX config once
+  const getSigner = useCallback(async () => {
+    if (typeof (window as any).ethereum === 'undefined') return null
+    const browserProvider = new ethers.providers.Web3Provider((window as any).ethereum)
+    await browserProvider.send('eth_requestAccounts', [])
+    return browserProvider.getSigner()
+  }, [])
+
+  // Load DEX config
   useEffect(() => {
     if (!bondingCurveAddr || isZeroAddress(bondingCurveAddr)) {
       setConfigError('BondingCurve address not configured')
@@ -92,11 +92,8 @@ export default function ExternalTradePanel({
     const load = async () => {
       try {
         const provider = getProvider()
-        const bc = new ethers.Contract(bondingCurveAddr, BC_ABI_FRAG, provider)
-        const [baseAsset, isXylo] = await Promise.all([
-          bc.baseAsset(),
-          bc.isXyloRouter(),
-        ])
+        const bc = new ethers.Contract(bondingCurveAddr, BC_ABI, provider)
+        const [baseAsset, isXylo] = await Promise.all([bc.baseAsset(), bc.isXyloRouter()])
         if (!cancelled) {
           setWusdcAddress(baseAsset)
           setIsXyloRouter(isXylo)
@@ -120,7 +117,7 @@ export default function ExternalTradePanel({
     const fetch = async () => {
       try {
         const provider = getProvider()
-        const router = new ethers.Contract(dexRouter, ROUTER_ABI_FRAG, provider)
+        const router = new ethers.Contract(dexRouter, ROUTER_ABI, provider)
         const amountIn = ethers.utils.parseUnits(buyAmount, 18)
         const amounts = await router.getAmountsOut(amountIn, [wusdcAddress, tokenAddress])
         if (!cancelled && amounts && amounts.length >= 2) {
@@ -144,7 +141,7 @@ export default function ExternalTradePanel({
     const fetch = async () => {
       try {
         const provider = getProvider()
-        const router = new ethers.Contract(dexRouter, ROUTER_ABI_FRAG, provider)
+        const router = new ethers.Contract(dexRouter, ROUTER_ABI, provider)
         const amountIn = ethers.utils.parseUnits(sellAmount, 18)
         const amounts = await router.getAmountsOut(amountIn, [tokenAddress, wusdcAddress])
         if (!cancelled && amounts && amounts.length >= 2) {
@@ -159,260 +156,169 @@ export default function ExternalTradePanel({
   }, [sellAmount, dexRouter, wusdcAddress, tokenAddress, getProvider])
 
   // Fetch user balances and allowances
-  useEffect(() => {
+  const refreshBalances = useCallback(async () => {
     if (!userAddress || !wusdcAddress) return
-    let cancelled = false
-    const fetch = async () => {
-      try {
-        const provider = getProvider()
-        const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI_FRAG, provider)
-        const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI_FRAG, provider)
+    try {
+      const provider = getProvider()
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
+      const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, provider)
 
-        const promises: Promise<any>[] = [
-          tokenContract.balanceOf(userAddress),
-        ]
-        if (activeTab === 'sell' && dexRouter && !isZeroAddress(dexRouter)) {
-          promises.push(tokenContract.allowance(userAddress, dexRouter))
+      const balPromises: Promise<any>[] = [tokenContract.balanceOf(userAddress)]
+      if (dexRouter && !isZeroAddress(dexRouter)) {
+        balPromises.push(tokenContract.allowance(userAddress, dexRouter))
+        if (isXyloRouter) {
+          balPromises.push(wusdcContract.balanceOf(userAddress))
+          balPromises.push(wusdcContract.allowance(userAddress, dexRouter))
         }
-        if (activeTab === 'buy' && isXyloRouter && dexRouter && !isZeroAddress(dexRouter)) {
-          promises.push(wusdcContract.balanceOf(userAddress))
-          promises.push(wusdcContract.allowance(userAddress, dexRouter))
-        }
-
-        const results = await Promise.all(promises)
-        if (!cancelled) {
-          setUserTokenBal(results[0]?.toString() || '0')
-          let idx = 1
-          if (activeTab === 'sell' && dexRouter && !isZeroAddress(dexRouter)) {
-            setTokenAllow(results[idx]?.toString() || '0')
-            idx++
-          }
-          if (activeTab === 'buy' && isXyloRouter && dexRouter && !isZeroAddress(dexRouter)) {
-            setUserWusdcBal(results[idx]?.toString() || '0')
-            setWusdcAllow(results[idx + 1]?.toString() || '0')
-          }
-        }
-      } catch {
-        // silent
       }
-    }
-    fetch()
-    const interval = setInterval(fetch, 15000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [userAddress, wusdcAddress, tokenAddress, dexRouter, isXyloRouter, activeTab, getProvider])
 
-  // Wagmi write helpers for contract writes (needs wallet)
-  const ERC20_ABI = [
-    { inputs: [{ internalType: 'address', name: 'spender', type: 'address' }, { internalType: 'uint256', name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ internalType: 'bool', name: '', type: 'bool' }], stateMutability: 'nonpayable', type: 'function' },
-  ] as const
-
-  const WUSDC_ABI = [
-    { inputs: [], name: 'deposit', outputs: [], stateMutability: 'payable', type: 'function' },
-    { inputs: [{ internalType: 'uint256', name: 'wad', type: 'uint256' }], name: 'withdraw', outputs: [], stateMutability: 'nonpayable', type: 'function' },
-    { inputs: [{ internalType: 'address', name: 'spender', type: 'address' }, { internalType: 'uint256', name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ internalType: 'bool', name: '', type: 'bool' }], stateMutability: 'nonpayable', type: 'function' },
-  ] as const
-
-  const ROUTER_ABI = [
-    { inputs: [{ internalType: 'uint256', name: 'amountIn', type: 'uint256' }, { internalType: 'uint256', name: 'amountOutMin', type: 'uint256' }, { internalType: 'address[]', name: 'path', type: 'address[]' }, { internalType: 'address', name: 'to', type: 'address' }, { internalType: 'uint256', name: 'deadline', type: 'uint256' }], name: 'swapExactTokensForTokens', outputs: [{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' }], stateMutability: 'nonpayable', type: 'function' },
-  ] as const
-
-  // Auto-run buy steps after tx confirmation
-  useEffect(() => {
-    if (!isConfirmed || !autoRunRef.current) return
-    autoRunRef.current = false
-
-    if (buyStep === 'depositing') {
-      setBuyStep('approving-wusdc')
-    } else if (buyStep === 'approving-wusdc') {
-      setBuyStep('swapping')
-    } else if (buyStep === 'swapping') {
-      setBuyStep('idle')
-    } else if (sellStep === 'approving-token') {
-      setSellStep('swapping')
-    } else if (sellStep === 'swapping') {
-      if (isXyloRouter && estimatedSell !== '0') {
-        setPendingWithdrawAmount(estimatedSell)
-        setSellStep('withdrawing')
-      } else {
-        setSellStep('idle')
+      const results = await Promise.all(balPromises)
+      setUserTokenBal(results[0]?.toString() || '0')
+      let idx = 1
+      if (dexRouter && !isZeroAddress(dexRouter)) {
+        setTokenAllow(results[idx]?.toString() || '0')
+        idx++
+        if (isXyloRouter) {
+          setUserWusdcBal(results[idx]?.toString() || '0')
+          setWusdcAllow(results[idx + 1]?.toString() || '0')
+        }
       }
+    } catch {
+      // silent
     }
-  }, [isConfirmed, buyStep, sellStep, isXyloRouter, estimatedSell])
+  }, [userAddress, wusdcAddress, tokenAddress, dexRouter, isXyloRouter, getProvider])
 
-  // WUSDC withdraw after sell
   useEffect(() => {
-    if (!isConfirmed || sellStep !== 'withdrawing' || !wusdcAddress) return
-    const amount = pendingWithdrawAmount
-    setPendingWithdrawAmount('0')
-    setSellStep('idle')
-    writeContractAsync({
-      address: wusdcAddress as `0x${string}`,
-      abi: WUSDC_ABI,
-      functionName: 'withdraw',
-      args: [BigInt(amount)],
-      chainId,
-      gas: 1_000_000n,
-    } as any).catch(() => {
-      setTxError('WUSDC unwrap failed, please withdraw manually')
-    })
-  }, [isConfirmed, sellStep, pendingWithdrawAmount, wusdcAddress, writeContractAsync, chainId])
+    refreshBalances()
+    const interval = setInterval(refreshBalances, 15000)
+    return () => clearInterval(interval)
+  }, [refreshBalances])
 
-  // Execute buy steps
-  useEffect(() => {
-    if (buyStep === 'idle' || isWritePending || isConfirming) return
-    const run = async () => {
-      try {
-        const amountIn = parseEther(buyAmount!)
-        const estBuy = BigInt(estimatedBuy)
-        const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-        const minOut = (estBuy * slippageBps) / BigInt(10000)
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 300)
-
-        if (buyStep === 'depositing' && isXyloRouter && wusdcAddress) {
-          const currentWusdc = BigInt(userWusdcBal)
-          const depositAmt = amountIn > currentWusdc ? amountIn - currentWusdc : BigInt(0)
-          if (depositAmt > BigInt(0)) {
-            autoRunRef.current = true
-            await writeContractAsync({
-              address: wusdcAddress as `0x${string}`,
-              abi: WUSDC_ABI,
-              functionName: 'deposit',
-              args: [],
-              value: depositAmt,
-              chainId,
-              gas: 1_000_000n,
-            } as any)
-          } else {
-            setBuyStep('approving-wusdc')
-          }
-        } else if (buyStep === 'approving-wusdc' && isXyloRouter && wusdcAddress) {
-          const currentAllowance = BigInt(wusdcAllow)
-          if (currentAllowance < amountIn) {
-            autoRunRef.current = true
-            await writeContractAsync({
-              address: wusdcAddress as `0x${string}`,
-              abi: WUSDC_ABI,
-              functionName: 'approve',
-              args: [dexRouter! as `0x${string}`, amountIn],
-              chainId,
-              gas: 1_000_000n,
-            } as any)
-          } else {
-            setBuyStep('swapping')
-          }
-        } else if (buyStep === 'swapping' && dexRouter) {
-          autoRunRef.current = true
-          await writeContractAsync({
-            address: dexRouter! as `0x${string}`,
-            abi: ROUTER_ABI,
-            functionName: 'swapExactTokensForTokens',
-            args: [amountIn, minOut, [wusdcAddress as `0x${string}`, tokenAddress], userAddress!, deadline],
-            chainId,
-            gas: 5_000_000n,
-          } as any)
-        }
-      } catch (err: any) {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) {
-          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-        }
-        setBuyStep('idle')
-        autoRunRef.current = false
-      }
-    }
-    run()
-  }, [buyStep, isWritePending, isConfirming])
-
-  // Execute sell steps
-  useEffect(() => {
-    if (sellStep === 'idle' || isWritePending || isConfirming) return
-    const run = async () => {
-      try {
-        const amountIn = parseEther(sellAmount!)
-        const estSell = BigInt(estimatedSell)
-        const slippageBps = BigInt(Math.round((100 - slippage) * 100))
-        const minOut = (estSell * slippageBps) / BigInt(10000)
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 300)
-
-        if (sellStep === 'approving-token') {
-          autoRunRef.current = true
-          await writeContractAsync({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [dexRouter! as `0x${string}`, amountIn],
-            chainId,
-            gas: 1_000_000n,
-          } as any)
-        } else if (sellStep === 'swapping' && dexRouter) {
-          autoRunRef.current = true
-          await writeContractAsync({
-            address: dexRouter! as `0x${string}`,
-            abi: ROUTER_ABI,
-            functionName: 'swapExactTokensForTokens',
-            args: [amountIn, minOut, [tokenAddress, wusdcAddress as `0x${string}`], userAddress!, deadline],
-            chainId,
-            gas: 5_000_000n,
-          } as any)
-        }
-      } catch (err: any) {
-        const msg = err?.shortMessage || err?.message || ''
-        if (!msg.includes('User rejected') && !msg.includes('denied')) {
-          setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-        }
-        setSellStep('idle')
-        autoRunRef.current = false
-      }
-    }
-    run()
-  }, [sellStep, isWritePending, isConfirming])
-
-  const handleBuy = useCallback(() => {
+  // Buy handler — all via ethers.js signer (same as PerpetualPage)
+  const handleBuy = useCallback(async () => {
+    if (!buyAmount || !dexRouter || !wusdcAddress || estimatedBuy === '0' || !userAddress) return
+    setIsBusy(true)
     setTxError('')
-    resetWrite()
-    if (!buyAmount || !dexRouter || !wusdcAddress || estimatedBuy === '0') return
+    setTxSuccess(false)
 
-    const amountIn = parseEther(buyAmount)
-    if (isXyloRouter) {
-      const currentWusdc = BigInt(userWusdcBal)
-      if (currentWusdc < amountIn) {
-        setBuyStep('depositing')
-      } else {
-        const currentAllowance = BigInt(wusdcAllow)
-        if (currentAllowance < amountIn) {
-          setBuyStep('approving-wusdc')
-        } else {
-          setBuyStep('swapping')
+    try {
+      const signer = await getSigner()
+      if (!signer) { setIsBusy(false); return }
+
+      const amountIn = ethers.utils.parseUnits(buyAmount, 18)
+      const estBuy = ethers.BigNumber.from(estimatedBuy)
+      const slippageBps = Math.round((100 - slippage) * 100)
+      const minOut = estBuy.mul(slippageBps).div(10000)
+      const deadline = Math.floor(Date.now() / 1000) + 300
+
+      // Step 1: Deposit ARC to WUSDC if needed
+      if (isXyloRouter) {
+        const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
+        const currentWusdc = await wusdcContract.balanceOf(userAddress)
+        if (currentWusdc.lt(amountIn)) {
+          const depositAmt = amountIn.sub(currentWusdc)
+          setTxStatus('Depositing ' + nativeSymbol + ' to WUSDC...')
+          const depositTx = await wusdcContract.deposit({ value: depositAmt, gasLimit: 500_000 })
+          await depositTx.wait()
+        }
+
+        // Step 2: Approve WUSDC if needed
+        const currentAllowance = await wusdcContract.allowance(userAddress, dexRouter)
+        if (currentAllowance.lt(amountIn)) {
+          setTxStatus('Approving WUSDC...')
+          const approveTx = await wusdcContract.approve(dexRouter, amountIn, { gasLimit: 500_000 })
+          await approveTx.wait()
         }
       }
-    } else {
-      setBuyStep('swapping')
-    }
-  }, [buyAmount, dexRouter, wusdcAddress, estimatedBuy, isXyloRouter, userWusdcBal, wusdcAllow, resetWrite])
 
-  const handleSell = useCallback(() => {
+      // Step 3: Swap
+      setTxStatus('Swapping...')
+      const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
+      const swapTx = await routerContract.swapExactTokensForTokens(
+        amountIn, minOut, [wusdcAddress, tokenAddress], userAddress, deadline,
+        { gasLimit: 5_000_000 }
+      )
+      await swapTx.wait()
+
+      setTxSuccess(true)
+      setTxStatus('')
+      refreshBalances()
+      onTxConfirmed?.()
+    } catch (err: any) {
+      const msg = err.reason || err.data?.message || err.message || ''
+      if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 200 ? msg.slice(0, 200) + '...' : msg)
+      }
+      setTxStatus('')
+    } finally {
+      setIsBusy(false)
+    }
+  }, [buyAmount, dexRouter, wusdcAddress, estimatedBuy, userAddress, isXyloRouter, slippage, nativeSymbol, getSigner, refreshBalances, onTxConfirmed])
+
+  // Sell handler — all via ethers.js signer
+  const handleSell = useCallback(async () => {
+    if (!sellAmount || !dexRouter || !wusdcAddress || estimatedSell === '0' || !userAddress) return
+    setIsBusy(true)
     setTxError('')
-    resetWrite()
-    if (!sellAmount || !dexRouter || !wusdcAddress || estimatedSell === '0') return
+    setTxSuccess(false)
 
-    const amountIn = parseEther(sellAmount)
-    const currentAllowance = BigInt(tokenAllow)
-    if (currentAllowance < amountIn) {
-      setSellStep('approving-token')
-    } else {
-      setSellStep('swapping')
+    try {
+      const signer = await getSigner()
+      if (!signer) { setIsBusy(false); return }
+
+      const amountIn = ethers.utils.parseUnits(sellAmount, 18)
+      const estSell = ethers.BigNumber.from(estimatedSell)
+      const slippageBps = Math.round((100 - slippage) * 100)
+      const minOut = estSell.mul(slippageBps).div(10000)
+      const deadline = Math.floor(Date.now() / 1000) + 300
+
+      // Step 1: Approve token if needed
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer)
+      const currentAllowance = await tokenContract.allowance(userAddress, dexRouter)
+      if (currentAllowance.lt(amountIn)) {
+        setTxStatus('Approving ' + tokenSymbol + '...')
+        const approveTx = await tokenContract.approve(dexRouter, amountIn, { gasLimit: 500_000 })
+        await approveTx.wait()
+      }
+
+      // Step 2: Swap
+      setTxStatus('Swapping...')
+      const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
+      const swapTx = await routerContract.swapExactTokensForTokens(
+        amountIn, minOut, [tokenAddress, wusdcAddress], userAddress, deadline,
+        { gasLimit: 5_000_000 }
+      )
+      await swapTx.wait()
+
+      // Step 3: Withdraw WUSDC to ARC if needed
+      if (isXyloRouter) {
+        try {
+          const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
+          const wusdcBal = await wusdcContract.balanceOf(userAddress)
+          if (wusdcBal.gt(0)) {
+            setTxStatus('Withdrawing WUSDC to ' + nativeSymbol + '...')
+            const withdrawTx = await wusdcContract.withdraw(wusdcBal, { gasLimit: 500_000 })
+            await withdrawTx.wait()
+          }
+        } catch {
+          // Withdrawal failure is not critical
+        }
+      }
+
+      setTxSuccess(true)
+      setTxStatus('')
+      refreshBalances()
+      onTxConfirmed?.()
+    } catch (err: any) {
+      const msg = err.reason || err.data?.message || err.message || ''
+      if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
+        setTxError(msg.length > 200 ? msg.slice(0, 200) + '...' : msg)
+      }
+      setTxStatus('')
+    } finally {
+      setIsBusy(false)
     }
-  }, [sellAmount, dexRouter, wusdcAddress, estimatedSell, tokenAllow, resetWrite])
-
-  const isBusy = isWritePending || isConfirming || buyStep !== 'idle' || sellStep !== 'idle'
-
-  const getStepLabel = () => {
-    if (buyStep === 'depositing') return t('tokenDetail.buyStep1')
-    if (buyStep === 'approving-wusdc') return t('tokenDetail.buyStep2')
-    if (sellStep === 'approving-token') return t('tokenDetail.sellStep1')
-    if (sellStep === 'withdrawing') return t('tokenDetail.sellStep2')
-    return undefined
-  }
+  }, [sellAmount, dexRouter, wusdcAddress, estimatedSell, userAddress, isXyloRouter, slippage, tokenSymbol, nativeSymbol, getSigner, refreshBalances, onTxConfirmed])
 
   const formatTokenAmount = (val: string) => {
     const num = Number(ethers.utils.formatEther(val))
@@ -432,7 +338,7 @@ export default function ExternalTradePanel({
             'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
             activeTab === 'buy' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
           )}
-          onClick={() => { setActiveTab('buy'); setBuyStep('idle'); setSellStep('idle') }}
+          onClick={() => { setActiveTab('buy'); setTxError(''); setTxSuccess(false) }}
         >
           {t('tokenDetail.buy')}
         </button>
@@ -441,7 +347,7 @@ export default function ExternalTradePanel({
             'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
             activeTab === 'sell' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
           )}
-          onClick={() => { setActiveTab('sell'); setBuyStep('idle'); setSellStep('idle') }}
+          onClick={() => { setActiveTab('sell'); setTxError(''); setTxSuccess(false) }}
         >
           {t('tokenDetail.sell')}
         </button>
@@ -509,9 +415,7 @@ export default function ExternalTradePanel({
               onClick={handleBuy}
               disabled={isBusy || !buyAmount || Number(buyAmount) <= 0}
             >
-              {isBusy
-                ? (isWritePending ? t('common.confirmInWallet') : getStepLabel() || t('create.confirming'))
-                : `${t('tokenDetail.buy')} ${tokenSymbol}`}
+              {isBusy ? (txStatus || 'Processing...') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
             </button>
           )}
         </div>
@@ -572,9 +476,7 @@ export default function ExternalTradePanel({
               onClick={handleSell}
               disabled={isBusy || !sellAmount || Number(sellAmount) <= 0}
             >
-              {isBusy
-                ? (isWritePending ? t('common.confirmInWallet') : getStepLabel() || t('create.confirming'))
-                : `${t('tokenDetail.sell')} ${tokenSymbol}`}
+              {isBusy ? (txStatus || 'Processing...') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
             </button>
           )}
         </div>
@@ -586,25 +488,9 @@ export default function ExternalTradePanel({
         </div>
       )}
 
-      {writeError && (
-        <div className="mt-3 flex items-start gap-2 text-neon-red text-xs bg-neon-red/10 rounded-lg p-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{writeError.message?.includes('User rejected') ? t('common.transactionRejected') : writeError.message?.slice(0, 100) || t('common.transactionFailed')}</span>
-        </div>
-      )}
-      {isConfirmed && buyStep === 'idle' && sellStep === 'idle' && (
+      {txSuccess && (
         <div className="mt-3 flex items-start gap-2 text-neon-green text-xs bg-neon-green/10 rounded-lg p-2">
           <span>{t('common.transactionConfirmed')}</span>
-          {txHash && (
-            <a
-              href={getBscScanUrl(chainId, 'tx', txHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:no-underline"
-            >
-              {t('common.view')}
-            </a>
-          )}
         </div>
       )}
     </div>
