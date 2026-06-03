@@ -24,6 +24,17 @@ struct Position {
     bool isActive;
 }
 
+struct LimitOrder {
+    address user;
+    address token;
+    bool isLong;
+    uint256 margin;
+    uint256 leverage;
+    uint256 triggerPrice;
+    bool isTriggerAbove; // true: execute when markPrice >= triggerPrice; false: execute when markPrice <= triggerPrice
+    bool isActive;
+}
+
 contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
 
@@ -57,6 +68,10 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     address[] public listedTokens;
     mapping(address => bool) public isTokenListedForPerp;
     address public defaultToken;
+
+    // Limit orders
+    LimitOrder[] public limitOrders;
+    mapping(address => uint256[]) public userLimitOrders;
 
     event TokenListedForPerp(address indexed token);
     event TokenDelistedForPerp(address indexed token);
@@ -92,12 +107,26 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     event FundingRateUpdated(address indexed token, uint256 rate, uint256 timestamp);
     event DepositTokens(address indexed token, uint256 amount);
     event InsuranceFundAdded(address indexed token, uint256 amount);
+    event LimitOrderPlaced(
+        uint256 indexed orderId,
+        address indexed user,
+        address indexed token,
+        bool isLong,
+        uint256 margin,
+        uint256 leverage,
+        uint256 triggerPrice,
+        bool isTriggerAbove
+    );
+    event LimitOrderCancelled(uint256 indexed orderId, address indexed user);
+    event LimitOrderExecuted(uint256 indexed orderId, address indexed user, uint256 entryPrice);
 
     constructor(address _oracle, address _burnEngine, address _platformTreasury) Ownable(msg.sender) {
         oracle = IPerpOracle(_oracle);
         burnEngine = _burnEngine;
         platformTreasury = _platformTreasury;
     }
+
+    // ============ Market Order ============
 
     function openPosition(
         address token,
@@ -186,6 +215,148 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
         delete positions[msg.sender][token];
     }
 
+    // ============ Limit Order ============
+
+    function placeLimitOrder(
+        address token,
+        bool isLong,
+        uint256 marginUsdc,
+        uint256 leverage,
+        uint256 triggerPrice,
+        bool isTriggerAbove
+    ) external payable nonReentrant whenNotPaused {
+        require(leverage >= 1e18 && leverage <= MAX_LEVERAGE, "invalid leverage");
+        require(msg.value >= marginUsdc, "insufficient margin");
+        require(marginUsdc > 0, "zero margin");
+        require(triggerPrice > 0, "zero trigger price");
+        require(isTokenListedForPerp[token], "token not listed for perp");
+
+        Position storage pos = positions[msg.sender][token];
+        require(!pos.isActive, "close existing position first");
+
+        uint256 orderId = limitOrders.length;
+        limitOrders.push(LimitOrder({
+            user: msg.sender,
+            token: token,
+            isLong: isLong,
+            margin: marginUsdc,
+            leverage: leverage,
+            triggerPrice: triggerPrice,
+            isTriggerAbove: isTriggerAbove,
+            isActive: true
+        }));
+
+        userLimitOrders[msg.sender].push(orderId);
+
+        emit LimitOrderPlaced(orderId, msg.sender, token, isLong, marginUsdc, leverage, triggerPrice, isTriggerAbove);
+    }
+
+    function cancelLimitOrder(uint256 orderId) external nonReentrant {
+        require(orderId < limitOrders.length, "invalid order");
+        LimitOrder storage order = limitOrders[orderId];
+        require(order.user == msg.sender, "not your order");
+        require(order.isActive, "order not active");
+
+        order.isActive = false;
+
+        // Refund margin
+        if (order.margin > 0 && order.margin <= address(this).balance) {
+            (bool success, ) = payable(msg.sender).call{value: order.margin}("");
+            require(success, "refund failed");
+        }
+
+        emit LimitOrderCancelled(orderId, msg.sender);
+    }
+
+    function executeLimitOrder(uint256 orderId) external nonReentrant whenNotPaused {
+        require(orderId < limitOrders.length, "invalid order");
+        LimitOrder storage order = limitOrders[orderId];
+        require(order.isActive, "order not active");
+
+        uint256 markPrice = oracle.getPrice(order.token);
+        require(markPrice > 0, "no price");
+
+        // Check trigger condition
+        if (order.isTriggerAbove) {
+            require(markPrice >= order.triggerPrice, "price not reached");
+        } else {
+            require(markPrice <= order.triggerPrice, "price not reached");
+        }
+
+        // Check user doesn't have active position
+        Position storage pos = positions[order.user][order.token];
+        require(!pos.isActive, "user has position");
+
+        order.isActive = false;
+
+        uint256 size = (order.margin * order.leverage) / 1e18;
+
+        _settleFunding(order.token);
+
+        pos.margin = order.margin;
+        pos.size = size;
+        pos.entryPrice = markPrice;
+        pos.lastFundingTime = block.timestamp;
+        pos.isLong = order.isLong;
+        pos.isActive = true;
+
+        if (order.isLong) {
+            tokenLongOpenInterest[order.token] += size;
+        } else {
+            tokenShortOpenInterest[order.token] += size;
+        }
+
+        uint256 protocolFee = (order.margin * protocolFeeBps) / 10000;
+        if (protocolFee > 0 && burnEngine != address(0)) {
+            (bool sent, ) = payable(burnEngine).call{value: protocolFee}("");
+            require(sent, "fee transfer failed");
+        }
+
+        emit LimitOrderExecuted(orderId, order.user, markPrice);
+        emit PositionOpened(order.token, order.user, order.isLong, order.margin, size, markPrice, block.timestamp);
+    }
+
+    function getUserLimitOrders(address user) external view returns (
+        uint256[] memory orderIds,
+        address[] memory tokens,
+        bool[] memory isLongs,
+        uint256[] memory margins,
+        uint256[] memory leverages,
+        uint256[] memory triggerPrices,
+        bool[] memory isTriggerAboves,
+        bool[] memory actives
+    ) {
+        uint256[] storage ids = userLimitOrders[user];
+        uint256 len = ids.length;
+        orderIds = new uint256[](len);
+        tokens = new address[](len);
+        isLongs = new bool[](len);
+        margins = new uint256[](len);
+        leverages = new uint256[](len);
+        triggerPrices = new uint256[](len);
+        isTriggerAboves = new bool[](len);
+        actives = new bool[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            uint256 oid = ids[i];
+            LimitOrder storage o = limitOrders[oid];
+            orderIds[i] = oid;
+            tokens[i] = o.token;
+            isLongs[i] = o.isLong;
+            margins[i] = o.margin;
+            leverages[i] = o.leverage;
+            triggerPrices[i] = o.triggerPrice;
+            isTriggerAboves[i] = o.isTriggerAbove;
+            actives[i] = o.isActive;
+        }
+    }
+
+    function getLimitOrderCount() external view returns (uint256) {
+        return limitOrders.length;
+    }
+
+    // ============ Liquidation ============
+
     function liquidate(address borrower, address token) external nonReentrant whenNotPaused {
         Position storage pos = positions[borrower][token];
         require(pos.isActive, "no position");
@@ -228,6 +399,8 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
 
         delete positions[borrower][token];
     }
+
+    // ============ Admin ============
 
     function depositTokens(address token, uint256 amount) external {
         require(msg.sender == bondingCurve || msg.sender == dexLister || msg.sender == owner(), "not authorized");
@@ -340,6 +513,8 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
         if (positionValue == 0) return type(uint256).max;
         return (marginAfterPnl * 1e18) / positionValue;
     }
+
+    // ============ View Functions ============
 
     function getPosition(address user, address token) external view returns (
         uint256 margin,

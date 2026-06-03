@@ -10,6 +10,9 @@ import { useT } from '@/i18n/useT'
 const PERP_ABI = [
   'function openPosition(address token, bool isLong, uint256 marginUsdc, uint256 leverage) payable',
   'function closePosition(address token) external',
+  'function placeLimitOrder(address token, bool isLong, uint256 marginUsdc, uint256 leverage, uint256 triggerPrice, bool isTriggerAbove) payable',
+  'function cancelLimitOrder(uint256 orderId) external',
+  'function executeLimitOrder(uint256 orderId) external',
   'function getPosition(address user, address token) view returns (uint256 margin, uint256 size, uint256 entryPrice, uint256 lastFundingTime, bool isLong, bool isActive)',
   'function getMarginRatio(address user, address token) view returns (uint256)',
   'function getPnl(address user, address token) view returns (int256)',
@@ -19,6 +22,7 @@ const PERP_ABI = [
   'function getListedTokens() view returns (address[])',
   'function defaultToken() view returns (address)',
   'function isTokenListedForPerp(address) view returns (bool)',
+  'function getUserLimitOrders(address user) view returns (uint256[] orderIds, address[] tokens, bool[] isLongs, uint256[] margins, uint256[] leverages, uint256[] triggerPrices, bool[] isTriggerAboves, bool[] actives)',
 ]
 
 const ORACLE_ABI = ['function getPrice(address token) view returns (uint256)']
@@ -32,6 +36,18 @@ interface TokenOption {
   address: string
   symbol: string
   name: string
+}
+
+interface LimitOrderInfo {
+  orderId: number
+  token: string
+  isLong: boolean
+  margin: string
+  leverage: string
+  triggerPrice: string
+  isTriggerAbove: boolean
+  isActive: boolean
+  tokenSymbol?: string
 }
 
 export default function PerpetualPage() {
@@ -53,8 +69,10 @@ export default function PerpetualPage() {
   const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([])
   const [selectedToken, setSelectedToken] = useState('')
   const [isLong, setIsLong] = useState(true)
+  const [orderType, setOrderType] = useState<'market' | 'limit'>('market')
   const [margin, setMargin] = useState('0.1')
   const [leverage, setLeverage] = useState('5')
+  const [triggerPrice, setTriggerPrice] = useState('')
   const [loading, setLoading] = useState(false)
   const [position, setPosition] = useState<any>(null)
   const [markPrice, setMarkPrice] = useState<string>('-')
@@ -62,6 +80,7 @@ export default function PerpetualPage() {
   const [marginRatio, setMarginRatio] = useState<string>('-')
   const [openInterest, setOpenInterest] = useState<{ long: string; short: string }>({ long: '-', short: '-' })
   const [klineSource, setKlineSource] = useState<KLineSource>('perpetual')
+  const [limitOrders, setLimitOrders] = useState<LimitOrderInfo[]>([])
 
   const { klineData, loading: klineLoading, refresh: refreshKline } = useKLineData(
     selectedToken,
@@ -139,6 +158,35 @@ export default function PerpetualPage() {
     }
   }
 
+  const fetchLimitOrders = async () => {
+    if (!perpPool || !address) return
+    try {
+      const provider = getProvider()
+      const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
+      const result = await contract.getUserLimitOrders(address)
+      const orders: LimitOrderInfo[] = []
+      for (let i = 0; i < result.orderIds.length; i++) {
+        if (result.actives[i]) {
+          const tokenOpt = tokenOptions.find(o => o.address.toLowerCase() === result.tokens[i].toLowerCase())
+          orders.push({
+            orderId: result.orderIds[i].toNumber(),
+            token: result.tokens[i],
+            isLong: result.isLongs[i],
+            margin: ethers.utils.formatEther(result.margins[i]),
+            leverage: ethers.utils.formatEther(result.leverages[i]),
+            triggerPrice: ethers.utils.formatEther(result.triggerPrices[i]),
+            isTriggerAbove: result.isTriggerAboves[i],
+            isActive: result.actives[i],
+            tokenSymbol: tokenOpt?.symbol || result.tokens[i].slice(0, 6) + '...',
+          })
+        }
+      }
+      setLimitOrders(orders)
+    } catch (err) {
+      console.error('Fetch limit orders failed:', err)
+    }
+  }
+
   const fetchMarkPrice = async () => {
     if (!priceOracle || !selectedToken) return
     try {
@@ -158,6 +206,12 @@ export default function PerpetualPage() {
     }
   }, [selectedToken, address])
 
+  useEffect(() => {
+    if (address) {
+      fetchLimitOrders()
+    }
+  }, [address, tokenOptions])
+
   const handleOpenPosition = async () => {
     if (!perpPool || !selectedToken) return
     setLoading(true)
@@ -167,16 +221,37 @@ export default function PerpetualPage() {
       const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
       const marginUsdc = ethers.utils.parseEther(margin)
       const leverageVal = ethers.utils.parseEther(leverage)
-      const tx = await contract.openPosition(selectedToken, isLong, marginUsdc, leverageVal, {
-        value: marginUsdc,
-        gasLimit: 500_000,
-      })
-      await tx.wait()
+
+      if (orderType === 'market') {
+        const tx = await contract.openPosition(selectedToken, isLong, marginUsdc, leverageVal, {
+          value: marginUsdc,
+          gasLimit: 500_000,
+        })
+        await tx.wait()
+      } else {
+        // Limit order
+        if (!triggerPrice || Number(triggerPrice) <= 0) {
+          alert('Please enter a trigger price')
+          setLoading(false)
+          return
+        }
+        const triggerPriceVal = ethers.utils.parseEther(triggerPrice)
+        // For long: trigger when price drops to or below trigger (isTriggerAbove=false)
+        // For short: trigger when price rises to or above trigger (isTriggerAbove=true)
+        const isTriggerAbove = !isLong
+        const tx = await contract.placeLimitOrder(
+          selectedToken, isLong, marginUsdc, leverageVal, triggerPriceVal, isTriggerAbove,
+          { value: marginUsdc, gasLimit: 500_000 }
+        )
+        await tx.wait()
+      }
       await fetchPosition()
+      await fetchLimitOrders()
       refreshKline()
     } catch (err: any) {
       console.error('Open position failed:', err)
-      alert('Open position failed: ' + (err.reason || err.message))
+      const reason = err.reason || err.data?.message || err.message || 'Unknown error'
+      alert('Failed: ' + (reason.length > 200 ? reason.slice(0, 200) + '...' : reason))
     } finally {
       setLoading(false)
     }
@@ -198,7 +273,25 @@ export default function PerpetualPage() {
       refreshKline()
     } catch (err: any) {
       console.error('Close position failed:', err)
-      alert('Close position failed: ' + (err.reason || err.message))
+      const reason = err.reason || err.data?.message || err.message || 'Unknown error'
+      alert('Close failed: ' + (reason.length > 200 ? reason.slice(0, 200) + '...' : reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!perpPool) return
+    setLoading(true)
+    try {
+      const signer = await getSigner()
+      if (!signer) return
+      const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
+      const tx = await contract.cancelLimitOrder(orderId, { gasLimit: 300_000 })
+      await tx.wait()
+      await fetchLimitOrders()
+    } catch (err: any) {
+      alert('Cancel failed: ' + (err.reason || err.message))
     } finally {
       setLoading(false)
     }
@@ -292,19 +385,11 @@ export default function PerpetualPage() {
                     </option>
                   ))}
                 </select>
-                {selectedOption && (
-                  <div className="text-xs text-slate-600 mt-1 font-mono truncate">
-                    {selectedToken}
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-2 mb-3">
                 <button
-                  onClick={() => {
-                    setIsLong(true)
-                    fetchMarkPrice()
-                  }}
+                  onClick={() => setIsLong(true)}
                   className={`flex-1 py-2 rounded-lg font-semibold text-sm ${
                     isLong ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
                   }`}
@@ -312,15 +397,31 @@ export default function PerpetualPage() {
                   Long
                 </button>
                 <button
-                  onClick={() => {
-                    setIsLong(false)
-                    fetchMarkPrice()
-                  }}
+                  onClick={() => setIsLong(false)}
                   className={`flex-1 py-2 rounded-lg font-semibold text-sm ${
                     !isLong ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400'
                   }`}
                 >
                   Short
+                </button>
+              </div>
+
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setOrderType('market')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${
+                    orderType === 'market' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  Market
+                </button>
+                <button
+                  onClick={() => setOrderType('limit')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${
+                    orderType === 'limit' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  Limit
                 </button>
               </div>
 
@@ -354,14 +455,34 @@ export default function PerpetualPage() {
                 </div>
               </div>
 
+              {orderType === 'limit' && (
+                <div className="mb-3">
+                  <label className="text-xs text-slate-500">
+                    Trigger Price (USDC)
+                    <span className="text-slate-600 ml-1">
+                      — {isLong ? 'execute when price ≤ trigger' : 'execute when price ≥ trigger'}
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    value={triggerPrice}
+                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    step="any"
+                    min="0"
+                    placeholder={markPrice !== '-' ? markPrice : '0'}
+                    className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm font-mono border border-slate-700 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+              )}
+
               <div className="mb-3 p-2 bg-slate-800 rounded-lg text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Position Size</span>
                   <span>{(parseFloat(margin || '0') * parseFloat(leverage || '1')).toFixed(4)} USDC</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-slate-500">Entry Price</span>
-                  <span>{markPrice}</span>
+                  <span className="text-slate-500">{orderType === 'market' ? 'Entry Price' : 'Trigger Price'}</span>
+                  <span>{orderType === 'market' ? markPrice : (triggerPrice || '-')}</span>
                 </div>
                 <div className="flex justify-between mt-1">
                   <span className="text-slate-500">Liquidation Price</span>
@@ -375,16 +496,22 @@ export default function PerpetualPage() {
                 </div>
               </div>
 
+              {position?.isActive && (
+                <div className="mb-3 p-2 bg-yellow-900/30 border border-yellow-700/30 rounded-lg text-xs text-yellow-400">
+                  You have an active {position.isLong ? 'Long' : 'Short'} position. Close it first to open a new one.
+                </div>
+              )}
+
               <button
                 onClick={handleOpenPosition}
-                disabled={loading || !selectedToken}
+                disabled={loading || !selectedToken || (orderType === 'limit' && (!triggerPrice || Number(triggerPrice) <= 0))}
                 className={`w-full py-3 rounded-lg font-semibold text-sm ${
                   isLong
                     ? 'bg-green-600 hover:bg-green-700 disabled:bg-green-900'
                     : 'bg-red-600 hover:bg-red-700 disabled:bg-red-900'
                 } disabled:opacity-50`}
               >
-                {loading ? 'Opening...' : `Open ${isLong ? 'Long' : 'Short'} ${leverage}x`}
+                {loading ? 'Processing...' : `${orderType === 'market' ? 'Market' : 'Limit'} ${isLong ? 'Long' : 'Short'} ${leverage}x`}
               </button>
             </div>
 
@@ -429,6 +556,35 @@ export default function PerpetualPage() {
                 >
                   {loading ? 'Closing...' : 'Close Position'}
                 </button>
+              </div>
+            )}
+
+            {limitOrders.length > 0 && (
+              <div className="bg-slate-900 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-slate-400 mb-3">Limit Orders</h3>
+                <div className="space-y-2">
+                  {limitOrders.map((order) => (
+                    <div key={order.orderId} className="p-2 bg-slate-800 rounded-lg text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className={order.isLong ? 'text-green-400' : 'text-red-400'}>
+                          {order.isLong ? 'Long' : 'Short'} {order.tokenSymbol}
+                        </span>
+                        <span className="text-slate-500">{parseFloat(order.leverage).toFixed(0)}x</span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-slate-500">Margin: {parseFloat(order.margin).toFixed(4)}</span>
+                        <span className="text-slate-500">Trigger: {parseFloat(order.triggerPrice).toExponential(4)}</span>
+                      </div>
+                      <button
+                        onClick={() => handleCancelOrder(order.orderId)}
+                        disabled={loading}
+                        className="w-full mt-2 py-1 rounded text-xs bg-red-900/50 hover:bg-red-800/50 text-red-300 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
