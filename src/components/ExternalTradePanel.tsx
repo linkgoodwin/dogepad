@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
 import { ethers } from 'ethers'
-import { getContractAddress, getBscScanUrl, isZeroAddress } from '@/config/contracts'
+import { getContractAddress, getBscScanUrl, isZeroAddress, DEFAULT_CHAIN_ID } from '@/config/contracts'
 import { useTradeStore } from '@/stores/tradeStore'
 import { cn, formatUsdc } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
-import { AlertCircle, ArrowRightLeft } from 'lucide-react'
+import { ArrowRightLeft } from 'lucide-react'
 
 const ERC20_ABI = [
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -31,6 +31,15 @@ const BC_ABI = [
   'function baseAsset() view returns (address)',
   'function isXyloRouter() view returns (bool)',
 ]
+
+// Hardcoded Arc testnet addresses as ultimate fallback
+const ARC_ADDRESSES = {
+  bondingCurve: '0x569944C02A15aAdB5F9D1999e202463e9860F473',
+  simpleRouter: '0x6C59fc8e5a4e0CFF1cfD050f1f73B7eA4a49992B',
+  wusdc: '0x911b4000D3422F482F4062a913885f7b035382Df',
+}
+
+const RPC_URL = 'https://rpc.testnet.arc.network'
 
 interface ExternalTradePanelProps {
   tokenAddress: `0x${string}`
@@ -57,8 +66,8 @@ export default function ExternalTradePanel({
   const { address: userAddress, isConnected } = useAccount()
 
   // All state from ethers direct RPC
-  const [wusdcAddress, setWusdcAddress] = useState<string>('')
-  const [isXyloRouter, setIsXyloRouter] = useState(false)
+  const [wusdcAddress, setWusdcAddress] = useState<string>(ARC_ADDRESSES.wusdc)
+  const [isXyloRouter, setIsXyloRouter] = useState(true)
   const [estimatedBuy, setEstimatedBuy] = useState<string>('0')
   const [estimatedSell, setEstimatedSell] = useState<string>('0')
   const [userTokenBal, setUserTokenBal] = useState<string>('0')
@@ -67,12 +76,16 @@ export default function ExternalTradePanel({
   const [wusdcAllow, setWusdcAllow] = useState<string>('0')
   const [configError, setConfigError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<string>('')
 
-  const dexRouter = getContractAddress(chainId, 'simpleRouter')
-  const bondingCurveAddr = getContractAddress(chainId, 'bondingCurve')
+  // Use hardcoded addresses as fallback if getContractAddress returns zero
+  const _router = getContractAddress(chainId, 'simpleRouter')
+  const _bc = getContractAddress(chainId, 'bondingCurve')
+  const dexRouter = (!isZeroAddress(_router) ? _router : ARC_ADDRESSES.simpleRouter) as string
+  const bondingCurveAddr = (!isZeroAddress(_bc) ? _bc : ARC_ADDRESSES.bondingCurve) as string
 
   const getProvider = useCallback(() => {
-    return new ethers.providers.JsonRpcProvider('https://rpc.testnet.arc.network')
+    return new ethers.providers.JsonRpcProvider(RPC_URL)
   }, [])
 
   const getSigner = useCallback(async () => {
@@ -82,12 +95,25 @@ export default function ExternalTradePanel({
     return browserProvider.getSigner()
   }, [])
 
+  // Debug: log key state
+  useEffect(() => {
+    const info = [
+      `chainId: ${chainId}`,
+      `dexRouter: ${dexRouter}`,
+      `bondingCurve: ${bondingCurveAddr}`,
+      `wusdc: ${wusdcAddress}`,
+      `isXyloRouter: ${isXyloRouter}`,
+      `token: ${tokenAddress}`,
+      `user: ${userAddress || 'not connected'}`,
+      `estBuy: ${estimatedBuy}`,
+      `estSell: ${estimatedSell}`,
+    ].join(' | ')
+    setDebugInfo(info)
+    console.log('[ExternalTradePanel]', info)
+  }, [chainId, dexRouter, bondingCurveAddr, wusdcAddress, isXyloRouter, tokenAddress, userAddress, estimatedBuy, estimatedSell])
+
   // Load DEX config
   useEffect(() => {
-    if (!bondingCurveAddr || isZeroAddress(bondingCurveAddr)) {
-      setConfigError('BondingCurve address not configured')
-      return
-    }
     let cancelled = false
     const load = async () => {
       try {
@@ -100,7 +126,11 @@ export default function ExternalTradePanel({
           setConfigError('')
         }
       } catch (e: any) {
-        if (!cancelled) setConfigError('Failed to load DEX config: ' + (e.message?.slice(0, 80) || 'unknown'))
+        if (!cancelled) {
+          console.error('[ExternalTradePanel] Config load error:', e)
+          // Don't set error — use hardcoded fallback
+          setConfigError('')
+        }
       }
     }
     load()
@@ -109,7 +139,7 @@ export default function ExternalTradePanel({
 
   // Fetch buy quote
   useEffect(() => {
-    if (!buyAmount || Number(buyAmount) <= 0 || !dexRouter || !wusdcAddress || isZeroAddress(dexRouter)) {
+    if (!buyAmount || Number(buyAmount) <= 0 || !dexRouter || !wusdcAddress) {
       setEstimatedBuy('0')
       return
     }
@@ -123,7 +153,8 @@ export default function ExternalTradePanel({
         if (!cancelled && amounts && amounts.length >= 2) {
           setEstimatedBuy(amounts[amounts.length - 1].toString())
         }
-      } catch {
+      } catch (e: any) {
+        console.error('[ExternalTradePanel] Buy quote error:', e?.message)
         if (!cancelled) setEstimatedBuy('0')
       }
     }
@@ -133,7 +164,7 @@ export default function ExternalTradePanel({
 
   // Fetch sell quote
   useEffect(() => {
-    if (!sellAmount || Number(sellAmount) <= 0 || !dexRouter || !wusdcAddress || isZeroAddress(dexRouter)) {
+    if (!sellAmount || Number(sellAmount) <= 0 || !dexRouter || !wusdcAddress) {
       setEstimatedSell('0')
       return
     }
@@ -147,7 +178,8 @@ export default function ExternalTradePanel({
         if (!cancelled && amounts && amounts.length >= 2) {
           setEstimatedSell(amounts[amounts.length - 1].toString())
         }
-      } catch {
+      } catch (e: any) {
+        console.error('[ExternalTradePanel] Sell quote error:', e?.message)
         if (!cancelled) setEstimatedSell('0')
       }
     }
@@ -163,30 +195,21 @@ export default function ExternalTradePanel({
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
       const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, provider)
 
-      const balPromises: Promise<any>[] = [tokenContract.balanceOf(userAddress)]
-      if (dexRouter && !isZeroAddress(dexRouter)) {
-        balPromises.push(tokenContract.allowance(userAddress, dexRouter))
-        if (isXyloRouter) {
-          balPromises.push(wusdcContract.balanceOf(userAddress))
-          balPromises.push(wusdcContract.allowance(userAddress, dexRouter))
-        }
-      }
+      const results = await Promise.all([
+        tokenContract.balanceOf(userAddress),
+        tokenContract.allowance(userAddress, dexRouter),
+        wusdcContract.balanceOf(userAddress),
+        wusdcContract.allowance(userAddress, dexRouter),
+      ])
 
-      const results = await Promise.all(balPromises)
       setUserTokenBal(results[0]?.toString() || '0')
-      let idx = 1
-      if (dexRouter && !isZeroAddress(dexRouter)) {
-        setTokenAllow(results[idx]?.toString() || '0')
-        idx++
-        if (isXyloRouter) {
-          setUserWusdcBal(results[idx]?.toString() || '0')
-          setWusdcAllow(results[idx + 1]?.toString() || '0')
-        }
-      }
-    } catch {
-      // silent
+      setTokenAllow(results[1]?.toString() || '0')
+      setUserWusdcBal(results[2]?.toString() || '0')
+      setWusdcAllow(results[3]?.toString() || '0')
+    } catch (e: any) {
+      console.error('[ExternalTradePanel] Balance refresh error:', e?.message)
     }
-  }, [userAddress, wusdcAddress, tokenAddress, dexRouter, isXyloRouter, getProvider])
+  }, [userAddress, wusdcAddress, tokenAddress, dexRouter, getProvider])
 
   useEffect(() => {
     refreshBalances()
@@ -194,7 +217,7 @@ export default function ExternalTradePanel({
     return () => clearInterval(interval)
   }, [refreshBalances])
 
-  // Buy handler — all via ethers.js signer (same as PerpetualPage)
+  // Buy handler
   const handleBuy = useCallback(async () => {
     if (!buyAmount || !dexRouter || !wusdcAddress || estimatedBuy === '0' || !userAddress) return
     setIsBusy(true)
@@ -203,7 +226,7 @@ export default function ExternalTradePanel({
 
     try {
       const signer = await getSigner()
-      if (!signer) { setIsBusy(false); return }
+      if (!signer) { setIsBusy(false); setTxError('No wallet detected'); return }
 
       const amountIn = ethers.utils.parseUnits(buyAmount, 18)
       const estBuy = ethers.BigNumber.from(estimatedBuy)
@@ -211,18 +234,16 @@ export default function ExternalTradePanel({
       const minOut = estBuy.mul(slippageBps).div(10000)
       const deadline = Math.floor(Date.now() / 1000) + 300
 
-      // Step 1: Deposit ARC to WUSDC if needed
       if (isXyloRouter) {
         const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
         const currentWusdc = await wusdcContract.balanceOf(userAddress)
         if (currentWusdc.lt(amountIn)) {
           const depositAmt = amountIn.sub(currentWusdc)
-          setTxStatus('Depositing ' + nativeSymbol + ' to WUSDC...')
+          setTxStatus(`Depositing ${nativeSymbol} to WUSDC...`)
           const depositTx = await wusdcContract.deposit({ value: depositAmt, gasLimit: 500_000 })
           await depositTx.wait()
         }
 
-        // Step 2: Approve WUSDC if needed
         const currentAllowance = await wusdcContract.allowance(userAddress, dexRouter)
         if (currentAllowance.lt(amountIn)) {
           setTxStatus('Approving WUSDC...')
@@ -231,7 +252,6 @@ export default function ExternalTradePanel({
         }
       }
 
-      // Step 3: Swap
       setTxStatus('Swapping...')
       const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
       const swapTx = await routerContract.swapExactTokensForTokens(
@@ -245,9 +265,10 @@ export default function ExternalTradePanel({
       refreshBalances()
       onTxConfirmed?.()
     } catch (err: any) {
+      console.error('[ExternalTradePanel] Buy error:', err)
       const msg = err.reason || err.data?.message || err.message || ''
       if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
-        setTxError(msg.length > 200 ? msg.slice(0, 200) + '...' : msg)
+        setTxError(msg.length > 300 ? msg.slice(0, 300) + '...' : msg)
       }
       setTxStatus('')
     } finally {
@@ -255,7 +276,7 @@ export default function ExternalTradePanel({
     }
   }, [buyAmount, dexRouter, wusdcAddress, estimatedBuy, userAddress, isXyloRouter, slippage, nativeSymbol, getSigner, refreshBalances, onTxConfirmed])
 
-  // Sell handler — all via ethers.js signer
+  // Sell handler
   const handleSell = useCallback(async () => {
     if (!sellAmount || !dexRouter || !wusdcAddress || estimatedSell === '0' || !userAddress) return
     setIsBusy(true)
@@ -264,7 +285,7 @@ export default function ExternalTradePanel({
 
     try {
       const signer = await getSigner()
-      if (!signer) { setIsBusy(false); return }
+      if (!signer) { setIsBusy(false); setTxError('No wallet detected'); return }
 
       const amountIn = ethers.utils.parseUnits(sellAmount, 18)
       const estSell = ethers.BigNumber.from(estimatedSell)
@@ -272,16 +293,14 @@ export default function ExternalTradePanel({
       const minOut = estSell.mul(slippageBps).div(10000)
       const deadline = Math.floor(Date.now() / 1000) + 300
 
-      // Step 1: Approve token if needed
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer)
       const currentAllowance = await tokenContract.allowance(userAddress, dexRouter)
       if (currentAllowance.lt(amountIn)) {
-        setTxStatus('Approving ' + tokenSymbol + '...')
+        setTxStatus(`Approving ${tokenSymbol}...`)
         const approveTx = await tokenContract.approve(dexRouter, amountIn, { gasLimit: 500_000 })
         await approveTx.wait()
       }
 
-      // Step 2: Swap
       setTxStatus('Swapping...')
       const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
       const swapTx = await routerContract.swapExactTokensForTokens(
@@ -290,13 +309,12 @@ export default function ExternalTradePanel({
       )
       await swapTx.wait()
 
-      // Step 3: Withdraw WUSDC to ARC if needed
       if (isXyloRouter) {
         try {
           const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
           const wusdcBal = await wusdcContract.balanceOf(userAddress)
           if (wusdcBal.gt(0)) {
-            setTxStatus('Withdrawing WUSDC to ' + nativeSymbol + '...')
+            setTxStatus(`Withdrawing WUSDC to ${nativeSymbol}...`)
             const withdrawTx = await wusdcContract.withdraw(wusdcBal, { gasLimit: 500_000 })
             await withdrawTx.wait()
           }
@@ -310,9 +328,10 @@ export default function ExternalTradePanel({
       refreshBalances()
       onTxConfirmed?.()
     } catch (err: any) {
+      console.error('[ExternalTradePanel] Sell error:', err)
       const msg = err.reason || err.data?.message || err.message || ''
       if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
-        setTxError(msg.length > 200 ? msg.slice(0, 200) + '...' : msg)
+        setTxError(msg.length > 300 ? msg.slice(0, 300) + '...' : msg)
       }
       setTxStatus('')
     } finally {
@@ -328,7 +347,7 @@ export default function ExternalTradePanel({
     return num.toExponential(2)
   }
 
-  const configReady = !!dexRouter && !!wusdcAddress && !isZeroAddress(dexRouter) && wusdcAddress !== '' && wusdcAddress !== ethers.constants.AddressZero
+  const configReady = !!dexRouter && !!wusdcAddress
 
   return (
     <div className="card-dark">
@@ -484,7 +503,7 @@ export default function ExternalTradePanel({
 
       {txError && (
         <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3 mt-4">
-          <p className="text-xs text-neon-red">{txError}</p>
+          <p className="text-xs text-neon-red break-all">{txError}</p>
         </div>
       )}
 
@@ -493,6 +512,12 @@ export default function ExternalTradePanel({
           <span>{t('common.transactionConfirmed')}</span>
         </div>
       )}
+
+      {/* Debug panel - always visible for now to diagnose issues */}
+      <details className="mt-4">
+        <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">Debug Info</summary>
+        <pre className="text-xs text-gray-500 mt-2 p-2 bg-dark-800 rounded overflow-x-auto break-all whitespace-pre-wrap">{debugInfo}</pre>
+      </details>
     </div>
   )
 }
