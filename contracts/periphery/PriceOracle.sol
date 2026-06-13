@@ -25,7 +25,7 @@ contract PriceOracle is Ownable {
     mapping(address => uint256) public twapPrices;
     mapping(address => uint256) public lastUpdateTime;
     uint256 public constant TWAP_PERIOD = 14400;
-    uint256 public constant DEVIATION_THRESHOLD = 10e16;
+    uint256 public constant DEVIATION_THRESHOLD = 5e15; // 0.5% deviation threshold
     uint256 public constant PRICE_DELAY = 600;
     uint256 public constant MAX_PRICE_AGE = 1 hours;
     mapping(address => uint256) public effectivePriceTime;
@@ -48,6 +48,10 @@ contract PriceOracle is Ownable {
 
     function setTokenDexPair(address token, address pair) external onlyOwner {
         tokenDexPairs[token] = pair;
+    }
+
+    function getPriceUpdatedAt(address token) external view returns (uint256) {
+        return effectivePriceTime[token] > 0 ? effectivePriceTime[token] - PRICE_DELAY : lastUpdateTime[token];
     }
 
     function getPrice(address token) external view returns (uint256) {

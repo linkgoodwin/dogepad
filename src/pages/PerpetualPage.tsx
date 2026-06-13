@@ -1,595 +1,986 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useAccount } from 'wagmi'
-import { ethers } from 'ethers'
-import { getContractAddress, DEFAULT_CHAIN_ID } from '../config/contracts'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useAccount, useChainId, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
+import { parseEther, formatEther } from 'viem'
+import { PERPETUAL_POOL_ABI, getContractAddress } from '../config/contracts'
+import { useTokenStore } from '../stores/tokenStore'
+import { getNativeSymbol } from '../config/contracts'
 import KLineChart from '../components/KLineChart'
-import { useKLineData } from '../hooks/useKLineData'
-import { KLineSource } from '../hooks/useKLineData'
-import { useT } from '@/i18n/useT'
+import { Loader2, TrendingUp, TrendingDown, Shield, Crosshair, ChevronDown, Plus, Minus, X } from 'lucide-react'
+import { useT } from '../i18n/useT'
 
-const PERP_ABI = [
-  'function openPosition(address token, bool isLong, uint256 marginUsdc, uint256 leverage) payable',
-  'function closePosition(address token) external',
-  'function placeLimitOrder(address token, bool isLong, uint256 marginUsdc, uint256 leverage, uint256 triggerPrice, bool isTriggerAbove) payable',
-  'function cancelLimitOrder(uint256 orderId) external',
-  'function executeLimitOrder(uint256 orderId) external',
-  'function getPosition(address user, address token) view returns (uint256 margin, uint256 size, uint256 entryPrice, uint256 lastFundingTime, bool isLong, bool isActive)',
-  'function getMarginRatio(address user, address token) view returns (uint256)',
-  'function getPnl(address user, address token) view returns (int256)',
-  'function getOpenInterest(address token) view returns (uint256 longOI, uint256 shortOI)',
-  'function getMarkPrice(address token) view returns (uint256)',
-  'function getNextFundingTime(address token) view returns (uint256)',
-  'function getListedTokens() view returns (address[])',
-  'function defaultToken() view returns (address)',
-  'function isTokenListedForPerp(address) view returns (bool)',
-  'function getUserLimitOrders(address user) view returns (uint256[] orderIds, address[] tokens, bool[] isLongs, uint256[] margins, uint256[] leverages, uint256[] triggerPrices, bool[] isTriggerAboves, bool[] actives)',
-]
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyWriteContract = (params: any) => void
 
-const ORACLE_ABI = ['function getPrice(address token) view returns (uint256)']
-
-const ERC20_ABI = [
-  'function symbol() view returns (string)',
-  'function name() view returns (string)',
-]
-
-interface TokenOption {
-  address: string
-  symbol: string
-  name: string
+interface Position {
+  token: string
+  tokenSymbol: string
+  margin: bigint
+  size: bigint
+  entryPrice: bigint
+  lastFundingTime: bigint
+  isLong: boolean
+  isActive: boolean
+  tpPrice: bigint
+  slPrice: bigint
+  hasTpsl: boolean
 }
 
-interface LimitOrderInfo {
-  orderId: number
+interface LimitOrder {
+  orderId: bigint
   token: string
   isLong: boolean
-  margin: string
-  leverage: string
-  triggerPrice: string
+  margin: bigint
+  leverage: bigint
+  triggerPrice: bigint
   isTriggerAbove: boolean
   isActive: boolean
-  tokenSymbol?: string
 }
 
 export default function PerpetualPage() {
-  const { address } = useAccount()
   const t = useT()
-  const chainId = DEFAULT_CHAIN_ID
+  const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { tokens } = useTokenStore()
 
-  const getSigner = async () => {
-    if (typeof (window as any).ethereum === 'undefined') return null
-    const browserProvider = new ethers.providers.Web3Provider((window as any).ethereum)
-    await browserProvider.send('eth_requestAccounts', [])
-    return browserProvider.getSigner()
-  }
+  const poolAddress = getContractAddress(chainId, 'perpetualPool')
+  const nativeSymbol = getNativeSymbol(chainId)
 
-  const getProvider = () => {
-    return new ethers.providers.JsonRpcProvider('https://rpc.testnet.arc.network')
-  }
-
-  const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([])
-  const [selectedToken, setSelectedToken] = useState('')
-  const [isLong, setIsLong] = useState(true)
+  // Trading state
+  const [selectedToken, setSelectedToken] = useState<string>('')
+  const [orderSide, setOrderSide] = useState<'long' | 'short'>('long')
   const [orderType, setOrderType] = useState<'market' | 'limit'>('market')
-  const [margin, setMargin] = useState('0.1')
-  const [leverage, setLeverage] = useState('5')
-  const [triggerPrice, setTriggerPrice] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [position, setPosition] = useState<any>(null)
-  const [markPrice, setMarkPrice] = useState<string>('-')
-  const [pnl, setPnl] = useState<string>('-')
-  const [marginRatio, setMarginRatio] = useState<string>('-')
-  const [openInterest, setOpenInterest] = useState<{ long: string; short: string }>({ long: '-', short: '-' })
-  const [klineSource, setKlineSource] = useState<KLineSource>('perpetual')
-  const [limitOrders, setLimitOrders] = useState<LimitOrderInfo[]>([])
+  const [margin, setMargin] = useState('')
+  const [leverage, setLeverage] = useState(2)
+  const [limitPrice, setLimitPrice] = useState('')
+  const [tpPrice, setTpPrice] = useState('')
+  const [slPrice, setSlPrice] = useState('')
+  const [activeTab, setActiveTab] = useState<'positions' | 'orders' | 'history'>('positions')
+  const [closePercent, setClosePercent] = useState(100)
+  const [showMarginModal, setShowMarginModal] = useState(false)
+  const [marginAction, setMarginAction] = useState<'add' | 'remove'>('add')
+  const [marginAmount, setMarginAmount] = useState('')
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
 
-  const { klineData, loading: klineLoading, refresh: refreshKline } = useKLineData(
-    selectedToken,
-    klineSource,
-    60_000
-  )
+  // Contract writes
+  const { writeContract: _openPositionWrite, data: openHash, isPending: isOpening } = useWriteContract()
+  const { writeContract: _closePositionWrite, data: closeHash, isPending: isClosing } = useWriteContract()
+  const { writeContract: _partialCloseWrite, data: partialCloseHash, isPending: isPartialClosing } = useWriteContract()
+  const { writeContract: _placeLimitOrderWrite, data: limitHash, isPending: isPlacingLimit } = useWriteContract()
+  const { writeContract: _cancelLimitOrderWrite, data: cancelLimitHash, isPending: isCancellingLimit } = useWriteContract()
+  const { writeContract: _setTpslWrite, data: tpslHash, isPending: isSettingTpsl } = useWriteContract()
+  const { writeContract: _addMarginWrite, data: addMarginHash, isPending: isAddingMargin } = useWriteContract()
+  const { writeContract: _removeMarginWrite, data: removeMarginHash, isPending: isRemovingMargin } = useWriteContract()
 
-  const perpPool = getContractAddress(chainId, 'perpetualPool')
-  const priceOracle = getContractAddress(chainId, 'priceOracle')
+  const openPositionWrite = _openPositionWrite as AnyWriteContract
+  const closePositionWrite = _closePositionWrite as AnyWriteContract
+  const partialCloseWrite = _partialCloseWrite as AnyWriteContract
+  const placeLimitOrderWrite = _placeLimitOrderWrite as AnyWriteContract
+  const cancelLimitOrderWrite = _cancelLimitOrderWrite as AnyWriteContract
+  const setTpslWrite = _setTpslWrite as AnyWriteContract
+  const addMarginWrite = _addMarginWrite as AnyWriteContract
+  const removeMarginWrite = _removeMarginWrite as AnyWriteContract
 
-  const fetchTokenList = useCallback(async () => {
-    if (!perpPool) return
-    try {
-      const provider = getProvider()
-      const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
-      const [listedTokens, defaultTokenAddr] = await Promise.all([
-        contract.getListedTokens(),
-        contract.defaultToken(),
-      ])
+  // Wait for transactions
+  const { isLoading: isOpenConfirming } = useWaitForTransactionReceipt({ hash: openHash })
+  const { isLoading: isCloseConfirming } = useWaitForTransactionReceipt({ hash: closeHash })
+  const { isLoading: isPartialCloseConfirming } = useWaitForTransactionReceipt({ hash: partialCloseHash })
+  const { isLoading: isLimitConfirming } = useWaitForTransactionReceipt({ hash: limitHash })
+  const { isLoading: isCancelLimitConfirming } = useWaitForTransactionReceipt({ hash: cancelLimitHash })
+  const { isLoading: isTpslConfirming } = useWaitForTransactionReceipt({ hash: tpslHash })
+  const { isLoading: isAddMarginConfirming } = useWaitForTransactionReceipt({ hash: addMarginHash })
+  const { isLoading: isRemoveMarginConfirming } = useWaitForTransactionReceipt({ hash: removeMarginHash })
 
-      const options: TokenOption[] = []
-      for (const tokenAddr of listedTokens) {
-        try {
-          const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider)
-          const [symbol, name] = await Promise.all([token.symbol(), token.name()])
-          options.push({ address: tokenAddr, symbol, name })
-        } catch {
-          options.push({ address: tokenAddr, symbol: tokenAddr.slice(0, 6) + '...', name: 'Unknown' })
-        }
-      }
+  // Read position data
+  const { data: positionData, refetch: refetchPosition } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getPosition',
+    args: address && selectedToken ? [address, selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!address && !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
 
-      setTokenOptions(options)
-      if (!selectedToken && options.length > 0) {
-        const defaultOpt = options.find(o => o.address.toLowerCase() === defaultTokenAddr.toLowerCase())
-        setSelectedToken(defaultOpt ? defaultOpt.address : options[0].address)
-      }
-    } catch (err) {
-      console.error('Fetch token list failed:', err)
+  // Read mark price
+  const { data: markPrice } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getMarkPrice',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read liquidation price
+  const { data: liqPrice } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getLiquidationPrice',
+    args: address && selectedToken ? [address, selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!address && !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read margin health
+  const { data: marginHealth } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getMarginHealth',
+    args: address && selectedToken ? [address, selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!address && !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read PnL
+  const { data: pnlData } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getPnl',
+    args: address && selectedToken ? [address, selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!address && !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read funding rate
+  const { data: fundingRate } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getCurrentFundingRate',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read open interest
+  const { data: openInterest } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getOpenInterest',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read listed tokens
+  const { data: listedTokens } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getListedTokens',
+    query: { enabled: poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read limit orders
+  const { data: limitOrdersData, refetch: refetchLimitOrders } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getUserLimitOrders',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Parse position
+  const position: Position | null = useMemo(() => {
+    if (!positionData || !selectedToken) return null
+    const tokenInfo = tokens.find(t => t.address.toLowerCase() === selectedToken.toLowerCase())
+    return {
+      token: selectedToken,
+      tokenSymbol: tokenInfo?.symbol || 'Unknown',
+      margin: positionData[0],
+      size: positionData[1],
+      entryPrice: positionData[2],
+      lastFundingTime: positionData[3],
+      isLong: positionData[4],
+      isActive: positionData[5],
+      tpPrice: positionData[6],
+      slPrice: positionData[7],
+      hasTpsl: positionData[8],
     }
-  }, [perpPool, selectedToken])
+  }, [positionData, selectedToken, tokens])
 
-  useEffect(() => {
-    fetchTokenList()
-  }, [fetchTokenList])
-
-  const fetchPosition = async () => {
-    if (!perpPool || !selectedToken || !address) return
-    try {
-      const provider = getProvider()
-      const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
-      const pos = await contract.getPosition(address, selectedToken)
-      setPosition({
-        margin: ethers.utils.formatEther(pos.margin),
-        size: ethers.utils.formatEther(pos.size),
-        entryPrice: ethers.utils.formatEther(pos.entryPrice),
-        isLong: pos.isLong,
-        isActive: pos.isActive,
+  // Parse limit orders
+  const limitOrders: LimitOrder[] = useMemo(() => {
+    if (!limitOrdersData) return []
+    const orders: LimitOrder[] = []
+    for (let i = 0; i < limitOrdersData[0].length; i++) {
+      orders.push({
+        orderId: limitOrdersData[0][i],
+        token: limitOrdersData[1][i],
+        isLong: limitOrdersData[2][i],
+        margin: limitOrdersData[3][i],
+        leverage: limitOrdersData[4][i],
+        triggerPrice: limitOrdersData[5][i],
+        isTriggerAbove: limitOrdersData[6][i],
+        isActive: limitOrdersData[7][i],
       })
+    }
+    return orders.filter(o => o.isActive)
+  }, [limitOrdersData])
 
-      if (pos.isActive) {
-        const ratio = await contract.getMarginRatio(address, selectedToken)
-        setMarginRatio((parseFloat(ethers.utils.formatEther(ratio)) * 100).toFixed(2) + '%')
+  // Auto-select first token
+  useEffect(() => {
+    if (listedTokens && listedTokens.length > 0 && !selectedToken) {
+      setSelectedToken(listedTokens[0])
+    }
+  }, [listedTokens, selectedToken])
 
-        const pnlVal = await contract.getPnl(address, selectedToken)
-        setPnl(ethers.utils.formatEther(pnlVal))
-      }
+  // Refresh data after transactions
+  useEffect(() => {
+    if (!isOpenConfirming && openHash) {
+      refetchPosition()
+      setMargin('')
+      setTpPrice('')
+      setSlPrice('')
+    }
+  }, [isOpenConfirming, openHash, refetchPosition])
 
-      const oi = await contract.getOpenInterest(selectedToken)
-      setOpenInterest({
-        long: ethers.utils.formatEther(oi.longOI),
-        short: ethers.utils.formatEther(oi.shortOI),
+  useEffect(() => {
+    if (!isCloseConfirming && closeHash) {
+      refetchPosition()
+    }
+  }, [isCloseConfirming, closeHash, refetchPosition])
+
+  useEffect(() => {
+    if (!isPartialCloseConfirming && partialCloseHash) {
+      refetchPosition()
+    }
+  }, [isPartialCloseConfirming, partialCloseHash, refetchPosition])
+
+  useEffect(() => {
+    if (!isTpslConfirming && tpslHash) {
+      refetchPosition()
+      setTpPrice('')
+      setSlPrice('')
+    }
+  }, [isTpslConfirming, tpslHash, refetchPosition])
+
+  useEffect(() => {
+    if (!isLimitConfirming && limitHash) {
+      refetchLimitOrders()
+      setMargin('')
+      setLimitPrice('')
+    }
+  }, [isLimitConfirming, limitHash, refetchLimitOrders])
+
+  useEffect(() => {
+    if (!isCancelLimitConfirming && cancelLimitHash) {
+      refetchLimitOrders()
+    }
+  }, [isCancelLimitConfirming, cancelLimitHash, refetchLimitOrders])
+
+  // Handlers
+  const handleOpenPosition = useCallback(() => {
+    if (!selectedToken || !margin || !isConnected) return
+    const marginValue = parseEther(margin)
+    const leverageValue = BigInt(leverage) * BigInt(1e18)
+
+    if (orderType === 'market') {
+      openPositionWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'openPosition',
+        args: [selectedToken as `0x${string}`, orderSide === 'long', marginValue, leverageValue],
+        value: marginValue,
       })
-    } catch (err) {
-      console.error('Fetch position failed:', err)
+    } else {
+      if (!limitPrice) return
+      const triggerPrice = parseEther(limitPrice)
+      const isTriggerAbove = orderSide === 'short'
+      placeLimitOrderWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'placeLimitOrder',
+        args: [selectedToken as `0x${string}`, orderSide === 'long', marginValue, leverageValue, triggerPrice, isTriggerAbove],
+        value: marginValue,
+      })
     }
+  }, [selectedToken, margin, leverage, orderSide, orderType, limitPrice, isConnected, poolAddress, openPositionWrite, placeLimitOrderWrite])
+
+  const handleClosePosition = useCallback(() => {
+    if (!selectedToken || !position?.isActive) return
+    if (closePercent === 100) {
+      closePositionWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'closePosition',
+        args: [selectedToken as `0x${string}`],
+      })
+    } else {
+      const closeSize = (position.size * BigInt(closePercent)) / BigInt(100)
+      partialCloseWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'closePositionPartial',
+        args: [selectedToken as `0x${string}`, closeSize],
+      })
+    }
+  }, [selectedToken, position, closePercent, poolAddress, closePositionWrite, partialCloseWrite])
+
+  const handleSetTpsl = useCallback(() => {
+    if (!selectedToken || !position?.isActive) return
+    const tp = tpPrice ? parseEther(tpPrice) : BigInt(0)
+    const sl = slPrice ? parseEther(slPrice) : BigInt(0)
+    setTpslWrite({
+      address: poolAddress as `0x${string}`,
+      abi: PERPETUAL_POOL_ABI,
+      functionName: 'setTpsl',
+      args: [selectedToken as `0x${string}`, tp, sl],
+    })
+  }, [selectedToken, position, tpPrice, slPrice, poolAddress, setTpslWrite])
+
+  const handleCancelTpsl = useCallback(() => {
+    if (!selectedToken || !position?.isActive) return
+    setTpslWrite({
+      address: poolAddress as `0x${string}`,
+      abi: PERPETUAL_POOL_ABI,
+      functionName: 'cancelTpsl',
+      args: [selectedToken as `0x${string}`],
+    })
+  }, [selectedToken, position, poolAddress, setTpslWrite])
+
+  const handleCancelLimitOrder = useCallback((orderId: bigint) => {
+    cancelLimitOrderWrite({
+      address: poolAddress as `0x${string}`,
+      abi: PERPETUAL_POOL_ABI,
+      functionName: 'cancelLimitOrder',
+      args: [orderId],
+    })
+  }, [poolAddress, cancelLimitOrderWrite])
+
+  const handleMarginAction = useCallback(() => {
+    if (!selectedToken || !position?.isActive || !marginAmount) return
+    const amount = parseEther(marginAmount)
+    if (marginAction === 'add') {
+      addMarginWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'addMargin',
+        args: [selectedToken as `0x${string}`],
+        value: amount,
+      })
+    } else {
+      removeMarginWrite({
+        address: poolAddress as `0x${string}`,
+        abi: PERPETUAL_POOL_ABI,
+        functionName: 'removeMargin',
+        args: [selectedToken as `0x${string}`, amount],
+      })
+    }
+    setShowMarginModal(false)
+    setMarginAmount('')
+  }, [selectedToken, position, marginAmount, marginAction, poolAddress, addMarginWrite, removeMarginWrite])
+
+  // Format helpers
+  const formatPrice = (price: bigint | undefined) => {
+    if (!price) return '-'
+    return Number(formatEther(price)).toFixed(6)
   }
 
-  const fetchLimitOrders = async () => {
-    if (!perpPool || !address) return
-    try {
-      const provider = getProvider()
-      const contract = new ethers.Contract(perpPool, PERP_ABI, provider)
-      const result = await contract.getUserLimitOrders(address)
-      const orders: LimitOrderInfo[] = []
-      for (let i = 0; i < result.orderIds.length; i++) {
-        if (result.actives[i]) {
-          const tokenOpt = tokenOptions.find(o => o.address.toLowerCase() === result.tokens[i].toLowerCase())
-          orders.push({
-            orderId: result.orderIds[i].toNumber(),
-            token: result.tokens[i],
-            isLong: result.isLongs[i],
-            margin: ethers.utils.formatEther(result.margins[i]),
-            leverage: ethers.utils.formatEther(result.leverages[i]),
-            triggerPrice: ethers.utils.formatEther(result.triggerPrices[i]),
-            isTriggerAbove: result.isTriggerAboves[i],
-            isActive: result.actives[i],
-            tokenSymbol: tokenOpt?.symbol || result.tokens[i].slice(0, 6) + '...',
-          })
-        }
-      }
-      setLimitOrders(orders)
-    } catch (err) {
-      console.error('Fetch limit orders failed:', err)
-    }
+  const formatPnl = (pnl: bigint | undefined) => {
+    if (!pnl) return '-'
+    const value = Number(formatEther(pnl))
+    const sign = value >= 0 ? '+' : ''
+    return `${sign}${value.toFixed(4)} ${nativeSymbol}`
   }
 
-  const fetchMarkPrice = async () => {
-    if (!priceOracle || !selectedToken) return
-    try {
-      const provider = getProvider()
-      const oracle = new ethers.Contract(priceOracle, ORACLE_ABI, provider)
-      const price = await oracle.getPrice(selectedToken)
-      setMarkPrice(ethers.utils.formatEther(price))
-    } catch (err) {
-      console.error('Fetch price failed:', err)
-    }
+  const formatFundingRate = (rate: bigint | undefined) => {
+    if (!rate) return '0%'
+    const value = Number(rate) / 1e18
+    const sign = value >= 0 ? '+' : ''
+    return `${sign}${(value * 100).toFixed(4)}%`
   }
 
-  useEffect(() => {
-    if (selectedToken) {
-      fetchMarkPrice()
-      fetchPosition()
-    }
-  }, [selectedToken, address])
-
-  useEffect(() => {
-    if (address) {
-      fetchLimitOrders()
-    }
-  }, [address, tokenOptions])
-
-  const handleOpenPosition = async () => {
-    if (!perpPool || !selectedToken) return
-    setLoading(true)
-    try {
-      const signer = await getSigner()
-      if (!signer) return
-      const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
-      const marginUsdc = ethers.utils.parseEther(margin)
-      const leverageVal = ethers.utils.parseEther(leverage)
-
-      if (orderType === 'market') {
-        const tx = await contract.openPosition(selectedToken, isLong, marginUsdc, leverageVal, {
-          value: marginUsdc,
-          gasLimit: 500_000,
-        })
-        await tx.wait()
-      } else {
-        // Limit order
-        if (!triggerPrice || Number(triggerPrice) <= 0) {
-          alert('Please enter a trigger price')
-          setLoading(false)
-          return
-        }
-        const triggerPriceVal = ethers.utils.parseEther(triggerPrice)
-        // For long: trigger when price drops to or below trigger (isTriggerAbove=false)
-        // For short: trigger when price rises to or above trigger (isTriggerAbove=true)
-        const isTriggerAbove = !isLong
-        const tx = await contract.placeLimitOrder(
-          selectedToken, isLong, marginUsdc, leverageVal, triggerPriceVal, isTriggerAbove,
-          { value: marginUsdc, gasLimit: 500_000 }
-        )
-        await tx.wait()
-      }
-      await fetchPosition()
-      await fetchLimitOrders()
-      refreshKline()
-    } catch (err: any) {
-      console.error('Open position failed:', err)
-      const reason = err.reason || err.data?.message || err.message || 'Unknown error'
-      alert('Failed: ' + (reason.length > 200 ? reason.slice(0, 200) + '...' : reason))
-    } finally {
-      setLoading(false)
-    }
+  const getHealthColor = (health: bigint | undefined) => {
+    if (!health) return 'text-gray-400'
+    const h = Number(health)
+    if (h >= 70) return 'text-green-400'
+    if (h >= 30) return 'text-yellow-400'
+    return 'text-red-400'
   }
 
-  const handleClosePosition = async () => {
-    if (!perpPool || !selectedToken) return
-    setLoading(true)
-    try {
-      const signer = await getSigner()
-      if (!signer) return
-      const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
-      const tx = await contract.closePosition(selectedToken, { gasLimit: 500_000 })
-      await tx.wait()
-      setPosition(null)
-      setPnl('-')
-      setMarginRatio('-')
-      await fetchPosition()
-      refreshKline()
-    } catch (err: any) {
-      console.error('Close position failed:', err)
-      const reason = err.reason || err.data?.message || err.message || 'Unknown error'
-      alert('Close failed: ' + (reason.length > 200 ? reason.slice(0, 200) + '...' : reason))
-    } finally {
-      setLoading(false)
-    }
+  const getHealthBg = (health: bigint | undefined) => {
+    if (!health) return 'bg-gray-700'
+    const h = Number(health)
+    if (h >= 70) return 'bg-green-500'
+    if (h >= 30) return 'bg-yellow-500'
+    return 'bg-red-500'
   }
 
-  const handleCancelOrder = async (orderId: number) => {
-    if (!perpPool) return
-    setLoading(true)
-    try {
-      const signer = await getSigner()
-      if (!signer) return
-      const contract = new ethers.Contract(perpPool, PERP_ABI, signer)
-      const tx = await contract.cancelLimitOrder(orderId, { gasLimit: 300_000 })
-      await tx.wait()
-      await fetchLimitOrders()
-    } catch (err: any) {
-      alert('Cancel failed: ' + (err.reason || err.message))
-    } finally {
-      setLoading(false)
-    }
-  }
+  const isLoading = isOpening || isOpenConfirming || isClosing || isCloseConfirming || isPartialClosing || isPartialCloseConfirming || isPlacingLimit || isLimitConfirming || isCancellingLimit || isCancelLimitConfirming || isSettingTpsl || isTpslConfirming || isAddingMargin || isAddMarginConfirming || isRemovingMargin || isRemoveMarginConfirming
 
-  const selectedOption = tokenOptions.find(o => o.address === selectedToken)
+  const selectedTokenInfo = tokens.find(t => t.address.toLowerCase() === selectedToken.toLowerCase())
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">{t('perp.title')}</h1>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-slate-900 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm text-slate-400">K-Line Source:</span>
-                {(['perpetual', 'dex', 'bondingCurve'] as KLineSource[]).map((src) => (
-                  <button
-                    key={src}
-                    onClick={() => setKlineSource(src)}
-                    className={`px-3 py-1 rounded text-xs ${
-                      klineSource === src
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
-                  >
-                    {src === 'perpetual' ? 'Perp' : src === 'dex' ? 'DEX' : 'Curve'}
-                  </button>
-                ))}
-                <button
-                  onClick={refreshKline}
-                  className="ml-auto px-3 py-1 rounded text-xs bg-slate-800 text-slate-400 hover:bg-slate-700"
-                >
-                  Refresh
-                </button>
+    <div className="min-h-screen bg-[#0a0e1a] text-white">
+      <div className="max-w-[1600px] mx-auto p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">{t('perpetualTrading')}</h1>
+            <p className="text-gray-400 text-sm">{t('tradePerpetualFutures')}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {/* Token Selector */}
+            <div className="relative">
+              <select
+                value={selectedToken}
+                onChange={(e) => setSelectedToken(e.target.value)}
+                className="bg-[#1a1f2e] border border-gray-700 rounded-lg px-4 py-2 text-white appearance-none cursor-pointer min-w-[180px]"
+              >
+                <option value="">{t('selectToken')}</option>
+                {listedTokens?.map((token) => {
+                  const info = tokens.find(t => t.address.toLowerCase() === token.toLowerCase())
+                  return (
+                    <option key={token} value={token}>
+                      {info?.symbol || token.slice(0, 8)}...{token.slice(-4)}
+                    </option>
+                  )
+                })}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+            {/* Funding Rate Display */}
+            {fundingRate !== undefined && (
+              <div className="bg-[#1a1f2e] border border-gray-700 rounded-lg px-4 py-2">
+                <span className="text-gray-400 text-xs">{t('fundingRate')}</span>
+                <div className={`text-sm font-mono ${Number(fundingRate) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {formatFundingRate(fundingRate)}
+                </div>
               </div>
-              {klineLoading ? (
-                <div className="h-[400px] flex items-center justify-center text-slate-500">
-                  Loading K-Line data...
+            )}
+            {/* OI Display */}
+            {openInterest && (
+              <div className="bg-[#1a1f2e] border border-gray-700 rounded-lg px-4 py-2">
+                <span className="text-gray-400 text-xs">{t('openInterest')}</span>
+                <div className="text-sm font-mono">
+                  <span className="text-green-400">L: {formatPrice(openInterest[0])}</span>
+                  <span className="text-gray-500 mx-1">/</span>
+                  <span className="text-red-400">S: {formatPrice(openInterest[1])}</span>
                 </div>
-              ) : klineData.length > 0 ? (
-                <KLineChart data={klineData} height={400} />
-              ) : (
-                <div className="h-[400px] flex items-center justify-center text-slate-500">
-                  No trade data available
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Chart Area */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="bg-[#1a1f2e] border border-gray-800 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold">{selectedTokenInfo?.symbol || t('selectToken')}</h2>
+                  <div className="flex items-center gap-4 mt-1">
+                    <span className="text-2xl font-mono">{formatPrice(markPrice)}</span>
+                    {pnlData !== undefined && position?.isActive && (
+                      <span className={`text-sm font-mono ${Number(pnlData) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {formatPnl(pnlData)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              )}
+                {position?.isActive && (
+                  <div className="text-right">
+                    <div className="text-xs text-gray-400">{t('marginHealth')}</div>
+                    <div className={`text-lg font-mono ${getHealthColor(marginHealth)}`}>
+                      {marginHealth ? `${marginHealth.toString()}%` : '-'}
+                    </div>
+                    <div className="w-32 h-2 bg-gray-700 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${getHealthBg(marginHealth)}`}
+                        style={{ width: `${Math.min(Number(marginHealth || 0), 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <KLineChart data={[]} />
             </div>
 
-            <div className="bg-slate-900 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-400 mb-2">Market Info</h3>
-              <div className="grid grid-cols-4 gap-4 text-center">
-                <div>
-                  <div className="text-xs text-slate-500">Mark Price</div>
-                  <div className="text-lg font-mono">{markPrice}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500">Long OI</div>
-                  <div className="text-lg font-mono text-green-400">{openInterest.long}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500">Short OI</div>
-                  <div className="text-lg font-mono text-red-400">{openInterest.short}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500">Margin Ratio</div>
-                  <div className="text-lg font-mono">{marginRatio}</div>
-                </div>
+            {/* Position / Orders Tabs */}
+            <div className="bg-[#1a1f2e] border border-gray-800 rounded-xl">
+              <div className="flex border-b border-gray-800">
+                {(['positions', 'orders', 'history'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      activeTab === tab
+                        ? 'text-white border-b-2 border-blue-500'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {t(tab)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-4">
+                {activeTab === 'positions' && (
+                  <div>
+                    {position?.isActive ? (
+                      <div className="space-y-4">
+                        {/* Active Position Card */}
+                        <div className="bg-[#0f1419] border border-gray-700 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                position.isLong ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              }`}>
+                                {position.isLong ? t('long') : t('short')}
+                              </span>
+                              <span className="font-mono text-sm">{position.tokenSymbol}</span>
+                              <span className="text-gray-400 text-sm">
+                                {leverage}x
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => { setMarginAction('add'); setSelectedPosition(position); setShowMarginModal(true) }}
+                                className="p-1.5 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors"
+                                title={t('addMargin')}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => { setMarginAction('remove'); setSelectedPosition(position); setShowMarginModal(true) }}
+                                className="p-1.5 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors"
+                                title={t('removeMargin')}
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                              <div className="text-xs text-gray-400">{t('size')}</div>
+                              <div className="font-mono text-sm">{formatPrice(position.size)}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-gray-400">{t('margin')}</div>
+                              <div className="font-mono text-sm">{formatPrice(position.margin)} {nativeSymbol}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-gray-400">{t('entryPrice')}</div>
+                              <div className="font-mono text-sm">{formatPrice(position.entryPrice)}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-gray-400">{t('markPrice')}</div>
+                              <div className="font-mono text-sm">{formatPrice(markPrice)}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-gray-400">{t('liquidationPrice')}</div>
+                              <div className="font-mono text-sm text-red-400">{formatPrice(liqPrice)}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-gray-400">{t('pnl')}</div>
+                              <div className={`font-mono text-sm ${Number(pnlData || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {formatPnl(pnlData)}
+                              </div>
+                            </div>
+                            {position.hasTpsl && (
+                              <>
+                                <div>
+                                  <div className="text-xs text-gray-400">{t('takeProfit')}</div>
+                                  <div className="font-mono text-sm text-green-400">{formatPrice(position.tpPrice)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-gray-400">{t('stopLoss')}</div>
+                                  <div className="font-mono text-sm text-red-400">{formatPrice(position.slPrice)}</div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Close Position */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 bg-[#1a1f2e] rounded-lg p-1">
+                              {[25, 50, 75, 100].map((pct) => (
+                                <button
+                                  key={pct}
+                                  onClick={() => setClosePercent(pct)}
+                                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                    closePercent === pct
+                                      ? 'bg-blue-500 text-white'
+                                      : 'text-gray-400 hover:text-white'
+                                  }`}
+                                >
+                                  {pct}%
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              onClick={handleClosePosition}
+                              disabled={isClosing || isPartialClosing}
+                              className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              {isClosing || isPartialClosing ? (
+                                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                              ) : (
+                                closePercent === 100 ? t('closePosition') : `${t('close')} ${closePercent}%`
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* TP/SL Setting */}
+                        <div className="bg-[#0f1419] border border-gray-700 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-medium flex items-center gap-2">
+                              <Crosshair className="w-4 h-4" />
+                              {t('takeProfitStopLoss')}
+                            </h3>
+                            {position.hasTpsl && (
+                              <button
+                                onClick={handleCancelTpsl}
+                                disabled={isSettingTpsl}
+                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                              >
+                                {t('cancel')}
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-1">{t('takeProfit')}</label>
+                              <input
+                                type="number"
+                                value={tpPrice}
+                                onChange={(e) => setTpPrice(e.target.value)}
+                                placeholder={t('price')}
+                                className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-1">{t('stopLoss')}</label>
+                              <input
+                                type="number"
+                                value={slPrice}
+                                onChange={(e) => setSlPrice(e.target.value)}
+                                placeholder={t('price')}
+                                className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleSetTpsl}
+                            disabled={isSettingTpsl || (!tpPrice && !slPrice)}
+                            className="w-full mt-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                          >
+                            {isSettingTpsl ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t('setTpsl')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-400">
+                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p>{t('noActivePosition')}</p>
+                        <p className="text-sm mt-1">{t('openPositionToStart')}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'orders' && (
+                  <div>
+                    {limitOrders.length > 0 ? (
+                      <div className="space-y-2">
+                        {limitOrders.map((order) => {
+                          const tokenInfo = tokens.find(t => t.address.toLowerCase() === order.token.toLowerCase())
+                          return (
+                            <div key={order.orderId.toString()} className="bg-[#0f1419] border border-gray-700 rounded-lg p-3 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  order.isLong ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {order.isLong ? t('long') : t('short')}
+                                </span>
+                                <span className="text-sm">{tokenInfo?.symbol || order.token.slice(0, 8)}</span>
+                                <span className="text-xs text-gray-400">
+                                  {formatPrice(order.margin)} {nativeSymbol} @ {Number(order.leverage) / 1e18}x
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {t('trigger')}: {formatPrice(order.triggerPrice)}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleCancelLimitOrder(order.orderId)}
+                                disabled={isCancellingLimit}
+                                className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-400">
+                        <p>{t('noActiveOrders')}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'history' && (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>{t('tradeHistoryComingSoon')}</p>
+                    <p className="text-sm mt-1">{t('useExplorerForHistory')}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
+          {/* Trading Panel */}
           <div className="space-y-4">
-            <div className="bg-slate-900 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-400 mb-3">Open Position</h3>
-
-              <div className="mb-3">
-                <label className="text-xs text-slate-500">{t('perp.selectToken')}</label>
-                <select
-                  value={selectedToken}
-                  onChange={(e) => setSelectedToken(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm border border-slate-700 focus:border-indigo-500 focus:outline-none"
-                >
-                  {tokenOptions.length === 0 && (
-                    <option value="">No tokens available</option>
-                  )}
-                  {tokenOptions.map((opt) => (
-                    <option key={opt.address} value={opt.address}>
-                      {opt.symbol} ({opt.name})
-                    </option>
-                  ))}
-                </select>
+            <div className="bg-[#1a1f2e] border border-gray-800 rounded-xl p-4">
+              {/* Order Type Tabs */}
+              <div className="flex mb-4">
+                {(['market', 'limit'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setOrderType(type)}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                      orderType === type
+                        ? 'text-white border-b-2 border-blue-500'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {t(type)}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex gap-2 mb-3">
+              {/* Side Selection */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
                 <button
-                  onClick={() => setIsLong(true)}
-                  className={`flex-1 py-2 rounded-lg font-semibold text-sm ${
-                    isLong ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
+                  onClick={() => setOrderSide('long')}
+                  className={`py-3 rounded-lg text-sm font-medium transition-colors ${
+                    orderSide === 'long'
+                      ? 'bg-green-500 text-white'
+                      : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                   }`}
                 >
-                  Long
+                  <TrendingUp className="w-4 h-4 inline mr-1" />
+                  {t('long')}
                 </button>
                 <button
-                  onClick={() => setIsLong(false)}
-                  className={`flex-1 py-2 rounded-lg font-semibold text-sm ${
-                    !isLong ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400'
+                  onClick={() => setOrderSide('short')}
+                  className={`py-3 rounded-lg text-sm font-medium transition-colors ${
+                    orderSide === 'short'
+                      ? 'bg-red-500 text-white'
+                      : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                   }`}
                 >
-                  Short
-                </button>
-              </div>
-
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => setOrderType('market')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${
-                    orderType === 'market' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  Market
-                </button>
-                <button
-                  onClick={() => setOrderType('limit')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${
-                    orderType === 'limit' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  Limit
+                  <TrendingDown className="w-4 h-4 inline mr-1" />
+                  {t('short')}
                 </button>
               </div>
 
-              <div className="mb-3">
-                <label className="text-xs text-slate-500">Margin (USDC)</label>
+              {/* Margin Input */}
+              <div className="mb-4">
+                <label className="text-xs text-gray-400 block mb-1">{t('margin')} ({nativeSymbol})</label>
                 <input
                   type="number"
                   value={margin}
                   onChange={(e) => setMargin(e.target.value)}
-                  step="0.01"
-                  min="0.01"
-                  className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm font-mono border border-slate-700 focus:border-indigo-500 focus:outline-none"
+                  placeholder="0.0"
+                  className="w-full bg-[#0f1419] border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="mb-3">
-                <label className="text-xs text-slate-500">Leverage: {leverage}x</label>
+              {/* Leverage Slider */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-400">{t('leverage')}</label>
+                  <span className="text-sm font-mono">{leverage}x</span>
+                </div>
                 <input
                   type="range"
+                  min={1}
+                  max={10}
+                  step={1}
                   value={leverage}
-                  onChange={(e) => setLeverage(e.target.value)}
-                  min="1"
-                  max="10"
-                  step="1"
-                  className="w-full mt-1"
+                  onChange={(e) => setLeverage(Number(e.target.value))}
+                  className="w-full accent-blue-500"
                 />
-                <div className="flex justify-between text-xs text-slate-600">
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
                   <span>1x</span>
                   <span>5x</span>
                   <span>10x</span>
                 </div>
               </div>
 
+              {/* Limit Price (for limit orders) */}
               {orderType === 'limit' && (
-                <div className="mb-3">
-                  <label className="text-xs text-slate-500">
-                    Trigger Price (USDC)
-                    <span className="text-slate-600 ml-1">
-                      — {isLong ? 'execute when price ≤ trigger' : 'execute when price ≥ trigger'}
-                    </span>
-                  </label>
+                <div className="mb-4">
+                  <label className="text-xs text-gray-400 block mb-1">{t('triggerPrice')}</label>
                   <input
                     type="number"
-                    value={triggerPrice}
-                    onChange={(e) => setTriggerPrice(e.target.value)}
-                    step="any"
-                    min="0"
-                    placeholder={markPrice !== '-' ? markPrice : '0'}
-                    className="w-full mt-1 px-3 py-2 bg-slate-800 rounded-lg text-sm font-mono border border-slate-700 focus:border-indigo-500 focus:outline-none"
+                    value={limitPrice}
+                    onChange={(e) => setLimitPrice(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full bg-[#0f1419] border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               )}
 
-              <div className="mb-3 p-2 bg-slate-800 rounded-lg text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Position Size</span>
-                  <span>{(parseFloat(margin || '0') * parseFloat(leverage || '1')).toFixed(4)} USDC</span>
+              {/* TP/SL Inputs */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">{t('tp')} ({t('optional')})</label>
+                  <input
+                    type="number"
+                    value={tpPrice}
+                    onChange={(e) => setTpPrice(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full bg-[#0f1419] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500"
+                  />
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-slate-500">{orderType === 'market' ? 'Entry Price' : 'Trigger Price'}</span>
-                  <span>{orderType === 'market' ? markPrice : (triggerPrice || '-')}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-slate-500">Liquidation Price</span>
-                  <span className="text-red-400">
-                    {markPrice !== '-' && isLong
-                      ? (parseFloat(markPrice) * (1 - 0.9 / parseFloat(leverage))).toFixed(6)
-                      : markPrice !== '-' && !isLong
-                      ? (parseFloat(markPrice) * (1 + 0.9 / parseFloat(leverage))).toFixed(6)
-                      : '-'}
-                  </span>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">{t('sl')} ({t('optional')})</label>
+                  <input
+                    type="number"
+                    value={slPrice}
+                    onChange={(e) => setSlPrice(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full bg-[#0f1419] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+                  />
                 </div>
               </div>
 
-              {position?.isActive && (
-                <div className="mb-3 p-2 bg-yellow-900/30 border border-yellow-700/30 rounded-lg text-xs text-yellow-400">
-                  You have an active {position.isLong ? 'Long' : 'Short'} position. Close it first to open a new one.
+              {/* Position Preview */}
+              {margin && markPrice && (
+                <div className="bg-[#0f1419] rounded-lg p-3 mb-4 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">{t('positionSize')}</span>
+                    <span className="font-mono">{(Number(margin) * leverage).toFixed(4)} {nativeSymbol}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">{t('entryPrice')}</span>
+                    <span className="font-mono">{formatPrice(markPrice)}</span>
+                  </div>
+                  {liqPrice && Number(liqPrice) > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">{t('estLiquidation')}</span>
+                      <span className="font-mono text-red-400">{formatPrice(liqPrice)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">{t('fee')}</span>
+                    <span className="font-mono">{(Number(margin) * 0.001).toFixed(6)} {nativeSymbol}</span>
+                  </div>
                 </div>
               )}
 
-              <button
-                onClick={handleOpenPosition}
-                disabled={loading || !selectedToken || (orderType === 'limit' && (!triggerPrice || Number(triggerPrice) <= 0))}
-                className={`w-full py-3 rounded-lg font-semibold text-sm ${
-                  isLong
-                    ? 'bg-green-600 hover:bg-green-700 disabled:bg-green-900'
-                    : 'bg-red-600 hover:bg-red-700 disabled:bg-red-900'
-                } disabled:opacity-50`}
-              >
-                {loading ? 'Processing...' : `${orderType === 'market' ? 'Market' : 'Limit'} ${isLong ? 'Long' : 'Short'} ${leverage}x`}
-              </button>
+              {/* Submit Button */}
+              {!isConnected ? (
+                <button
+                  onClick={() => {}}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors"
+                >
+                  {t('connectWallet')}
+                </button>
+              ) : (
+                <button
+                  onClick={handleOpenPosition}
+                  disabled={isLoading || !margin || !selectedToken}
+                  className={`w-full py-3 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                    orderSide === 'long'
+                      ? 'bg-green-500 hover:bg-green-600 text-white'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                  ) : (
+                    `${orderSide === 'long' ? t('long') : t('short')} ${selectedTokenInfo?.symbol || ''}`
+                  )}
+                </button>
+              )}
             </div>
 
-            {position?.isActive && (
-              <div className="bg-slate-900 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-slate-400 mb-3">Your Position</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Direction</span>
-                    <span className={position.isLong ? 'text-green-400' : 'text-red-400'}>
-                      {position.isLong ? 'Long' : 'Short'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Size</span>
-                    <span>{position.size}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Entry Price</span>
-                    <span>{position.entryPrice}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Margin</span>
-                    <span>{position.margin} USDC</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">PnL</span>
-                    <span className={parseFloat(pnl) >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {pnl} USDC
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Margin Ratio</span>
-                    <span>{marginRatio}</span>
-                  </div>
+            {/* Market Info */}
+            <div className="bg-[#1a1f2e] border border-gray-800 rounded-xl p-4">
+              <h3 className="text-sm font-medium mb-3">{t('marketInfo')}</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('markPrice')}</span>
+                  <span className="font-mono">{formatPrice(markPrice)}</span>
                 </div>
-
-                <button
-                  onClick={handleClosePosition}
-                  disabled={loading}
-                  className="w-full mt-4 py-2 rounded-lg font-semibold text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
-                >
-                  {loading ? 'Closing...' : 'Close Position'}
-                </button>
-              </div>
-            )}
-
-            {limitOrders.length > 0 && (
-              <div className="bg-slate-900 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-slate-400 mb-3">Limit Orders</h3>
-                <div className="space-y-2">
-                  {limitOrders.map((order) => (
-                    <div key={order.orderId} className="p-2 bg-slate-800 rounded-lg text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className={order.isLong ? 'text-green-400' : 'text-red-400'}>
-                          {order.isLong ? 'Long' : 'Short'} {order.tokenSymbol}
-                        </span>
-                        <span className="text-slate-500">{parseFloat(order.leverage).toFixed(0)}x</span>
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-slate-500">Margin: {parseFloat(order.margin).toFixed(4)}</span>
-                        <span className="text-slate-500">Trigger: {parseFloat(order.triggerPrice).toExponential(4)}</span>
-                      </div>
-                      <button
-                        onClick={() => handleCancelOrder(order.orderId)}
-                        disabled={loading}
-                        className="w-full mt-2 py-1 rounded text-xs bg-red-900/50 hover:bg-red-800/50 text-red-300 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ))}
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('fundingRate')}</span>
+                  <span className={`font-mono ${Number(fundingRate || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {formatFundingRate(fundingRate)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('longOI')}</span>
+                  <span className="font-mono text-green-400">{formatPrice(openInterest?.[0])}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('shortOI')}</span>
+                  <span className="font-mono text-red-400">{formatPrice(openInterest?.[1])}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('maxLeverage')}</span>
+                  <span className="font-mono">10x</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('maintenanceMargin')}</span>
+                  <span className="font-mono">6%</span>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Margin Modal */}
+      {showMarginModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#1a1f2e] border border-gray-700 rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">
+                {marginAction === 'add' ? t('addMargin') : t('removeMargin')}
+              </h3>
+              <button
+                onClick={() => setShowMarginModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs text-gray-400 block mb-1">
+                {t('amount')} ({nativeSymbol})
+              </label>
+              <input
+                type="number"
+                value={marginAmount}
+                onChange={(e) => setMarginAmount(e.target.value)}
+                placeholder="0.0"
+                className="w-full bg-[#0f1419] border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            {selectedPosition && (
+              <div className="bg-[#0f1419] rounded-lg p-3 mb-4 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">{t('currentMargin')}</span>
+                  <span className="font-mono">{formatPrice(selectedPosition.margin)} {nativeSymbol}</span>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleMarginAction}
+              disabled={isAddingMargin || isRemovingMargin || !marginAmount}
+              className={`w-full py-3 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                marginAction === 'add'
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
+                  : 'bg-red-500 hover:bg-red-600 text-white'
+              }`}
+            >
+              {isAddingMargin || isRemovingMargin ? (
+                <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+              ) : (
+                marginAction === 'add' ? t('addMargin') : t('removeMargin')
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

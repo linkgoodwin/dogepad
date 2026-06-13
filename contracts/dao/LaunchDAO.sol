@@ -76,7 +76,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     uint256 public constant TIER_7_FEE = 0.5 ether;
     uint256 public constant TIER_30_FEE = 1 ether;
 
-    enum CandidateStatus { Active, Queued, Expired, GracePeriod, Recyclable, Launched }
+    enum CandidateStatus { Active, Queued, Expired, GracePeriod, Recyclable, ReadyToLaunch, Launched }
     enum DurationTier { Day3, Day7, Day30 }
     enum StakeDuration { Demand, Days30, Days90, Days180 }
 
@@ -102,6 +102,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 launchedDogeUsed;
         uint256 launchedExcessDoge;
         uint256 queueTime;
+        uint256 launchAt;
         bool wantTaxShare;
         bool wantLpShare;
         bool wantTokenAllocation;
@@ -181,6 +182,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     event EpochSettled(uint256 indexed day, uint256 winningCandidateId);
     event DailyEnqueue(uint256 indexed day, uint256 count);
     event TokenLaunched(uint256 indexed candidateId, address token, uint256 usdcUsed, uint256 tokensReceived, uint256 excessUsdc);
+    event CandidateReadyToLaunch(uint256 indexed candidateId, address token);
     event RewardsDeposited(address indexed from, uint256 amount);
 
     error InvalidDurationTier();
@@ -445,6 +447,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             launchedDogeUsed: 0,
             launchedExcessDoge: 0,
             queueTime: 0,
+            launchAt: 0,
             wantTaxShare: _wantTaxShare,
             wantLpShare: _wantLpShare,
             wantTokenAllocation: _wantTokenAllocation
@@ -557,6 +560,10 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
 
         if (winningId != type(uint256).max && maxWeight > 0) {
+            // Mark winning candidate as ready to launch
+            candidates[winningId].status = CandidateStatus.ReadyToLaunch;
+            candidates[winningId].launchAt = block.timestamp;
+            emit CandidateReadyToLaunch(winningId, candidates[winningId].launchedToken);
         }
 
         epoch.winningCandidateId = winningId;
