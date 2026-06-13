@@ -1,0 +1,109 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IBondingCurveLaunch",
+  "sourceName": "contracts/dao/LaunchDAO.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "minTokensOut",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        }
+      ],
+      "name": "buy",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalSupply",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "metadataURI",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "voterPool",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "voterAllocationBps",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "wantTaxShare",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "wantLpShare",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "wantTokenAllocation",
+          "type": "bool"
+        }
+      ],
+      "name": "createTokenForDao",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "listOnDex",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/dao/LaunchDAO.sol",
+  "buildInfoId": "solc-0_8_24-09361ceb9aa7eab9dad68e9ecc9bb798a7b63a45"
+}

@@ -1,0 +1,27 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IPerpToken",
+  "sourceName": "contracts/pool/PerpetualPool.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "dexPair",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/pool/PerpetualPool.sol",
+  "buildInfoId": "solc-0_8_24-f6214ff0b05813703cc291a901826c3b4401bb89"
+}

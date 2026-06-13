@@ -1,0 +1,27 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IBurnableToken",
+  "sourceName": "contracts/periphery/BuyAndBurnEngine.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "burn",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/periphery/BuyAndBurnEngine.sol",
+  "buildInfoId": "solc-0_8_24-90400f2b29e1ab6d772eccdb956b8a125eaef08a"
+}

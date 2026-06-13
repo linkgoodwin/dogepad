@@ -1,0 +1,38 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "ISimpleFactory",
+  "sourceName": "contracts/periphery/PriceOracle.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "tokenA",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "tokenB",
+          "type": "address"
+        }
+      ],
+      "name": "getPair",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/periphery/PriceOracle.sol",
+  "buildInfoId": "solc-0_8_24-09361ceb9aa7eab9dad68e9ecc9bb798a7b63a45"
+}

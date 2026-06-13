@@ -1,0 +1,47 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "ICreatorRewardManager",
+  "sourceName": "contracts/periphery/DexLister.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "asset",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "beneficiary",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "cliffDuration",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "vestingDuration",
+          "type": "uint256"
+        }
+      ],
+      "name": "createVesting",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/periphery/DexLister.sol",
+  "buildInfoId": "solc-0_8_24-90400f2b29e1ab6d772eccdb956b8a125eaef08a"
+}

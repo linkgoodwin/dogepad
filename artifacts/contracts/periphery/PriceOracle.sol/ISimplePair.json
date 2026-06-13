@@ -1,0 +1,50 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "ISimplePair",
+  "sourceName": "contracts/periphery/PriceOracle.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "getReserves",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "reserve0",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "reserve1",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "blockTimestampLast",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "token0",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/periphery/PriceOracle.sol",
+  "buildInfoId": "solc-0_8_24-09361ceb9aa7eab9dad68e9ecc9bb798a7b63a45"
+}

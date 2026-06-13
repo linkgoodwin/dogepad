@@ -1,0 +1,40 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IBondingCurveTokenExclude",
+  "sourceName": "contracts/dao/LaunchDAO.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "excludeFromHoldingLimit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "excludeFromTax",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/dao/LaunchDAO.sol",
+  "buildInfoId": "solc-0_8_24-09361ceb9aa7eab9dad68e9ecc9bb798a7b63a45"
+}

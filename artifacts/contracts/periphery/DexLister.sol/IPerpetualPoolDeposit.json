@@ -1,0 +1,45 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IPerpetualPoolDeposit",
+  "sourceName": "contracts/periphery/DexLister.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "depositTokens",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "depositUsdcToInsurance",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/periphery/DexLister.sol",
+  "buildInfoId": "solc-0_8_24-90400f2b29e1ab6d772eccdb956b8a125eaef08a"
+}

@@ -1,0 +1,27 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "IBondingCurveTokenHoldingLimit",
+  "sourceName": "contracts/dao/LaunchDAO.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "maxHoldingPercent",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/dao/LaunchDAO.sol",
+  "buildInfoId": "solc-0_8_24-09361ceb9aa7eab9dad68e9ecc9bb798a7b63a45"
+}
