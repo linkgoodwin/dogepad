@@ -1,9 +1,11 @@
 import { HardhatUserConfig } from "hardhat/config";
+import hardhatMocha from "@nomicfoundation/hardhat-mocha";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
 const config: HardhatUserConfig = {
+  plugins: [hardhatMocha],
   solidity: {
     version: "0.8.24",
     settings: {
@@ -15,6 +17,9 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+    hardhat: {
+      type: "edr-simulated",
+    },
     bscTestnet: {
       type: "http",
       url: process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545",
