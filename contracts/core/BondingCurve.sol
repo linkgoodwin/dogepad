@@ -45,6 +45,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         bool isListedOnDex;
         uint256 dexListingThreshold;
         string metadataURI;
+        uint256 tradeCount;
+        uint256 uniqueBuyerCount;
     }
 
     struct CreatorIncentive {
@@ -86,6 +88,10 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
     uint256 public creationFee = 0.1 ether;
     uint256 public defaultDexThreshold = 5 ether;
     bool public daoOnlyLaunch = false;
+
+    // Multi-dimensional listing thresholds
+    uint256 public minTradeCountForListing = 10;
+    uint256 public minUniqueBuyersForListing = 5;
 
     uint256 public maturityThreshold = 100 ether;
     mapping(address => bool) public isMatureOverride;
@@ -257,7 +263,9 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
             tokensSold: 0,
             isListedOnDex: false,
             dexListingThreshold: defaultDexThreshold,
-            metadataURI: metadataURI
+            metadataURI: metadataURI,
+            tradeCount: 0,
+            uniqueBuyerCount: 0
         });
 
         emit TokenCreated(address(token), msg.sender, name, symbol, totalSupply);
@@ -290,6 +298,12 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
         info.reserveUsdc += usdcAfterFee;
         info.tokensSold += tokensToBuy;
+        info.tradeCount++;
+
+        // Track unique buyers
+        if (BondingCurveToken(token).balanceOf(recipient) == tokensToBuy) {
+            info.uniqueBuyerCount++;
+        }
 
         BondingCurveToken(token).buyFromCurve(recipient, tokensToBuy);
 
@@ -319,6 +333,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
         info.reserveUsdc -= usdcToReturn;
         info.tokensSold -= tokenAmount;
+        info.tradeCount++;
 
         BondingCurveToken(token).sellToCurve(msg.sender, tokenAmount);
 
@@ -386,8 +401,14 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
     function _checkAndListOnDex(address token) internal {
         TokenInfo storage info = tokens[token];
-        if (info.reserveUsdc < info.dexListingThreshold) return;
         if (info.isListedOnDex) return;
+
+        // Multi-dimensional check: reserve + trade count + unique buyers
+        bool reserveOk = info.reserveUsdc >= info.dexListingThreshold;
+        bool tradeCountOk = info.tradeCount >= minTradeCountForListing;
+        bool uniqueBuyersOk = info.uniqueBuyerCount >= minUniqueBuyersForListing;
+
+        if (!reserveOk || !tradeCountOk || !uniqueBuyersOk) return;
 
         info.isListedOnDex = true;
         emit DexListingReady(token);
@@ -511,6 +532,14 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
 
     function setMatureOverride(address token, bool mature) external onlyOwner {
         isMatureOverride[token] = mature;
+    }
+
+    function setListingThresholds(
+        uint256 _minTradeCount,
+        uint256 _minUniqueBuyers
+    ) external onlyOwner {
+        minTradeCountForListing = _minTradeCount;
+        minUniqueBuyersForListing = _minUniqueBuyers;
     }
 
     function pause() external onlyOwner {
