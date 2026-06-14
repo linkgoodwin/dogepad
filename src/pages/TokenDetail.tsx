@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, ExternalLink, Globe, Twitter, MessageCircle, UsersRound, SearchX, Loader2, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Users, ExternalLink, Globe, Twitter, MessageCircle, UsersRound, SearchX, Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 import { useReadContract, useReadContracts, usePublicClient } from 'wagmi'
 import { formatEther, parseEther, parseAbiItem, zeroAddress } from 'viem'
 import { useQuery } from '@tanstack/react-query'
@@ -700,7 +700,7 @@ export default function TokenDetail() {
                   to="/perpetual"
                   className="bg-neon-red/5 border border-neon-red/20 rounded-xl p-4 text-center hover:bg-neon-red/10 transition-all group"
                 >
-                  <ArrowLeft className="w-6 h-6 mx-auto mb-2 text-neon-red group-hover:scale-110 transition-transform" />
+                  <TrendingDown className="w-6 h-6 mx-auto mb-2 text-neon-red group-hover:scale-110 transition-transform" />
                   <div className="font-display font-bold text-neon-red text-sm">{t('tokenDetail.goShort')}</div>
                   <div className="text-[10px] text-gray-400 mt-1">{t('tokenDetail.goShortDesc')}</div>
                 </Link>

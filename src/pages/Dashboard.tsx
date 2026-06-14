@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { formatEther } from 'viem'
-import { TrendingUp, BarChart3, Flame, Rocket, Loader2, Clock, Zap, ArrowRight } from 'lucide-react'
+import { TrendingUp, BarChart3, Flame, Rocket, Loader2, Clock, Zap, ArrowRight, Shield, Target } from 'lucide-react'
 import StatCard from '@/components/StatCard'
 import { LAUNCH_DAO_ABI, BONDING_CURVE_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
@@ -349,6 +349,40 @@ export default function Dashboard() {
         <StatCard title={t('dashboard.24hVolume')} value={`${formatUsdc(totalDistributed)} ${nativeSymbol}`} icon={<BarChart3 className="w-5 h-5 text-doge-cyan" />} />
         <StatCard title={t('dashboard.forgedTokens')} value={String(candidateCount)} icon={<Flame className="w-5 h-5 text-doge-gold" />} />
         <StatCard title={t('dashboard.launchedDex')} value={String(launchedCount)} icon={<Rocket className="w-5 h-5 text-neon-green" />} />
+      </section>
+
+      {/* Quick Actions */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Link to="/create" className="card-dark group hover:border-doge-gold/30 transition-all p-4 flex items-center gap-4">
+          <div className="rounded-xl bg-doge-gold/10 p-3">
+            <Flame className="w-6 h-6 text-doge-gold group-hover:scale-110 transition-transform" />
+          </div>
+          <div className="flex-1">
+            <p className="font-display font-bold text-white text-sm">{t('home.submitToken')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.quickForgeDesc')}</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-doge-gold transition-colors" />
+        </Link>
+        <Link to="/perpetual" className="card-dark group hover:border-doge-cyan/30 transition-all p-4 flex items-center gap-4">
+          <div className="rounded-xl bg-doge-cyan/10 p-3">
+            <Target className="w-6 h-6 text-doge-cyan group-hover:scale-110 transition-transform" />
+          </div>
+          <div className="flex-1">
+            <p className="font-display font-bold text-white text-sm">{t('perpetualTrading')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.quickPerpDesc')}</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-doge-cyan transition-colors" />
+        </Link>
+        <Link to="/dao" className="card-dark group hover:border-neon-green/30 transition-all p-4 flex items-center gap-4">
+          <div className="rounded-xl bg-neon-green/10 p-3">
+            <Shield className="w-6 h-6 text-neon-green group-hover:scale-110 transition-transform" />
+          </div>
+          <div className="flex-1">
+            <p className="font-display font-bold text-white text-sm">{t('dashboard.quickDao')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.quickDaoDesc')}</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500 group-hover:text-neon-green transition-colors" />
+        </Link>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
