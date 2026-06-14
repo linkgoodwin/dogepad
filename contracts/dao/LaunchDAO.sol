@@ -244,13 +244,13 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function subscribeUsdc(uint256 candidateId) external payable nonReentrant {
         require(candidateId < candidates.length, "invalid candidate");
-        require(msg.value >= MIN_SUBSCRIBE_USDC, "below min subscribe");
+        require(msg.value >= MIN_SUBSCRIBE_USDC, "below min sub");
 
         _tryAdvanceDay();
         _updateCandidateStatus(candidateId);
 
         Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "not active or queued");
+        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "nAQ");
 
         uint256 weight = msg.value * SUBSCRIBE_USDC_WEIGHT / SUBSCRIBE_DENOM;
 
@@ -278,9 +278,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function stakeUsdc(StakeDuration duration) external payable nonReentrant {
-        require(msg.value >= MIN_STAKE, "below min stake");
+        require(msg.value >= MIN_STAKE, "min stk");
         uint256 newUsdc = msg.value;
-        require(newUsdc <= MAX_STAKE, "above max stake");
+        require(newUsdc <= MAX_STAKE, "max stk");
 
         uint256 maturityTime = duration == StakeDuration.Demand
             ? 0
@@ -305,7 +305,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function stakeDoge(uint256 amount, StakeDuration duration) external nonReentrant {
         require(amount > 0, "zero amount");
-        require(dogeToken != address(0), "doge token not set");
+        require(dogeToken != address(0), "dtns");
 
         IERC20(dogeToken).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -352,7 +352,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         if (token == address(0)) {
             totalStakedUsdc -= amount;
             (bool success, ) = payable(msg.sender).call{value: amount}("");
-            require(success, "transfer failed");
+            require(success, "tf");
         } else if (token == dogeToken) {
             totalStakedDoge -= amount;
             IERC20(dogeToken).safeTransfer(msg.sender, amount);
@@ -386,7 +386,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         _updateCandidateStatus(candidateId);
 
         Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "not active or queued");
+        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "nAQ");
 
         userEffectiveSpent[msg.sender] += amount;
         c.totalRightsVotes += amount;
@@ -414,13 +414,13 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         if (msg.value < fee) revert InsufficientFee();
         require(bytes(name).length > 0 && bytes(name).length <= 64, "invalid name");
         require(bytes(symbol).length >= 1 && bytes(symbol).length <= 11, "invalid symbol");
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
 
         _tryAdvanceDay();
 
         if (msg.value > 0) {
             (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "fee transfer failed");
+            require(sent, "ftf");
         }
 
         uint256 duration = getTierDuration(tier);
@@ -462,14 +462,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         if (c.proposer != msg.sender) revert NotProposer();
         if (c.status != CandidateStatus.GracePeriod) revert NotInGracePeriod();
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
 
         uint256 fee = getTierFee(tier);
         if (msg.value < fee) revert InsufficientFee();
 
         if (msg.value > 0) {
             (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "fee transfer failed");
+            require(sent, "ftf");
         }
 
         uint256 duration = getTierDuration(tier);
@@ -492,14 +492,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         if (candidateId >= candidates.length) revert CandidateNotActive();
         Candidate storage c = candidates[candidateId];
         if (c.status != CandidateStatus.Recyclable) revert NotRecyclable();
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "must choose at least 1 incentive");
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
 
         uint256 fee = getTierFee(tier);
         if (msg.value < fee) revert InsufficientFee();
 
         if (msg.value > 0) {
             (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "fee transfer failed");
+            require(sent, "ftf");
         }
 
         uint256 duration = getTierDuration(tier);
@@ -531,7 +531,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         require(c.proposer == msg.sender, "not proposer");
         require(c.status == CandidateStatus.Active, "not active");
-        require(c.totalSubUsdc >= LAUNCH_THRESHOLD, "below launch threshold");
+        require(c.totalSubUsdc >= LAUNCH_THRESHOLD, "blt");
 
         _enqueueCandidate(candidateId);
 
@@ -544,8 +544,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         _cleanupActiveCandidates();
 
         EpochInfo storage epoch = epochInfo[currentDay];
-        require(!epoch.isSettled, "already settled");
-        require(block.timestamp >= epoch.dayStart + EPOCH_DURATION, "epoch not ended");
+        require(!epoch.isSettled, "settled");
+        require(block.timestamp >= epoch.dayStart + EPOCH_DURATION, "ene");
 
         uint256 winningId = type(uint256).max;
         uint256 maxWeight = 0;
@@ -740,7 +740,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
             if (userExcessUsdc > 0) {
                 (bool success, ) = payable(supporter).call{value: userExcessUsdc}("");
-                require(success, "refund failed");
+                require(success, "rf");
             }
 
             emit SubscriptionClaimed(supporter, candidateId, token, actualTransfer);
@@ -754,7 +754,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         require(c.launchedToken != address(0), "no token");
 
         Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        require(sub.isActive, "no subscription");
+        require(sub.isActive, "nosub");
         require(!sub.hasClaimed, "already claimed");
 
         sub.hasClaimed = true;
@@ -777,7 +777,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             uint256 refundUsdc = (sub.usdcAmount * c.launchedExcessUsdc) / c.totalSubUsdc;
             if (refundUsdc > 0) {
                 (bool success, ) = payable(msg.sender).call{value: refundUsdc}("");
-                require(success, "refund failed");
+                require(success, "rf");
             }
         }
 
@@ -798,7 +798,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         require(!c.wasLaunched, "was launched");
 
         Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        require(sub.isActive, "no subscription");
+        require(sub.isActive, "nosub");
         require(!sub.hasRefunded, "already refunded");
 
         sub.hasRefunded = true;
@@ -808,14 +808,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         if (usdcReturn > 0) {
             (bool success, ) = payable(msg.sender).call{value: usdcReturn}("");
-            require(success, "transfer failed");
+            require(success, "tf");
         }
 
         emit SubscriptionRefunded(msg.sender, candidateId, usdcReturn, 0);
     }
 
     function depositRewards(uint256 amount) external nonReentrant {
-        require(dogeToken != address(0), "doge token not set");
+        require(dogeToken != address(0), "dtns");
         IERC20(dogeToken).safeTransferFrom(msg.sender, address(this), amount);
         rewardPool += amount;
 
@@ -1267,7 +1267,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function setMaxLaunchsPerDay(uint256 _max) external onlyOwner {
-        require(_max >= 1 && _max <= 3, "invalid max launchs per day");
+        require(_max >= 1 && _max <= 3, "mx");
         maxLaunchsPerDay = _max;
     }
 
@@ -1281,7 +1281,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     }
 
     function setDefaultIncentives(bool _tax, bool _lp, bool _token) external onlyOwner {
-        require(_tax || _lp || _token, "must choose at least 1");
+        require(_tax || _lp || _token, "1+");
         defaultWantTaxShare = _tax;
         defaultWantLpShare = _lp;
         defaultWantTokenAllocation = _token;

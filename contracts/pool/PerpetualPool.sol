@@ -16,6 +16,12 @@ interface IPerpToken {
     function dexPair() external view returns (address);
 }
 
+interface IDexPair {
+    function getReserves() external view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+}
+
 struct Position {
     uint256 margin;
     uint256 size;
@@ -60,9 +66,9 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     address public dexLister;
     address public platformTreasury;
 
-    uint256 public constant MAINTENANCE_MARGIN_RATIO = 6e16;
+    uint256 public constant MAINTENANCE_MARGIN_RATIO = 15e16; // 15% (was 6%)
     uint256 public constant LIQUIDATION_FEE = 5e16;
-    uint256 public constant MAX_LEVERAGE = 10e18;
+    uint256 public constant MAX_LEVERAGE = 5e18; // 5x (was 10x)
     uint256 public constant FUNDING_INTERVAL = 8 hours;
     uint256 public constant MAX_FUNDING_RATE = 1e15;
     uint256 public constant PRICE_STALENESS_THRESHOLD = 5 minutes;
@@ -72,6 +78,16 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     uint256 public protocolFeeBps = 10;
     uint256 public liquidatorIncentiveBps = 500;
     uint256 public tpslExecutorRewardBps = 100; // 1% reward for TP/SL execution
+
+    // Dynamic funding rate parameters
+    uint256 public constant FUNDING_DEVIATION_MULTIPLIER = 2e18; // 2x multiplier per 1% deviation
+    uint256 public constant MAX_FUNDING_DEVIATION_RATE = 5e15; // 0.5% max additional rate per period
+
+    // Circuit breaker parameters
+    uint256 public constant CIRCUIT_BREAKER_THRESHOLD = 15e15; // 15% deviation triggers circuit breaker
+    uint256 public constant CIRCUIT_BREAKER_RESUME = 3e15; // 3% deviation to resume
+    mapping(address => bool) public circuitBreakerActive;
+    mapping(address => uint256) public circuitBreakerTriggeredAt;
 
     mapping(address => mapping(address => Position)) public positions;
     mapping(address => uint256) public tokenLongOpenInterest;
@@ -195,6 +211,10 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
         uint256 markPrice = oracle.getPrice(token);
         require(markPrice > 0, "no price");
         _validatePriceFreshness(token);
+
+        // Circuit breaker check
+        _checkCircuitBreaker(token, markPrice);
+        require(!circuitBreakerActive[token], "circuit breaker active");
 
         uint256 size = (marginUsdc * leverage) / 1e18;
         uint256 entryPrice = markPrice;
@@ -669,15 +689,18 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
         uint256 fundingPeriods = timeElapsed / FUNDING_INTERVAL;
         int256 rate;
 
+        // Use dynamic funding rate based on price deviation
+        uint256 dynamicRate = getDynamicFundingRate(token);
+
         if (longOI > shortOI) {
             uint256 ratio = (longOI * 1e18) / (shortOI > 0 ? shortOI : 1);
-            rate = int256((baseFundingRate * ratio * fundingPeriods) / 1e18);
+            rate = int256((dynamicRate * ratio * fundingPeriods) / 1e18);
             if (rate > int256(MAX_FUNDING_RATE * fundingPeriods)) {
                 rate = int256(MAX_FUNDING_RATE * fundingPeriods);
             }
         } else if (shortOI > longOI) {
             uint256 ratio = (shortOI * 1e18) / (longOI > 0 ? longOI : 1);
-            rate = -int256((baseFundingRate * ratio * fundingPeriods) / 1e18);
+            rate = -int256((dynamicRate * ratio * fundingPeriods) / 1e18);
             if (-rate > int256(MAX_FUNDING_RATE * fundingPeriods)) {
                 rate = -int256(MAX_FUNDING_RATE * fundingPeriods);
             }
@@ -992,6 +1015,86 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     function getListedTokensCount() external view returns (uint256) {
         return listedTokens.length;
     }
+
+    // ============ Dynamic Funding Rate & Circuit Breaker ============
+
+    function _getDexSpotPrice(address token) internal view returns (uint256) {
+        address pair = IPerpToken(token).dexPair();
+        if (pair == address(0)) return 0;
+
+        IDexPair dexPair = IDexPair(pair);
+        (uint256 reserve0, uint256 reserve1,) = dexPair.getReserves();
+        address token0 = dexPair.token0();
+        address token1 = dexPair.token1();
+
+        // Assume one of the tokens is the base asset (e.g., WUSDC)
+        // Price = reserveBase / reserveToken
+        if (token0 == token) {
+            return (reserve1 * 1e18) / reserve0;
+        } else if (token1 == token) {
+            return (reserve0 * 1e18) / reserve1;
+        }
+        return 0;
+    }
+
+    function _getPriceDeviation(address token, uint256 markPrice) internal view returns (uint256) {
+        uint256 spotPrice = _getDexSpotPrice(token);
+        if (spotPrice == 0 || markPrice == 0) return 0;
+
+        uint256 diff = markPrice > spotPrice ? markPrice - spotPrice : spotPrice - markPrice;
+        return (diff * 1e18) / spotPrice;
+    }
+
+    function _checkCircuitBreaker(address token, uint256 markPrice) internal {
+        uint256 deviation = _getPriceDeviation(token, markPrice);
+
+        if (deviation >= CIRCUIT_BREAKER_THRESHOLD) {
+            circuitBreakerActive[token] = true;
+            circuitBreakerTriggeredAt[token] = block.timestamp;
+            emit CircuitBreakerTriggered(token, deviation, markPrice);
+        } else if (deviation <= CIRCUIT_BREAKER_RESUME && circuitBreakerActive[token]) {
+            circuitBreakerActive[token] = false;
+            emit CircuitBreakerResumed(token, deviation, markPrice);
+        }
+    }
+
+    function getDynamicFundingRate(address token) public view returns (uint256) {
+        uint256 markPrice = oracle.getPrice(token);
+        uint256 deviation = _getPriceDeviation(token, markPrice);
+
+        // Base rate + dynamic adjustment based on deviation
+        uint256 dynamicRate = (deviation * FUNDING_DEVIATION_MULTIPLIER) / 1e18;
+        if (dynamicRate > MAX_FUNDING_DEVIATION_RATE) {
+            dynamicRate = MAX_FUNDING_DEVIATION_RATE;
+        }
+
+        return baseFundingRate + dynamicRate;
+    }
+
+    function getPriceDeviation(address token) external view returns (uint256 markPrice, uint256 spotPrice, uint256 deviation) {
+        markPrice = oracle.getPrice(token);
+        spotPrice = _getDexSpotPrice(token);
+        deviation = _getPriceDeviation(token, markPrice);
+    }
+
+    function isCircuitBreakerActive(address token) external view returns (bool) {
+        return circuitBreakerActive[token];
+    }
+
+    // ============ Spot Fee Injection to Insurance Fund ============
+
+    function injectInsuranceFund(address token, uint256 amount) external payable {
+        require(amount > 0, "zero amount");
+        require(isTokenListedForPerp[token], "token not listed");
+        require(msg.value >= amount, "insufficient value");
+
+        tokenInsuranceFund[token] += amount;
+        emit InsuranceFundInjected(token, amount, msg.sender);
+    }
+
+    event CircuitBreakerTriggered(address indexed token, uint256 deviation, uint256 markPrice);
+    event CircuitBreakerResumed(address indexed token, uint256 deviation, uint256 markPrice);
+    event InsuranceFundInjected(address indexed token, uint256 amount, address indexed injector);
 
     receive() external payable {}
 }

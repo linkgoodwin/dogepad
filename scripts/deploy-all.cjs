@@ -3,14 +3,21 @@ const fs = require("fs");
 const path = require("path");
 
 const envPath = path.resolve(__dirname, "../.env");
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match && !process.env[match[1].trim()]) {
-      process.env[match[1].trim()] = match[2].trim();
+const envLocalPath = path.resolve(__dirname, "../.env.local");
+
+function loadEnv(filePath) {
+  if (fs.existsSync(filePath)) {
+    for (const line of fs.readFileSync(filePath, "utf8").split("\n")) {
+      const match = line.match(/^([^#=]+)=(.*)$/);
+      if (match && !process.env[match[1].trim()]) {
+        process.env[match[1].trim()] = match[2].trim();
+      }
     }
   }
 }
+
+loadEnv(envPath);
+loadEnv(envLocalPath);
 
 const WUSDC = "0x911b4000D3422F482F4062a913885f7b035382Df";
 const CORRECT_DOGE_TOKEN = "0xC65D9B12760d8ad32A62271814EB6c88aFC9d2FB";

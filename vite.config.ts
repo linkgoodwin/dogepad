@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
+import { terser } from 'rollup-plugin-terser';
 
 export default defineConfig({
   base: '/dogepad/',
@@ -12,8 +13,10 @@ export default defineConfig({
   },
   build: {
     sourcemap: 'hidden',
+    minify: false,
     rollupOptions: {
       external: ['@reown/appkit/core'],
+      plugins: [terser()],
     },
   },
   plugins: [

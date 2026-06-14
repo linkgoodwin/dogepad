@@ -144,6 +144,33 @@ export default function PerpetualPage() {
     query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
   })
 
+  // Read dynamic funding rate
+  const { data: dynamicFundingRate } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getDynamicFundingRate',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read price deviation
+  const { data: priceDeviationData } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'getPriceDeviation',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
+  // Read circuit breaker status
+  const { data: circuitBreakerStatus } = useReadContract({
+    address: poolAddress as `0x${string}`,
+    abi: PERPETUAL_POOL_ABI,
+    functionName: 'isCircuitBreakerActive',
+    args: selectedToken ? [selectedToken as `0x${string}`] : undefined,
+    query: { enabled: !!selectedToken && poolAddress !== '0x0000000000000000000000000000000000000000' },
+  })
+
   // Read open interest
   const { data: openInterest } = useReadContract({
     address: poolAddress as `0x${string}`,
@@ -436,6 +463,25 @@ export default function PerpetualPage() {
                 <span className="text-gray-400 text-xs">{t('fundingRate')}</span>
                 <div className={`text-sm font-mono ${Number(fundingRate) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {formatFundingRate(fundingRate)}
+                </div>
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {dynamicFundingRate !== undefined ? `${t('dynamic')}: ${formatFundingRate(dynamicFundingRate)}` : t('dynamicRate')}
+                </div>
+              </div>
+            )}
+            {/* Circuit Breaker Status */}
+            {selectedToken && (
+              <div className={`border rounded-lg px-4 py-2 ${circuitBreakerStatus ? 'bg-red-900/20 border-red-700' : 'bg-[#1a1f2e] border-gray-700'}`}>
+                <span className="text-gray-400 text-xs">{t('circuitBreaker')}</span>
+                <div className="text-sm font-mono">
+                  {circuitBreakerStatus ? (
+                    <span className="text-red-400 font-bold">{t('triggered')}</span>
+                  ) : (
+                    <span className="text-green-400">{t('normal')}</span>
+                  )}
+                </div>
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {priceDeviationData ? `${t('deviation')}: ${(Number(priceDeviationData[2]) / 1e16).toFixed(2)}%` : `${t('deviation')}: -`}
                 </div>
               </div>
             )}
@@ -790,7 +836,7 @@ export default function PerpetualPage() {
                 <input
                   type="range"
                   min={1}
-                  max={10}
+                  max={5}
                   step={1}
                   value={leverage}
                   onChange={(e) => setLeverage(Number(e.target.value))}
@@ -798,8 +844,8 @@ export default function PerpetualPage() {
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
                   <span>1x</span>
+                  <span>3x</span>
                   <span>5x</span>
-                  <span>10x</span>
                 </div>
               </div>
 
@@ -916,12 +962,30 @@ export default function PerpetualPage() {
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">{t('maxLeverage')}</span>
-                  <span className="font-mono">10x</span>
+                  <span className="font-mono">5x</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">{t('maintenanceMargin')}</span>
-                  <span className="font-mono">6%</span>
+                  <span className="font-mono">15%</span>
                 </div>
+                {priceDeviationData && (
+                  <>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">{t('markPrice')}</span>
+                      <span className="font-mono">{formatPrice(priceDeviationData[0])}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">{t('spotPrice')}</span>
+                      <span className="font-mono">{formatPrice(priceDeviationData[1])}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">{t('priceDeviation')}</span>
+                      <span className={`font-mono ${Number(priceDeviationData[2]) > 15e15 ? 'text-red-400' : 'text-gray-300'}`}>
+                        {(Number(priceDeviationData[2]) / 1e16).toFixed(2)}%
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

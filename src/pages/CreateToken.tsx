@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
-import { Flame, Info, Globe, Twitter, MessageCircle, Users, Upload, Clock, CheckCircle, Loader2, AlertTriangle, Wallet, X, Wifi } from 'lucide-react'
+import { Flame, Info, Globe, Twitter, MessageCircle, Users, Upload, Clock, CheckCircle, Loader2, AlertTriangle, Wallet, X, Wifi, ChevronDown, ChevronUp, Zap } from 'lucide-react'
 import { useT } from '@/i18n/useT'
 import { cn } from '@/lib/utils'
 import { uploadToIpfs } from '@/lib/ipfs'
@@ -43,6 +43,7 @@ export default function CreateToken() {
   const [uploadError, setUploadError] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
   const [txError, setTxError] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const selectedTierInfo = DURATION_TIERS[selectedTier]
   const isContractNotDeployed = isZeroAddress(daoAddress)
@@ -282,64 +283,77 @@ export default function CreateToken() {
             </div>
           </div>
 
-          <div className="card-dark space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Globe className="w-4 h-4 text-doge-cyan" />
-              <span className="font-semibold text-white">{t('create.socialLinks')}</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('create.website')} className="input-dark w-full" />
-                  {websiteError && <p className="text-[10px] text-neon-red mt-1">{websiteError}</p>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Twitter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <input type="text" value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder={t('create.twitter')} className="input-dark w-full" />
-                  {twitterError && <p className="text-[10px] text-neon-red mt-1">{twitterError}</p>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <input type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder={t('create.telegram')} className="input-dark flex-1" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <input type="text" value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder={t('create.discord')} className="input-dark flex-1" />
-              </div>
-            </div>
-          </div>
+          {/* Advanced Options Toggle */}
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-400 hover:text-white transition-colors border border-dashed border-dark-500 rounded-xl hover:border-dark-400"
+          >
+            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {showAdvanced ? t('create.hideAdvanced') : t('create.showAdvanced')}
+          </button>
 
-          <div className="card-dark space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Info className="w-4 h-4 text-doge-gold" />
-              <span className="font-semibold text-white">{t('create.aboutCoin')}</span>
-            </div>
-            <input
-              type="text"
-              value={aboutCoin}
-              onChange={(e) => setAboutCoin(e.target.value.slice(0, 128))}
-              placeholder={t('create.aboutCoinPlaceholder')}
-              maxLength={128}
-              className="input-dark w-full"
-            />
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{t('create.description')}</span>
-              <span>{aboutCoin.length}/128</span>
-            </div>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value.slice(0, 1024))}
-              placeholder={t('create.descriptionPlaceholder')}
-              maxLength={1024}
-              rows={4}
-              className="input-dark w-full resize-none"
-            />
-            <div className="text-right text-xs text-gray-500">{description.length}/1024</div>
-          </div>
+          {showAdvanced && (
+            <>
+              <div className="card-dark space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Globe className="w-4 h-4 text-doge-cyan" />
+                  <span className="font-semibold text-white">{t('create.socialLinks')}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('create.website')} className="input-dark w-full" />
+                      {websiteError && <p className="text-[10px] text-neon-red mt-1">{websiteError}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Twitter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <input type="text" value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder={t('create.twitter')} className="input-dark w-full" />
+                      {twitterError && <p className="text-[10px] text-neon-red mt-1">{twitterError}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder={t('create.telegram')} className="input-dark flex-1" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input type="text" value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder={t('create.discord')} className="input-dark flex-1" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="card-dark space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Info className="w-4 h-4 text-doge-gold" />
+                  <span className="font-semibold text-white">{t('create.aboutCoin')}</span>
+                </div>
+                <input
+                  type="text"
+                  value={aboutCoin}
+                  onChange={(e) => setAboutCoin(e.target.value.slice(0, 128))}
+                  placeholder={t('create.aboutCoinPlaceholder')}
+                  maxLength={128}
+                  className="input-dark w-full"
+                />
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>{t('create.description')}</span>
+                  <span>{aboutCoin.length}/128</span>
+                </div>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value.slice(0, 1024))}
+                  placeholder={t('create.descriptionPlaceholder')}
+                  maxLength={1024}
+                  rows={4}
+                  className="input-dark w-full resize-none"
+                />
+                <div className="text-right text-xs text-gray-500">{description.length}/1024</div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -440,7 +454,11 @@ export default function CreateToken() {
               <p className="text-xs text-gray-400 mt-1">{t('create.connectWalletDesc')}</p>
             </div>
           ) : (
-            <button className="btn-primary w-full" disabled={!name || !symbol || uploading || isContractNotDeployed || !(wantTaxShare || wantLpShare || wantTokenAllocation) || !!websiteError || !!twitterError} onClick={handleSubmit}>
+            <button
+              className="btn-primary w-full flex items-center justify-center gap-2"
+              disabled={!name || !symbol || uploading || isContractNotDeployed || !(wantTaxShare || wantLpShare || wantTokenAllocation) || !!websiteError || !!twitterError}
+              onClick={handleSubmit}
+            >
               {isContractNotDeployed ? (
                 t('create.contractNotDeployed')
               ) : uploading ? (
@@ -448,7 +466,12 @@ export default function CreateToken() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   {t('create.uploading')}
                 </span>
-              ) : t('create.submit')}
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  {t('create.oneClickLaunch')}
+                </>
+              )}
             </button>
           )}
         </div>

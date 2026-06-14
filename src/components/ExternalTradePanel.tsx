@@ -34,8 +34,8 @@ const BC_ABI = [
 
 // Hardcoded Arc testnet addresses as ultimate fallback
 const ARC_ADDRESSES = {
-  bondingCurve: '0x569944C02A15aAdB5F9D1999e202463e9860F473',
-  simpleRouter: '0x6C59fc8e5a4e0CFF1cfD050f1f73B7eA4a49992B',
+  bondingCurve: '0xbb0fEbC501B40983666a4d3e8FCfD8f251CA080F',
+  simpleRouter: '0xc7BF0097B7a83560E8E92e3820115832d85aC37a',
   wusdc: '0x911b4000D3422F482F4062a913885f7b035382Df',
 }
 

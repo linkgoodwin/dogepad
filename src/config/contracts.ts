@@ -939,6 +939,69 @@ export const PERPETUAL_POOL_ABI = [
     name: 'FundingRateUpdated',
     type: 'event',
   },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getDynamicFundingRate',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getPriceDeviation',
+    outputs: [
+      { internalType: 'uint256', name: 'markPrice', type: 'uint256' },
+      { internalType: 'uint256', name: 'spotPrice', type: 'uint256' },
+      { internalType: 'uint256', name: 'deviation', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'isCircuitBreakerActive',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'injectInsuranceFund',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'token', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'amount', type: 'uint256' },
+      { indexed: false, internalType: 'address', name: 'sender', type: 'address' },
+    ],
+    name: 'InsuranceFundInjected',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'token', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'timestamp', type: 'uint256' },
+    ],
+    name: 'CircuitBreakerTriggered',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'token', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'timestamp', type: 'uint256' },
+    ],
+    name: 'CircuitBreakerResumed',
+    type: 'event',
+  },
 ] as const
 
 export const FEE_DISTRIBUTOR_ABI = [
@@ -1130,17 +1193,17 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_MONAD_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x58D1bC74355C11fF01d04b58251bbf118a19259F'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x569944C02A15aAdB5F9D1999e202463e9860F473'),
-    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x020bF89469a2bc4C3f91d02AB71E42a481462ebA'),
-    perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0x43e610e2A27Ae6Eb40C8f9286296741378E752dA'),
-    buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x418Ea719bbF661DDFF99Dd94b4e0aabA05d220c9'),
-    priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0x9aFb859f7A2Ce4afe7a670762cEEe2C11e1bc9d9'),
-    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x5E1328AD73287405257f92b38810E7F55F6b7969'),
-    creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0xf62B64603b9df428D493C625E807FFE4573CFeb1'),
-    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x0622495843eca9299F07Fe3ad3a67ad39DB7ba4f'),
-    simpleFactory: resolveAddr('VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS', 'VITE_SIMPLE_FACTORY_ADDRESS', '0xf1b805AF51f8eC789D05aA7c981234C9d854357C'),
-    simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x6C59fc8e5a4e0CFF1cfD050f1f73B7eA4a49992B'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x5a36007E5A5CE4823364D3EDf33220D259Fd206d'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x0412839B2c0007D0642aD437B3E7b95c3680C765'),
+    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x026D1A2c92000754EA7Aa938046d62F32127AddB'),
+    perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0xDE2E9167C2bd2c391c3840332dB76642c2cF3a7f'),
+    buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x2f2b93878817940e4F064E86cc7bA52500299a2c'),
+    priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0xA5c5B084ebfF62fc4F61B3370Ab28eA28D967346'),
+    feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x07A35B574987c5E9a0eE64eA3Bb0dD522041a288'),
+    creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0x67C4Edb80dF88dd707Cf72e5aB18A6805D8230fD'),
+    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x03baA5aC876d3AFBc325c13E8b178e0498091389'),
+    simpleFactory: resolveAddr('VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS', 'VITE_SIMPLE_FACTORY_ADDRESS', '0x148f3f0710976aB48c979A5064D201BffdfB1446'),
+    simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x5D503fBc1476658f28B8f991A035167C5Ad29FCB'),
   },
 }
 
