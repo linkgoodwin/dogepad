@@ -8,6 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+
+# Temp directories
+nm_to_delete/
+.temp/
+.tmp/
 dist
 dist-ssr
 *.local

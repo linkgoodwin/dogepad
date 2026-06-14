@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DogePad - Fair Token Launch Platform | Fundraising Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ========== RESET & BASE ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body {
+  font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: #f0b90b; text-decoration: none; transition: color 0.2s; }
+a:hover { color: #ffd860; }
+img { max-width: 100%; }
+
+/* ========== UTILITIES ========== */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 40px; }
+.section { padding: 80px 0; }
+.section-alt { background: #161b22; }
+.gold { color: #f0b90b; }
+.cyan { color: #00d4aa; }
+.red { color: #f85149; }
+.green { color: #3fb950; }
+.text-center { text-align: center; }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.text-lg { font-size: 1.125rem; }
+.text-xl { font-size: 1.25rem; }
+.text-2xl { font-size: 1.5rem; }
+.text-3xl { font-size: 2rem; }
+.text-4xl { font-size: 2.5rem; }
+.text-5xl { font-size: 3.5rem; }
+.font-bold { font-weight: 700; }
+.font-light { font-weight: 300; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.mt-4 { margin-top: 2rem; }
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+.mb-4 { margin-bottom: 2rem; }
+.opacity-60 { opacity: 0.6; }
+.opacity-80 { opacity: 0.8; }
+
+/* ========== NAVIGATION ========== */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(240, 185, 11, 0.15);
+  padding: 0 40px;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800; font-size: 1.25rem;
+  color: #f0b90b;
+  letter-spacing: -0.5px;
+}
+.nav-logo span { color: #00d4aa; }
+.nav-links { display: flex; gap: 28px; }
+.nav-links a {
+  font-size: 0.8rem; font-weight: 500;
+  color: #8b949e; text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: #f0b90b; }
+
+/* ========== HERO / COVER ========== */
+.hero {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  padding: 80px 40px 60px;
+}
+.hero::before {
+  content: '';
+  position: absolute; top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(240,185,11,0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(0,212,170,0.06) 0%, transparent 50%);
+  animation: heroGlow 15s ease-in-out infinite alternate;
+}
+@keyframes heroGlow {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(-2%, -1%) rotate(3deg); }
+}
+.hero-content { position: relative; z-index: 1; max-width: 800px; }
+.hero-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  border: 1px solid rgba(240,185,11,0.4);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #f0b90b;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 32px;
+}
+.hero h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: 4.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.1;
+  letter-spacing: -2px;
+  margin-bottom: 8px;
+}
+.hero h1 .accent { color: #f0b90b; }
+.hero .subtitle {
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: #8b949e;
+  margin-bottom: 40px;
+}
+.hero .subtitle strong { color: #c9d1d9; font-weight: 500; }
+.hero-tags {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 48px;
+}
+.hero-tag {
+  padding: 8px 20px;
+  background: rgba(240,185,11,0.08);
+  border: 1px solid rgba(240,185,11,0.2);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #f0b90b;
+  font-weight: 500;
+}
+.hero-chain {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 24px;
+  background: rgba(0,212,170,0.1);
+  border: 1px solid rgba(0,212,170,0.3);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #00d4aa;
+  font-weight: 500;
+}
+.hero-chain .dot {
+  width: 8px; height: 8px;
+  background: #00d4aa;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ========== SECTION HEADERS ========== */
+.section-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f0b90b;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -1px;
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+.section-desc {
+  font-size: 1.05rem;
+  color: #8b949e;
+  max-width: 700px;
+  line-height: 1.8;
+}
+.section-desc strong { color: #c9d1d9; }
+
+/* ========== GRID ========== */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+
+/* ========== CARDS ========== */
+.card {
+  background: #161b22;
+  border: 1px solid rgba(240,185,11,0.1);
+  border-radius: 16px;
+  padding: 32px;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.card:hover {
+  border-color: rgba(240,185,11,0.3);
+  transform: translateY(-2px);
+}
+.card-icon {
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+}
+.card-icon.gold-bg { background: rgba(240,185,11,0.12); }
+.card-icon.cyan-bg { background: rgba(0,212,170,0.12); }
+.card-icon.red-bg { background: rgba(248,81,73,0.12); }
+.card h3 {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+.card p { font-size: 0.9rem; color: #8b949e; line-height: 1.7; }
+
+/* ========== STAT CARDS ========== */
+.stat-card {
+  background: linear-gradient(135deg, #161b22 0%, #1c2333 100%);
+  border: 1px solid rgba(240,185,11,0.15);
+  border-radius: 16px;
+  padding: 28px;
+  text-align: center;
+}
+.stat-value {
+  font-family: 'Inter', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #f0b90b;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.stat-label {
+  font-size: 0.8rem;
+  color: #8b949e;
+  font-weight: 500;
+}
+
+/* ========== TABLE ========== */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(240,185,11,0.12);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+thead { background: rgba(240,185,11,0.06); }
+th {
+  padding: 14px 20px;
+  text-align: left;
+  font-weight: 600;
+  color: #f0b90b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(240,185,11,0.12);
+}
+td {
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: #c9d1d9;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(240,185,11,0.03); }
+
+/* ========== FLOW DIAGRAM ========== */
+.flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: wrap;
+  padding: 40px 0;
+}
+.flow-step {
+  text-align: center;
+  padding: 24px 20px;
+  min-width: 140px;
+}
+.flow-step .step-num {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(240,185,11,0.15);
+  color: #f0b90b;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700; font-size: 0.9rem;
+  margin: 0 auto 12px;
+}
+.flow-step .step-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+.flow-step .step-desc {
+  font-size: 0.75rem;
+  color: #8b949e;
+}
+.flow-arrow {
+  color: #f0b90b;
+  font-size: 1.5rem;
+  padding: 0 8px;
+  opacity: 0.5;
+}
+
+/* ========== TIMELINE ========== */
+.timeline { position: relative; padding-left: 40px; }
+.timeline::before {
+  content: '';
+  position: absolute; left: 15px; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #f0b90b, #00d4aa);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 40px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute; left: -33px; top: 6px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #f0b90b;
+  border: 3px solid #0d1117;
+}
+.timeline-item.active::before {
+  background: #00d4aa;
+  box-shadow: 0 0 12px rgba(0,212,170,0.5);
+}
+.timeline-phase {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.timeline-phase.gold { color: #f0b90b; }
+.timeline-phase.cyan { color: #00d4aa; }
+.timeline-phase.gray { color: #8b949e; }
+.timeline-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+.timeline-desc {
+  font-size: 0.85rem;
+  color: #8b949e;
+  line-height: 1.7;
+}
+
+/* ========== HIGHLIGHT BOX ========== */
+.highlight-box {
+  background: linear-gradient(135deg, rgba(240,185,11,0.08) 0%, rgba(0,212,170,0.05) 100%);
+  border: 1px solid rgba(240,185,11,0.2);
+  border-radius: 16px;
+  padding: 32px;
+  margin: 32px 0;
+}
+.highlight-box h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f0b90b;
+  margin-bottom: 12px;
+}
+.highlight-box p {
+  font-size: 0.9rem;
+  color: #c9d1d9;
+  line-height: 1.8;
+}
+
+/* ========== RISK TABLE ========== */
+.risk-high { color: #f85149; font-weight: 600; }
+.risk-medium { color: #f0b90b; font-weight: 600; }
+.risk-low { color: #3fb950; font-weight: 600; }
+
+/* ========== QUOTE ========== */
+.quote-block {
+  border-left: 3px solid #f0b90b;
+  padding: 20px 28px;
+  background: rgba(240,185,11,0.04);
+  border-radius: 0 12px 12px 0;
+  margin: 24px 0;
+}
+.quote-block p {
+  font-size: 0.95rem;
+  color: #c9d1d9;
+  font-style: italic;
+  line-height: 1.8;
+}
+.quote-block cite {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: #8b949e;
+  font-style: normal;
+}
+
+/* ========== CONTRACT LIST ========== */
+.contract-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.contract-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: #161b22;
+  border: 1px solid rgba(0,212,170,0.15);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #c9d1d9;
+  font-weight: 500;
+  transition: border-color 0.2s;
+}
+.contract-item:hover { border-color: rgba(0,212,170,0.4); }
+.contract-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #00d4aa;
+  flex-shrink: 0;
+}
+
+/* ========== FOOTER ========== */
+.footer {
+  padding: 60px 0 40px;
+  border-top: 1px solid rgba(240,185,11,0.1);
+  text-align: center;
+}
+.footer-logo {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f0b90b;
+  margin-bottom: 12px;
+}
+.footer-logo span { color: #00d4aa; }
+.footer p { font-size: 0.8rem; color: #484f58; margin-bottom: 6px; }
+.footer .disclaimer {
+  max-width: 700px;
+  margin: 20px auto 0;
+  font-size: 0.72rem;
+  color: #484f58;
+  line-height: 1.7;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: 20px;
+}
+
+/* ========== DIVIDER ========== */
+.divider {
+  width: 60px; height: 3px;
+  background: linear-gradient(90deg, #f0b90b, #00d4aa);
+  border-radius: 2px;
+  margin: 16px 0 24px;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .container { padding: 0 20px; }
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero h1 { font-size: 2.5rem; letter-spacing: -1px; }
+  .hero .subtitle { font-size: 1.1rem; }
+  .hero-tags { gap: 8px; }
+  .hero-tag { padding: 6px 14px; font-size: 0.72rem; }
+  .section { padding: 50px 0; }
+  .section-title { font-size: 1.8rem; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .flow { flex-direction: column; gap: 0; }
+  .flow-arrow { transform: rotate(90deg); }
+  .stat-value { font-size: 1.8rem; }
+  .contract-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .hero h1 { font-size: 2rem; }
+  .contract-grid { grid-template-columns: 1fr; }
+}
+
+/* ========== PRINT ========== */
+@media print {
+  .nav { position: static; background: #fff; border-bottom: 2px solid #000; }
+  .nav-links a { color: #000; }
+  body { background: #fff; color: #000; }
+  .section-alt { background: #f5f5f5; }
+  .card { border-color: #ddd; background: #f9f9f9; }
+  .section-title { color: #000; }
+  .hero { min-height: auto; padding: 60px 20px; }
+  .hero h1 { color: #000; }
+  .hero::before { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== NAVIGATION ==================== -->
+<nav class="nav">
+  <div class="nav-logo">Doge<span>Pad</span></div>
+  <div class="nav-links">
+    <a href="#summary">Executive Summary</a>
+    <a href="#market">Market</a>
+    <a href="#product">Product</a>
+    <a href="#tech">Technology</a>
+    <a href="#tokenomics">Tokenomics</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#team">Team</a>
+    <a href="#risks">Risks</a>
+  </div>
+</nav>
+
+<!-- ==================== SECTION 1: COVER / HERO ==================== -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">Confidential &mdash; Fundraising Handbook 2025</div>
+    <h1>Doge<span class="accent">Pad</span></h1>
+    <p class="subtitle"><strong>Fair Token Launch Platform</strong><br>公平代币发射平台 &mdash; 基于 Bonding Curve 的下一代 DeFi 基础设施</p>
+    <div class="hero-tags">
+      <div class="hero-tag">Bonding Curve</div>
+      <div class="hero-tag">DAO Governance</div>
+      <div class="hero-tag">Perpetual Short</div>
+      <div class="hero-tag">Circuit Breaker</div>
+      <div class="hero-tag">Buy &amp; Burn</div>
+      <div class="hero-tag">Insurance Fund</div>
+    </div>
+    <div class="hero-chain">
+      <span class="dot"></span>
+      Arc Testnet &mdash; Chain ID: 5042002 &mdash; 11 Contracts Deployed
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 2: EXECUTIVE SUMMARY ==================== -->
+<section class="section" id="summary">
+  <div class="container">
+    <div class="section-label">01 &mdash; Executive Summary</div>
+    <h2 class="section-title">执行摘要</h2>
+    <div class="divider"></div>
+    <p class="section-desc mb-4">
+      DogePad 是部署于 <strong>Arc 链</strong>上的代币发射平台，通过 Bonding Curve（联合曲线）实现公平发币，集成 DAO 治理投票、永续合约做空、动态资金费率与价格熔断机制，构建从资产发行到双向博弈的完整 DeFi 闭环。
+    </p>
+
+    <div class="highlight-box">
+      <h4>核心命题</h4>
+      <p>
+        Pump.fun 在 Solana 上一年内创造了超过 <strong>$1.5 亿</strong> 协议收入，但其模式存在三大致命缺陷：无做空机制导致单边市场、无 DAO 筛选导致垃圾项目泛滥、无平台代币导致协议价值无法内化。DogePad 在此市场空白上构建下一代发射平台，以永续合约做空、DAO 治理和通缩飞轮三大创新填补市场空白。
+      </p>
+    </div>
+
+    <div class="grid-4 mt-4">
+      <div class="stat-card">
+        <div class="stat-value">$1.5B+</div>
+        <div class="stat-label">Meme 币市场峰值市值</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">$150M+</div>
+        <div class="stat-label">Pump.fun 年协议收入</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">11</div>
+        <div class="stat-label">已部署智能合约</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">5x</div>
+        <div class="stat-label">最大永续杠杆</div>
+      </div>
+    </div>
+
+    <div class="grid-2 mt-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#9889;</div>
+        <h3>差异化优势</h3>
+        <p>DogePad 是唯一将公平发射 + DAO 治理 + 永续合约做空 + 保险基金整合为单一协议的平台。用户无需在多个协议间跳转，即可完成从发现项目、参与发射、杠杆做多/做空到治理投票的全流程。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128200;</div>
+        <h3>收入模型</h3>
+        <p>多元化收入结构：代币创建费 + 曲线交易费 + DEX 交易税 + 平台储备分配 + 创建者激励盈余。基准预测月收入约 $104K，乐观预测可达 $209K/月。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 3: MARKET OPPORTUNITY ==================== -->
+<section class="section section-alt" id="market">
+  <div class="container">
+    <div class="section-label">02 &mdash; Market Opportunity</div>
+    <h2 class="section-title">市场机会</h2>
+    <div class="divider"></div>
+    <p class="section-desc mb-4">
+      Meme 币已从边缘实验演变为加密市场核心叙事。2024 年 Meme 币板块总市值一度突破 <strong>800 亿美元</strong>，日均交易量超过 <strong>50 亿美元</strong>。
+    </p>
+
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#127760;</div>
+        <h3>Meme 币市场规模</h3>
+        <p>2024 年 Meme 币板块总市值突破 $800 亿，日均交易量超 $50 亿。驱动力来自社区文化、社交传播与投机需求的叠加，已成为加密市场不可忽视的核心叙事。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128640;</div>
+        <h3>Pump.fun 验证</h3>
+        <p>累计上线代币超 400 万个，协议总收入超 $1.5 亿，日峰值收入超 $500 万，单日创建量峰值超 30,000 个。联合曲线模式已被充分验证。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon red-bg">&#9888;</div>
+        <h3>Pump.fun 的缺陷</h3>
+        <p><strong>无做空机制</strong>：单边市场，只能做多拉盘<br><strong>无 DAO 筛选</strong>：垃圾项目泛滥<br><strong>无平台代币</strong>：协议价值无法内化<br><strong>无风险管控</strong>：无熔断、无保险</p>
+      </div>
+    </div>
+
+    <div class="highlight-box">
+      <h4>DogePad 的市场定位</h4>
+      <p>
+        DogePad 不只是一个发射平台，而是 <strong>「带做空机制的 Pump.fun」</strong>。通过永续合约做空机制，让代币价格有双向博弈空间；通过 DAO 治理筛选优质项目；通过保险基金和熔断机制保护投资者；通过 Buy & Burn 引擎实现平台代币的价值捕获。这是 Pump.fun 模式的下一代演进。
+      </p>
+    </div>
+
+    <div class="table-wrap mt-4">
+      <table>
+        <thead>
+          <tr>
+            <th>对比维度</th>
+            <th>Pump.fun</th>
+            <th>DogePad</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>发币机制</td>
+            <td>Bonding Curve</td>
+            <td class="gold">Bonding Curve + 反狙击设计</td>
+          </tr>
+          <tr>
+            <td>做空机制</td>
+            <td class="red">&#10005; 无</td>
+            <td class="green">&#10003; 永续合约做空</td>
+          </tr>
+          <tr>
+            <td>DAO 治理</td>
+            <td class="red">&#10005; 无</td>
+            <td class="green">&#10003; LaunchDAO 投票筛选</td>
+          </tr>
+          <tr>
+            <td>风险管控</td>
+            <td class="red">&#10005; 无</td>
+            <td class="green">&#10003; 熔断 + 保险基金</td>
+          </tr>
+          <tr>
+            <td>平台代币</td>
+            <td class="red">&#10005; 无</td>
+            <td class="green">&#10003; DOGE 通缩飞轮</td>
+          </tr>
+          <tr>
+            <td>价值捕获</td>
+            <td class="red">&#10005; 无</td>
+            <td class="green">&#10003; 回购销毁 + 手续费分红</td>
+          </tr>
+          <tr>
+            <td>资金费率</td>
+            <td>N/A</td>
+            <td class="gold">动态费率 + 偏差熔断</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 4: PRODUCT ARCHITECTURE ==================== -->
+<section class="section" id="product">
+  <div class="container">
+    <div class="section-label">03 &mdash; Product Architecture</div>
+    <h2 class="section-title">产品架构</h2>
+    <div class="divider"></div>
+    <p class="section-desc mb-4">
+      DogePad 由四大核心模块构成，形成完整的代币资产生命周期管理闭环：Bonding Curve 公平发行 &rarr; DAO 治理投票 &rarr; DEX 上架交易 &rarr; 永续合约做空。
+    </p>
+
+    <!-- Flow Diagram -->
+    <div class="flow">
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-title">Bonding Curve</div>
+        <div class="step-desc">公平发币<br>价格发现</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-title">DAO Voting</div>
+        <div class="step-desc">社区投票<br>项目筛选</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step">
+        <div class="step-num">3</div>
+        <div class="step-title">DEX Listing</div>
+        <div class="step-desc">自动上架<br>流动性注入</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step">
+        <div class="step-num">4</div>
+        <div class="step-title">Perpetual Short</div>
+        <div class="step-desc">永续做空<br>双向博弈</div>
+      </div>
+    </div>
+
+    <!-- Module Cards -->
+    <div class="grid-2 mt-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#128200;</div>
+        <h3>Bonding Curve 发行引擎</h3>
+        <p>采用线性联合曲线模型，实现公平、透明的价格发现。无预售、无团队预留、无内幕交易。所有参与者在同一机制下交易，消除信息不对称。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>参数</th><th>值</th></tr></thead>
+            <tbody>
+              <tr><td>起始价格</td><td>100 gwei</td></tr>
+              <tr><td>代币总供应</td><td>1,000,000,000</td></tr>
+              <tr><td>创建费</td><td>0.1 BNB</td></tr>
+              <tr><td>曲线交易费</td><td>买 1% + 卖 1%</td></tr>
+              <tr><td>持仓上限</td><td>总供应量 5%</td></tr>
+              <tr><td>DEX 上线阈值</td><td>20 BNB 储备</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon cyan-bg">&#129513;</div>
+        <h3>LaunchDAO 治理投票</h3>
+        <p>以 1 天为周期（Epoch），通过社区投票筛选优质项目。质押 DOGE 可获得 15% 额外投票权重加成。胜出项目的支持者以承诺 BNB 按比例获得代币。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>参数</th><th>值</th></tr></thead>
+            <tbody>
+              <tr><td>Epoch 周期</td><td>1 天</td></tr>
+              <tr><td>DOGE 加权系数</td><td>3x 额外权重</td></tr>
+              <tr><td>BNB 质押范围</td><td>0.1 - 300 BNB</td></tr>
+              <tr><td>候选人有效期</td><td>7 天</td></tr>
+              <tr><td>每日队列上限</td><td>3 个项目</td></tr>
+              <tr><td>认购期</td><td>3.5 小时</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon gold-bg">&#128176;</div>
+        <h3>DEX 自动上架</h3>
+        <p>当 BNB 储备达到阈值时，系统自动在 DEX 添加流动性并挂牌交易。BNB 和代币按预设比例分配至 LP 流动性池、永续合约池、Buy & Burn 引擎和平台金库。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>BNB 分配</th><th>比例</th></tr></thead>
+            <tbody>
+              <tr><td>LP 流动性</td><td>65%</td></tr>
+              <tr><td>永续合约池</td><td>20%</td></tr>
+              <tr><td>Buy & Burn 引擎</td><td>10%</td></tr>
+              <tr><td>平台</td><td>5%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128640;</div>
+        <h3>PerpetualPool 永续合约</h3>
+        <p>为每个上线代币配备永续合约做空能力，支持最多 5x 杠杆。集成止盈止损、限价单、动态资金费率和价格偏差熔断，是 DogePad 最核心的差异化功能。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>参数</th><th>值</th></tr></thead>
+            <tbody>
+              <tr><td>最大杠杆</td><td>5x</td></tr>
+              <tr><td>维持保证金率</td><td>15%</td></tr>
+              <tr><td>资金费间隔</td><td>8 小时</td></tr>
+              <tr><td>最大资金费率</td><td>0.1%</td></tr>
+              <tr><td>熔断阈值</td><td>15% 偏差</td></tr>
+              <tr><td>清算激励</td><td>5%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 5: TECHNOLOGY ==================== -->
+<section class="section section-alt" id="tech">
+  <div class="container">
+    <div class="section-label">04 &mdash; Technical Advantages</div>
+    <h2 class="section-title">技术优势</h2>
+    <div class="divider"></div>
+    <p class="section-desc mb-4">
+      DogePad 的技术架构围绕<strong>安全、公平、可控</strong>三大原则设计。所有合约基于 OpenZeppelin 标准库，集成 Timelock 治理、Transparent Proxy 升级模式和多重安全机制。
+    </p>
+
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#9889;</div>
+        <h3>Dynamic Funding Rate</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">动态资金费率</h4>
+        <p>基于多空持仓偏差自动调节资金费率。偏差越大，费率越高，促使市场回归平衡。偏差乘数 2x/1%，最大附加费率 0.5%/期，防止极端单边持仓。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon red-bg">&#128293;</div>
+        <h3>Circuit Breaker</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">价格偏差熔断</h4>
+        <p>当价格偏离 TWAP 预言机价格超过 15% 时自动触发熔断，暂停永续合约开仓。价格回归至 3% 偏差以内后自动恢复。有效防止闪崩攻击和剧烈操纵。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128737;</div>
+        <h3>Insurance Fund</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">保险基金机制</h4>
+        <p>每次清算产生的清算费用中，30% 自动注入保险基金。保险基金用于覆盖穿仓损失，保护盈利交易者不被亏损者拖累。现货交易手续费也按比例注入永续池。</p>
+      </div>
+    </div>
+
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#128274;</div>
+        <h3>Timelock Governance</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">时间锁治理</h4>
+        <p>所有关键合约参数变更必须经过 Timelock 延迟执行，社区成员可在延迟期内审查和挑战提案。确保治理透明、不可突击修改，保护所有参与者利益。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128260;</div>
+        <h3>Transparent Proxy</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">透明代理升级</h4>
+        <p>采用 Transparent Proxy 模式实现合约可升级性。管理员和用户调用分离，防止选择器冲突。升级操作同样受 Timelock 约束，确保升级过程安全可控。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon gold-bg">&#128101;</div>
+        <h3>Anti-Front-Running</h3>
+        <h4 style="font-size:0.8rem;color:#00d4aa;margin-bottom:8px;">反狙击设计</h4>
+        <p>线性联合曲线 + 1% 买卖手续费 + 5% 持仓上限三重防护，有效抑制狙击机器人抢跑和大户操纵。所有代币从零开始，无预售、无团队预留。</p>
+      </div>
+    </div>
+
+    <h3 class="text-xl font-bold mb-3" style="color:#fff;">Smart Contracts &mdash; 智能合约矩阵</h3>
+    <p class="text-sm opacity-80 mb-3">全部 11 个核心合约已部署至 Arc Testnet (Chain ID: 5042002)</p>
+    <div class="contract-grid">
+      <div class="contract-item"><span class="contract-dot"></span>BondingCurve</div>
+      <div class="contract-item"><span class="contract-dot"></span>LaunchDAO</div>
+      <div class="contract-item"><span class="contract-dot"></span>PerpetualPool</div>
+      <div class="contract-item"><span class="contract-dot"></span>PriceOracle</div>
+      <div class="contract-item"><span class="contract-dot"></span>FeeDistributor</div>
+      <div class="contract-item"><span class="contract-dot"></span>DexLister</div>
+      <div class="contract-item"><span class="contract-dot"></span>BuyAndBurnEngine</div>
+      <div class="contract-item"><span class="contract-dot"></span>CreatorRewardManager</div>
+      <div class="contract-item"><span class="contract-dot"></span>SimpleFactory</div>
+      <div class="contract-item"><span class="contract-dot"></span>SimplePair</div>
+      <div class="contract-item"><span class="contract-dot"></span>SimpleRouter</div>
+    </div>
+
+    <div class="highlight-box mt-4">
+      <h4>前端技术栈</h4>
+      <p>
+        React + Vite + Wagmi + TailwindCSS &mdash; 现代化前端架构，原生支持钱包连接和链上交互。响应式设计，适配桌面端和移动端。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 6: TOKENOMICS ==================== -->
+<section class="section" id="tokenomics">
+  <div class="container">
+    <div class="section-label">05 &mdash; Token Economics</div>
+    <h2 class="section-title">代币经济学</h2>
+    <div class="divider"></div>
+    <p class="section-desc mb-4">
+      DOGE 代币是 DogePad 平台的原生治理与价值捕获代币，通过 <strong>Buy & Burn 回购销毁</strong>、<strong>手续费质押分红</strong>和 <strong>DAO 治理权重</strong>三重机制实现价值内化，构建可持续的通缩飞轮。
+    </p>
+
+    <!-- Deflationary Flywheel -->
+    <div class="highlight-box mb-4">
+      <h4>通缩飞轮 &mdash; Deflationary Flywheel</h4>
+      <p style="margin-bottom:16px;">
+        DogePad 的核心经济模型是一个自驱动的正向飞轮：
+      </p>
+      <div class="flow" style="padding:20px 0;">
+        <div class="flow-step">
+          <div class="step-title" style="font-size:0.8rem;">代币上线</div>
+          <div class="step-desc">Bonding Curve<br>价格发现</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-title" style="font-size:0.8rem;">手续费产生</div>
+          <div class="step-desc">曲线交易<br>DEX 税收</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-title" style="font-size:0.8rem;">FeeDistributor</div>
+          <div class="step-desc">30% 销毁<br>50% 永续池<br>20% 分红</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-title" style="font-size:0.8rem;">DOGE 通缩</div>
+          <div class="step-desc">回购销毁<br>供应减少</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step">
+          <div class="step-title" style="font-size:0.8rem;">价格上升</div>
+          <div class="step-desc">吸引更多<br>项目上线</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#128293;</div>
+        <h3>Buy & Burn 回购销毁</h3>
+        <p>每个代币上线时，10% BNB 储备自动进入 Buy & Burn 引擎，在 DEX 上购买 DOGE 并永久销毁。FeeDistributor 将手续费的 20% 也路由至销毁引擎。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>周期</th><th>销毁金额</th></tr></thead>
+            <tbody>
+              <tr><td>单次上线</td><td>~$3,069</td></tr>
+              <tr><td>月（30 代币）</td><td>~$92,000</td></tr>
+              <tr><td>年（365 代币）</td><td>~$1,100,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128176;</div>
+        <h3>Fee Distribution 手续费分配</h3>
+        <p>FeeDistributor 将平台所有手续费收入按比例分配：</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>用途</th><th>比例</th></tr></thead>
+            <tbody>
+              <tr><td>永续合约池注入</td><td>50%</td></tr>
+              <tr><td>DOGE 质押分红</td><td>30%</td></tr>
+              <tr><td>Buy & Burn 销毁</td><td>20%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-2 text-sm opacity-60">最低质押 7 天，按持仓比例分配 BNB 收益</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon gold-bg">&#127942;</div>
+        <h3>Creator Incentive 创作者激励</h3>
+        <p>创建者可从三项激励中选择 1-3 项：税收分成、LP 份额、代币分配。选择越多，单项比例越低，平台盈余越高。</p>
+        <div class="table-wrap mt-3">
+          <table>
+            <thead><tr><th>选择数</th><th>每项比例</th><th>平台盈余</th></tr></thead>
+            <tbody>
+              <tr><td>1 项</td><td>50%</td><td>0%</td></tr>
+              <tr><td>2 项</td><td>22.5%</td><td>5%</td></tr>
+              <tr><td>3 项</td><td>14%</td><td>11%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="text-xl font-bold mb-3" style="color:#fff;">Revenue Model &mdash; 收入模型</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>收入类型</th>
+            <th>触发条件</th>
+            <th>费率</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>创建费</td><td>代币创建</td><td>0.1 BNB</td></tr>
+          <tr><td>曲线买入费</td><td>联合曲线阶段买入</td><td>1%</td></tr>
+          <tr><td>曲线卖出费</td><td>联合曲线阶段卖出</td><td>1%</td></tr>
+          <tr><td>DEX 买入税</td><td>DEX 阶段买入</td><td>1%</td></tr>
+          <tr><td>DEX 卖出税</td><td>DEX 阶段卖出</td><td>2%</td></tr>
+          <tr><td>平台 BNB 分配</td><td>DEX 挂牌</td><td>5%</td></tr>
+          <tr><td>创建者激励盈余</td><td>创建者选择 2-3 项激励</td><td>5%-11%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-3 mt-4">
+      <div class="stat-card">
+        <div class="stat-value">~$52K</div>
+        <div class="stat-label">保守月收入</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">~$104K</div>
+        <div class="stat-label">基准月收入</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">~$209K</div>
+        <div class="stat-label">乐观月收入</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 7: ROADMAP ==================== -->
+<section class="section section-alt" id="roadmap">
+  <div class="container">
+    <div class="section-label">06 &mdash; Roadmap</div>
+    <h2 class="section-title">路线图</h2>
+    <div class="divider"></div>
+
+    <div class="timeline">
+      <div class="timeline-item active">
+        <div class="timeline-phase cyan">Phase 1 &mdash; 基础建设 (Q1-Q2 2025)</div>
+        <div class="timeline-title">核心合约开发与部署</div>
+        <div class="timeline-desc">
+          11 个核心智能合约全部开发完成并部署至 Arc Testnet。Bonding Curve 发行引擎、DEX 集成（SimpleFactory + SimplePair + SimpleRouter）、PriceOracle 预言机、FeeDistributor 费用分配器上线。前端 React + Vite + Wagmi + TailwindCSS 开发完成。
+        </div>
+      </div>
+      <div class="timeline-item active">
+        <div class="timeline-phase cyan">Phase 2 &mdash; 永续合约 (Q2-Q3 2025)</div>
+        <div class="timeline-title">PerpetualPool 永续合约上线</div>
+        <div class="timeline-desc">
+          永续合约池部署，支持做多/做空双向博弈。动态资金费率、价格偏差熔断、保险基金机制上线。BuyAndBurnEngine 启动回购销毁。CreatorRewardManager 创作者激励体系开放。
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-phase gold">Phase 3 &mdash; DAO 治理 (Q3 2025)</div>
+        <div class="timeline-title">LaunchDAO 去中心化治理</div>
+        <div class="timeline-desc">
+          LaunchDAO 治理投票全面上线。社区通过质押 DOGE 和 BNB 参与项目筛选。Timelock 时间锁治理部署。多语言前端支持、移动端适配。KOL 与社区合作计划启动。
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-phase gray">Phase 4 &mdash; 规模扩张 (Q4 2025)</div>
+        <div class="timeline-title">跨链部署与生态扩展</div>
+        <div class="timeline-desc">
+          跨链桥接探索（Base、Arbitrum）。高级交易功能（限价单、止损已实现）。开发者 SDK 与 API 开放。机构级 Meme 指数产品。NFT 发射支持。
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-phase gray">Phase 5 &mdash; 协议演进 (2026)</div>
+        <div class="timeline-title">完全去中心化与生态自治</div>
+        <div class="timeline-desc">
+          DAO 完全接管协议治理。协议收入用于生态 Grant 计划。多链部署完成。SubGraph 数据索引上线。机构级合规框架搭建。
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 8: TEAM ==================== -->
+<section class="section" id="team">
+  <div class="container">
+    <div class="section-label">07 &mdash; Team &amp; Contact</div>
+    <h2 class="section-title">团队与联系方式</h2>
+    <div class="divider"></div>
+
+    <div class="grid-2 mb-4">
+      <div class="card">
+        <div class="card-icon gold-bg">&#127919;</div>
+        <h3>Our Vision</h3>
+        <p>成为 Arc 链上代币发射的基础设施标准，让每一个创意都能获得公平的资本发现机会。通过 Bonding Curve、DAO 治理和永续合约做空三位一体的机制设计，将公平从理念转化为可验证的链上逻辑。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon cyan-bg">&#128736;</div>
+        <h3>Technical Philosophy</h3>
+        <p>核心团队由 DeFi 协议开发、智能合约安全与加密社区运营领域的资深从业者组成。所有合约采用 OpenZeppelin 标准库，集成 ReentrancyGuard、Pausable、Ownable 等安全模块。Solidity 0.8.24 编译，内置溢出保护。</p>
+      </div>
+    </div>
+
+    <div class="highlight-box">
+      <h4>核心理念</h4>
+      <p>
+        公平不是口号，而是机制设计。DogePad 通过联合曲线杜绝预挖和内幕交易，通过 DAO 治理让社区决定哪些项目上线，通过永续合约做空让市场有双向博弈空间，通过保险基金和熔断机制保护投资者。每一个设计决策都指向同一个目标：<strong>让 DeFi 发射回归公平</strong>。
+      </p>
+    </div>
+
+    <div class="grid-3 mt-4">
+      <div class="stat-card">
+        <div class="stat-value">11</div>
+        <div class="stat-label">核心智能合约</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">Solidity</div>
+        <div class="stat-label">0.8.24 + OpenZeppelin</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">Arc</div>
+        <div class="stat-label">Testnet Chain ID: 5042002</div>
+      </div>
+    </div>
+
+    <div class="quote-block mt-4">
+      <p>「Show me the incentive and I will show you the outcome.」</p>
+      <cite>&mdash; Charlie Munger</cite>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 9: RISK DISCLOSURE ==================== -->
+<section class="section section-alt" id="risks">
+  <div class="container">
+    <div class="section-label">08 &mdash; Risk Disclosure</div>
+    <h2 class="section-title">风险披露</h2>
+    <div class="divider"></div>
+
+    <div class="quote-block mb-4">
+      <p>「All I want to know is where I'm going to die, so I'll never go there.」&mdash; 这不是一句玩笑话，而是投资的第一原则：先识别致命风险，然后远离它。以下是我们识别的每一个可能杀死项目的风险，以及我们正在采取的缓解措施。我们不回避风险，因为回避风险讨论本身就是最大的风险。</p>
+      <cite>&mdash; DogePad 团队，以芒格视角审视自身</cite>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>风险类别</th>
+            <th>等级</th>
+            <th>详细描述</th>
+            <th>缓解措施</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>智能合约漏洞</strong></td>
+            <td class="risk-high">HIGH</td>
+            <td>合约代码可能存在未发现的漏洞，导致资金损失。DeFi 历史上多次发生因合约漏洞导致的黑客攻击事件。</td>
+            <td>OpenZeppelin 标准库 + ReentrancyGuard + Pausable 紧急暂停 + Timelock 治理 + 计划第三方审计 + Transparent Proxy 可升级</td>
+          </tr>
+          <tr>
+            <td><strong>监管不确定性</strong></td>
+            <td class="risk-high">HIGH</td>
+            <td>各国对加密资产和 DeFi 的监管政策尚不明确，可能面临合规风险。Meme 币可能被认定为证券。</td>
+            <td>无证券属性设计（无预售、无团队预留）+ 去中心化 DAO 治理 + 法律顾问持续跟踪 + 合规友好链选择</td>
+          </tr>
+          <tr>
+            <td><strong>流动性风险</strong></td>
+            <td class="risk-medium">MEDIUM</td>
+            <td>新上线代币可能面临流动性不足，导致大额交易产生严重滑点。永续合约池可能资金不足。</td>
+            <td>DEX 自动做市 + LP 激励 + 保险基金覆盖穿仓 + 永续合约最大杠杆限制 5x + 维持保证金率 15%</td>
+          </tr>
+          <tr>
+            <td><strong>预言机操纵</strong></td>
+            <td class="risk-medium">MEDIUM</td>
+            <td>价格预言机可能被操纵，导致永续合约结算价格失真。闪电贷攻击可能影响 TWAP 价格。</td>
+            <td>TWAP 时间加权平均价格 + 价格新鲜度检查（5 分钟阈值）+ 熔断机制（15% 偏差暂停）+ 多源价格验证</td>
+          </tr>
+          <tr>
+            <td><strong>市场竞争</strong></td>
+            <td class="risk-medium">MEDIUM</td>
+            <td>Pump.fun 及其竞品可能复制做空功能。新平台可能以更低费用抢占市场。</td>
+            <td>先发优势 + 永续合约做空差异化 + Buy & Burn 护城河 + DAO 治理网络效应 + 创建者激励生态</td>
+          </tr>
+          <tr>
+            <td><strong>Meme 市场周期</strong></td>
+            <td class="risk-medium">MEDIUM</td>
+            <td>Meme 币市场具有强周期性，牛市活跃、熊市萎缩。平台收入高度依赖市场情绪。</td>
+            <td>多收入来源分散风险 + 持续收入（交易税）占比高 + 可扩展至非 Meme 资产 + 保险基金跨周期缓冲</td>
+          </tr>
+          <tr>
+            <td><strong>链风险</strong></td>
+            <td class="risk-medium">MEDIUM</td>
+            <td>Arc 链作为相对新的公链，可能面临技术稳定性、安全性和生态成熟度方面的风险。</td>
+            <td>Transparent Proxy 支持跨链迁移 + 多链部署路线图 + 核心逻辑链无关设计 + 持续监控链状态</td>
+          </tr>
+          <tr>
+            <td><strong>抢跑攻击</strong></td>
+            <td class="risk-low">LOW</td>
+            <td>狙击机器人可能在代币上线时抢跑买入，获取不正当优势。</td>
+            <td>线性联合曲线 + 1% 买卖手续费 + 5% 持仓上限 + DAO 投票筛选 + 创建费门槛</td>
+          </tr>
+          <tr>
+            <td><strong>清算级联</strong></td>
+            <td class="risk-low">LOW</td>
+            <td>极端行情下可能触发大规模清算，导致保险基金耗尽。</td>
+            <td>保险基金持续注入（30% 清算费）+ 现货手续费注入永续池 + 最大杠杆限制 5x + 熔断机制</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="highlight-box mt-4">
+      <h4>风险披露声明</h4>
+      <p>
+        本融资手册仅供信息参考，不构成投资建议或要约。加密资产投资具有极高风险，包括但不限于：可能损失全部投资、流动性不足导致无法退出、智能合约漏洞导致资金损失、监管变化导致项目无法继续运营等。过往表现不代表未来收益。投资者应在充分了解所有风险的基础上，结合自身财务状况和风险承受能力，做出独立的投资判断。DogePad 团队不对任何投资损失承担责任。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-logo">Doge<span>Pad</span></div>
+    <p>Fair Token Launch Platform &mdash; 公平代币发射平台</p>
+    <p class="opacity-60">Arc Testnet &bull; Chain ID: 5042002 &bull; 11 Contracts Deployed</p>
+    <div class="disclaimer">
+      <strong>Disclaimer</strong>: This fundraising handbook is strictly confidential and intended for qualified investors only. It does not constitute an offer to sell or a solicitation of an offer to buy any securities. All information herein is provided on an &ldquo;as is&rdquo; basis without any warranties of any kind. Cryptocurrency investments are highly speculative and involve substantial risk of loss. Past performance is not indicative of future results. Investors should conduct their own due diligence and consult with financial, legal, and tax advisors before making any investment decisions.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
