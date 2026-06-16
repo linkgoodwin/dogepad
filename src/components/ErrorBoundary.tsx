@@ -44,7 +44,7 @@ class ErrorBoundary extends React.Component<Props, State> {
             <div className="flex gap-3 justify-center">
               <button
                 className="px-4 py-2 bg-doge-gold text-black rounded-lg font-bold"
-                onClick={() => window.location.href = '/dogepad/'}
+                onClick={() => window.location.href = '/'}
               >
                 {t('common.back')}
               </button>

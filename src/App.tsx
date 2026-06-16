@@ -20,7 +20,7 @@ function DocumentTitle() {
   const { lang } = useI18n()
   useEffect(() => {
     const tr = (key: TranslationKey) => translate(key, lang)
-    document.title = `${tr('home.title')} - ${tr('home.subtitle')} · dogepad.online`
+    document.title = `${tr('home.title')} - ${tr('home.subtitle')} · dogepad.pro`
   }, [lang])
   return null
 }
@@ -35,7 +35,7 @@ function PageLoader() {
 
 export default function App() {
   return (
-    <Router basename="/dogepad/">
+    <Router basename="/">
       <DocumentTitle />
       <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>

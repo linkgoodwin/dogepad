@@ -300,8 +300,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         info.tokensSold += tokensToBuy;
         info.tradeCount++;
 
-        // Track unique buyers
-        if (BondingCurveToken(token).balanceOf(recipient) == tokensToBuy) {
+        // Track unique buyers (check before buy)
+        if (BondingCurveToken(token).balanceOf(recipient) == 0) {
             info.uniqueBuyerCount++;
         }
 
