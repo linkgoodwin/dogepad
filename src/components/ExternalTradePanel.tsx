@@ -1,45 +1,33 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, usePublicClient } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
-import { ethers } from 'ethers'
-import { getContractAddress, getBscScanUrl, isZeroAddress, DEFAULT_CHAIN_ID } from '@/config/contracts'
+import { getContractAddress, getBscScanUrl, isZeroAddress, getNativeSymbol } from '@/config/contracts'
 import { useTradeStore } from '@/stores/tradeStore'
 import { cn, formatUsdc } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
-import { ArrowRightLeft } from 'lucide-react'
+import { ArrowRightLeft, AlertCircle, CheckCircle } from 'lucide-react'
 
 const ERC20_ABI = [
   'function approve(address spender, uint256 amount) returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function balanceOf(address account) view returns (uint256)',
-]
+] as const
 
 const ROUTER_ABI = [
-  'function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[])',
-  'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[])',
-]
+  'function getAmountsOut(uint256 amountIn, address[] memory path) public view returns (uint256[] memory)',
+  'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) external returns (uint256[] memory amounts)',
+] as const
 
-const WUSDC_ABI = [
-  'function deposit() payable',
-  'function withdraw(uint256 wad)',
+const USDC_ABI = [
   'function balanceOf(address account) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
-]
+  'function transfer(address to, uint256 amount) returns (bool)',
+] as const
 
 const BC_ABI = [
   'function baseAsset() view returns (address)',
-  'function isXyloRouter() view returns (bool)',
-]
-
-// Hardcoded Arc testnet addresses as ultimate fallback
-const ARC_ADDRESSES = {
-  bondingCurve: '0xbb0fEbC501B40983666a4d3e8FCfD8f251CA080F',
-  simpleRouter: '0xc7BF0097B7a83560E8E92e3820115832d85aC37a',
-  wusdc: '0x911b4000D3422F482F4062a913885f7b035382Df',
-}
-
-const RPC_URL = 'https://rpc.testnet.arc.network'
+] as const
 
 interface ExternalTradePanelProps {
   tokenAddress: `0x${string}`
@@ -54,470 +42,428 @@ export default function ExternalTradePanel({
   tokenAddress,
   tokenSymbol,
   nativeSymbol,
+  bondingCurveAddress,
   chainId,
   onTxConfirmed,
 }: ExternalTradePanelProps) {
+  const t = useT()
+  const { address: userAddress, isConnected } = useAccount()
+  const publicClient = usePublicClient()
+
   const { buyAmount, sellAmount, slippage, setBuyAmount, setSellAmount, setSlippage } = useTradeStore()
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
   const [txStatus, setTxStatus] = useState<string>('')
   const [txError, setTxError] = useState('')
   const [txSuccess, setTxSuccess] = useState(false)
-  const t = useT()
-  const { address: userAddress, isConnected } = useAccount()
+  const [loading, setLoading] = useState(false)
 
-  // All state from ethers direct RPC
-  const [wusdcAddress, setWusdcAddress] = useState<string>(ARC_ADDRESSES.wusdc)
-  const [isXyloRouter, setIsXyloRouter] = useState(true)
+  // State from wagmi
   const [estimatedBuy, setEstimatedBuy] = useState<string>('0')
   const [estimatedSell, setEstimatedSell] = useState<string>('0')
   const [userTokenBal, setUserTokenBal] = useState<string>('0')
-  const [userWusdcBal, setUserWusdcBal] = useState<string>('0')
-  const [tokenAllow, setTokenAllow] = useState<string>('0')
-  const [wusdcAllow, setWusdcAllow] = useState<string>('0')
+  const [userUsdcBal, setUserUsdcBal] = useState<string>('0')
+  const [tokenAllowance, setTokenAllowance] = useState<string>('0')
+  const [usdcAllowance, setUsdcAllowance] = useState<string>('0')
   const [configError, setConfigError] = useState('')
-  const [isBusy, setIsBusy] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<string>('')
 
-  // Use hardcoded addresses as fallback if getContractAddress returns zero
-  const _router = getContractAddress(chainId, 'simpleRouter')
-  const _bc = getContractAddress(chainId, 'bondingCurve')
-  const dexRouter = (!isZeroAddress(_router) ? _router : ARC_ADDRESSES.simpleRouter) as string
-  const bondingCurveAddr = (!isZeroAddress(_bc) ? _bc : ARC_ADDRESSES.bondingCurve) as string
+  // Get contract addresses from config
+  const routerAddress = getContractAddress(chainId, 'simpleRouter')
+  const factoryAddress = getContractAddress(chainId, 'simpleFactory')
+  const usdcAddress = getContractAddress(chainId, 'wusdc') || getContractAddress(chainId, 'baseAsset')
 
-  const getProvider = useCallback(() => {
-    return new ethers.providers.JsonRpcProvider(RPC_URL)
-  }, [])
-
-  const getSigner = useCallback(async () => {
-    if (typeof (window as any).ethereum === 'undefined') return null
-    const browserProvider = new ethers.providers.Web3Provider((window as any).ethereum)
-    await browserProvider.send('eth_requestAccounts', [])
-    return browserProvider.getSigner()
-  }, [])
-
-  // Debug: log key state
+  // Check if addresses are configured
   useEffect(() => {
-    const info = [
-      `chainId: ${chainId}`,
-      `dexRouter: ${dexRouter}`,
-      `bondingCurve: ${bondingCurveAddr}`,
-      `wusdc: ${wusdcAddress}`,
-      `isXyloRouter: ${isXyloRouter}`,
-      `token: ${tokenAddress}`,
-      `user: ${userAddress || 'not connected'}`,
-      `estBuy: ${estimatedBuy}`,
-      `estSell: ${estimatedSell}`,
-    ].join(' | ')
-    setDebugInfo(info)
-    console.log('[ExternalTradePanel]', info)
-  }, [chainId, dexRouter, bondingCurveAddr, wusdcAddress, isXyloRouter, tokenAddress, userAddress, estimatedBuy, estimatedSell])
+    if (isZeroAddress(routerAddress as `0x${string}`) || isZeroAddress(factoryAddress as `0x${string}`)) {
+      setConfigError(t('externalTrade.configError') || 'DEX not configured for this network')
+    } else {
+      setConfigError('')
+    }
+  }, [routerAddress, factoryAddress, t])
 
-  // Load DEX config
+  // Fetch user balances
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
+    if (!publicClient || !userAddress || !isConnected) return
+
+    const fetchBalances = async () => {
       try {
-        const provider = getProvider()
-        const bc = new ethers.Contract(bondingCurveAddr, BC_ABI, provider)
-        const [baseAsset, isXylo] = await Promise.all([bc.baseAsset(), bc.isXyloRouter()])
-        if (!cancelled) {
-          setWusdcAddress(baseAsset)
-          setIsXyloRouter(isXylo)
-          setConfigError('')
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          console.error('[ExternalTradePanel] Config load error:', e)
-          // Don't set error — use hardcoded fallback
-          setConfigError('')
-        }
+        // Get USDC balance
+        const usdcBal = await publicClient.readContract({
+          address: usdcAddress as `0x${string}`,
+          abi: USDC_ABI,
+          functionName: 'balanceOf',
+          args: [userAddress],
+        })
+        setUserUsdcBal(formatEther(usdcBal as bigint))
+
+        // Get token balance
+        const tokenBal = await publicClient.readContract({
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [userAddress],
+        })
+        setUserTokenBal(formatEther(tokenBal as bigint))
+
+        // Get USDC allowance for router
+        const usdcAllow = await publicClient.readContract({
+          address: usdcAddress as `0x${string}`,
+          abi: USDC_ABI,
+          functionName: 'allowance',
+          args: [userAddress, routerAddress as `0x${string}`],
+        })
+        setUsdcAllowance(formatEther(usdcAllow as bigint))
+
+        // Get token allowance for router
+        const tokenAllow = await publicClient.readContract({
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'allowance',
+          args: [userAddress, routerAddress as `0x${string}`],
+        })
+        setTokenAllowance(formatEther(tokenAllow as bigint))
+      } catch (err) {
+        console.error('Error fetching balances:', err)
       }
     }
-    load()
-    return () => { cancelled = true }
-  }, [bondingCurveAddr, getProvider])
 
-  // Fetch buy quote
-  useEffect(() => {
-    if (!buyAmount || Number(buyAmount) <= 0 || !dexRouter || !wusdcAddress) {
+    fetchBalances()
+    const interval = setInterval(fetchBalances, 10000)
+    return () => clearInterval(interval)
+  }, [publicClient, userAddress, isConnected, tokenAddress, usdcAddress, routerAddress])
+
+  // Fetch price estimates
+  const fetchEstimate = useCallback(async () => {
+    if (!publicClient || !buyAmount || parseFloat(buyAmount) === 0) {
       setEstimatedBuy('0')
       return
     }
-    let cancelled = false
-    const fetch = async () => {
-      try {
-        const provider = getProvider()
-        const router = new ethers.Contract(dexRouter, ROUTER_ABI, provider)
-        const amountIn = ethers.utils.parseUnits(buyAmount, 18)
-        const amounts = await router.getAmountsOut(amountIn, [wusdcAddress, tokenAddress])
-        if (!cancelled && amounts && amounts.length >= 2) {
-          setEstimatedBuy(amounts[amounts.length - 1].toString())
-        }
-      } catch (e: any) {
-        console.error('[ExternalTradePanel] Buy quote error:', e?.message)
-        if (!cancelled) setEstimatedBuy('0')
-      }
-    }
-    fetch()
-    return () => { cancelled = true }
-  }, [buyAmount, dexRouter, wusdcAddress, tokenAddress, getProvider])
 
-  // Fetch sell quote
-  useEffect(() => {
-    if (!sellAmount || Number(sellAmount) <= 0 || !dexRouter || !wusdcAddress) {
+    try {
+      const amountIn = parseEther(buyAmount)
+      const amounts = await publicClient.readContract({
+        address: routerAddress as `0x${string}`,
+        abi: ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: [amountIn, [usdcAddress, tokenAddress] as any],
+      })
+      const amountOut = (amounts as bigint[])[1]
+      setEstimatedBuy(formatEther(amountOut))
+    } catch (err) {
+      console.error('Error fetching buy estimate:', err)
+      setEstimatedBuy('0')
+    }
+  }, [publicClient, buyAmount, routerAddress, usdcAddress, tokenAddress])
+
+  const fetchSellEstimate = useCallback(async () => {
+    if (!publicClient || !sellAmount || parseFloat(sellAmount) === 0) {
       setEstimatedSell('0')
       return
     }
-    let cancelled = false
-    const fetch = async () => {
-      try {
-        const provider = getProvider()
-        const router = new ethers.Contract(dexRouter, ROUTER_ABI, provider)
-        const amountIn = ethers.utils.parseUnits(sellAmount, 18)
-        const amounts = await router.getAmountsOut(amountIn, [tokenAddress, wusdcAddress])
-        if (!cancelled && amounts && amounts.length >= 2) {
-          setEstimatedSell(amounts[amounts.length - 1].toString())
-        }
-      } catch (e: any) {
-        console.error('[ExternalTradePanel] Sell quote error:', e?.message)
-        if (!cancelled) setEstimatedSell('0')
-      }
-    }
-    fetch()
-    return () => { cancelled = true }
-  }, [sellAmount, dexRouter, wusdcAddress, tokenAddress, getProvider])
 
-  // Fetch user balances and allowances
-  const refreshBalances = useCallback(async () => {
-    if (!userAddress || !wusdcAddress) return
     try {
-      const provider = getProvider()
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
-      const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, provider)
-
-      const results = await Promise.all([
-        tokenContract.balanceOf(userAddress),
-        tokenContract.allowance(userAddress, dexRouter),
-        wusdcContract.balanceOf(userAddress),
-        wusdcContract.allowance(userAddress, dexRouter),
-      ])
-
-      setUserTokenBal(results[0]?.toString() || '0')
-      setTokenAllow(results[1]?.toString() || '0')
-      setUserWusdcBal(results[2]?.toString() || '0')
-      setWusdcAllow(results[3]?.toString() || '0')
-    } catch (e: any) {
-      console.error('[ExternalTradePanel] Balance refresh error:', e?.message)
+      const amountIn = parseEther(sellAmount)
+      const amounts = await publicClient.readContract({
+        address: routerAddress as `0x${string}`,
+        abi: ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: [amountIn, [tokenAddress, usdcAddress] as any],
+      })
+      const amountOut = (amounts as bigint[])[1]
+      setEstimatedSell(formatEther(amountOut))
+    } catch (err) {
+      console.error('Error fetching sell estimate:', err)
+      setEstimatedSell('0')
     }
-  }, [userAddress, wusdcAddress, tokenAddress, dexRouter, getProvider])
+  }, [publicClient, sellAmount, routerAddress, tokenAddress, usdcAddress])
 
   useEffect(() => {
-    refreshBalances()
-    const interval = setInterval(refreshBalances, 15000)
-    return () => clearInterval(interval)
-  }, [refreshBalances])
+    if (activeTab === 'buy') fetchEstimate()
+    else fetchSellEstimate()
+  }, [activeTab, fetchEstimate, fetchSellEstimate])
 
-  // Buy handler
-  const handleBuy = useCallback(async () => {
-    if (!buyAmount || !dexRouter || !wusdcAddress || estimatedBuy === '0' || !userAddress) return
-    setIsBusy(true)
+  // Approve USDC
+  const handleApproveUsdc = async () => {
+    if (!publicClient || !userAddress) return
+    setLoading(true)
     setTxError('')
-    setTxSuccess(false)
-
     try {
-      const signer = await getSigner()
-      if (!signer) { setIsBusy(false); setTxError('No wallet detected'); return }
-
-      const amountIn = ethers.utils.parseUnits(buyAmount, 18)
-      const estBuy = ethers.BigNumber.from(estimatedBuy)
-      const slippageBps = Math.round((100 - slippage) * 100)
-      const minOut = estBuy.mul(slippageBps).div(10000)
-      const deadline = Math.floor(Date.now() / 1000) + 300
-
-      if (isXyloRouter) {
-        const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
-        const currentWusdc = await wusdcContract.balanceOf(userAddress)
-        if (currentWusdc.lt(amountIn)) {
-          const depositAmt = amountIn.sub(currentWusdc)
-          setTxStatus(`Depositing ${nativeSymbol} to WUSDC...`)
-          const depositTx = await wusdcContract.deposit({ value: depositAmt, gasLimit: 500_000 })
-          await depositTx.wait()
-        }
-
-        const currentAllowance = await wusdcContract.allowance(userAddress, dexRouter)
-        if (currentAllowance.lt(amountIn)) {
-          setTxStatus('Approving WUSDC...')
-          const approveTx = await wusdcContract.approve(dexRouter, amountIn, { gasLimit: 500_000 })
-          await approveTx.wait()
-        }
-      }
-
-      setTxStatus('Swapping...')
-      const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
-      const swapTx = await routerContract.swapExactTokensForTokens(
-        amountIn, minOut, [wusdcAddress, tokenAddress], userAddress, deadline,
-        { gasLimit: 5_000_000 }
-      )
-      await swapTx.wait()
-
-      setTxSuccess(true)
+      const hash = await publicClient.writeContract({
+        account: userAddress,
+        address: usdcAddress as `0x${string}`,
+        abi: USDC_ABI,
+        functionName: 'approve',
+        args: [routerAddress as `0x${string}`, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
+      })
+      setTxStatus(t('externalTrade.approving') || 'Approving...')
+      await publicClient.waitForTransactionReceipt({ hash })
       setTxStatus('')
-      refreshBalances()
-      onTxConfirmed?.()
+      // Refresh allowance
+      const allow = await publicClient.readContract({
+        address: usdcAddress as `0x${string}`,
+        abi: USDC_ABI,
+        functionName: 'allowance',
+        args: [userAddress, routerAddress as `0x${string}`],
+      })
+      setUsdcAllowance(formatEther(allow as bigint))
     } catch (err: any) {
-      console.error('[ExternalTradePanel] Buy error:', err)
-      const msg = err.reason || err.data?.message || err.message || ''
-      if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
-        setTxError(msg.length > 300 ? msg.slice(0, 300) + '...' : msg)
-      }
-      setTxStatus('')
-    } finally {
-      setIsBusy(false)
+      setTxError(err.message || 'Approval failed')
     }
-  }, [buyAmount, dexRouter, wusdcAddress, estimatedBuy, userAddress, isXyloRouter, slippage, nativeSymbol, getSigner, refreshBalances, onTxConfirmed])
-
-  // Sell handler
-  const handleSell = useCallback(async () => {
-    if (!sellAmount || !dexRouter || !wusdcAddress || estimatedSell === '0' || !userAddress) return
-    setIsBusy(true)
-    setTxError('')
-    setTxSuccess(false)
-
-    try {
-      const signer = await getSigner()
-      if (!signer) { setIsBusy(false); setTxError('No wallet detected'); return }
-
-      const amountIn = ethers.utils.parseUnits(sellAmount, 18)
-      const estSell = ethers.BigNumber.from(estimatedSell)
-      const slippageBps = Math.round((100 - slippage) * 100)
-      const minOut = estSell.mul(slippageBps).div(10000)
-      const deadline = Math.floor(Date.now() / 1000) + 300
-
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer)
-      const currentAllowance = await tokenContract.allowance(userAddress, dexRouter)
-      if (currentAllowance.lt(amountIn)) {
-        setTxStatus(`Approving ${tokenSymbol}...`)
-        const approveTx = await tokenContract.approve(dexRouter, amountIn, { gasLimit: 500_000 })
-        await approveTx.wait()
-      }
-
-      setTxStatus('Swapping...')
-      const routerContract = new ethers.Contract(dexRouter, ROUTER_ABI, signer)
-      const swapTx = await routerContract.swapExactTokensForTokens(
-        amountIn, minOut, [tokenAddress, wusdcAddress], userAddress, deadline,
-        { gasLimit: 5_000_000 }
-      )
-      await swapTx.wait()
-
-      if (isXyloRouter) {
-        try {
-          const wusdcContract = new ethers.Contract(wusdcAddress, WUSDC_ABI, signer)
-          const wusdcBal = await wusdcContract.balanceOf(userAddress)
-          if (wusdcBal.gt(0)) {
-            setTxStatus(`Withdrawing WUSDC to ${nativeSymbol}...`)
-            const withdrawTx = await wusdcContract.withdraw(wusdcBal, { gasLimit: 500_000 })
-            await withdrawTx.wait()
-          }
-        } catch {
-          // Withdrawal failure is not critical
-        }
-      }
-
-      setTxSuccess(true)
-      setTxStatus('')
-      refreshBalances()
-      onTxConfirmed?.()
-    } catch (err: any) {
-      console.error('[ExternalTradePanel] Sell error:', err)
-      const msg = err.reason || err.data?.message || err.message || ''
-      if (!msg.includes('User denied') && !msg.includes('user rejected') && !msg.includes('denied')) {
-        setTxError(msg.length > 300 ? msg.slice(0, 300) + '...' : msg)
-      }
-      setTxStatus('')
-    } finally {
-      setIsBusy(false)
-    }
-  }, [sellAmount, dexRouter, wusdcAddress, estimatedSell, userAddress, isXyloRouter, slippage, tokenSymbol, nativeSymbol, getSigner, refreshBalances, onTxConfirmed])
-
-  const formatTokenAmount = (val: string) => {
-    const num = Number(ethers.utils.formatEther(val))
-    if (num === 0) return '0'
-    if (num >= 1) return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    if (num >= 0.001) return num.toFixed(4)
-    return num.toExponential(2)
+    setLoading(false)
   }
 
-  const configReady = !!dexRouter && !!wusdcAddress
+  // Approve Token
+  const handleApproveToken = async () => {
+    if (!publicClient || !userAddress) return
+    setLoading(true)
+    setTxError('')
+    try {
+      const hash = await publicClient.writeContract({
+        account: userAddress,
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [routerAddress as `0x${string}`, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
+      })
+      setTxStatus(t('externalTrade.approving') || 'Approving...')
+      await publicClient.waitForTransactionReceipt({ hash })
+      setTxStatus('')
+      // Refresh allowance
+      const allow = await publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [userAddress, routerAddress as `0x${string}`],
+      })
+      setTokenAllowance(formatEther(allow as bigint))
+    } catch (err: any) {
+      setTxError(err.message || 'Approval failed')
+    }
+    setLoading(false)
+  }
+
+  // Buy tokens with USDC
+  const handleBuy = async () => {
+    if (!publicClient || !userAddress || !buyAmount || parseFloat(buyAmount) === 0) return
+    setLoading(true)
+    setTxError('')
+    setTxSuccess(false)
+
+    try {
+      const amountIn = parseEther(buyAmount)
+      const minOut = parseEther((parseFloat(estimatedBuy) * (1 - slippage / 100)).toFixed(18))
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200) // 20 min
+
+      const hash = await publicClient.writeContract({
+        account: userAddress,
+        address: routerAddress as `0x${string}`,
+        abi: ROUTER_ABI,
+        functionName: 'swapExactTokensForTokens',
+        args: [amountIn, minOut, [usdcAddress, tokenAddress] as any, userAddress, deadline],
+      })
+      setTxStatus(t('externalTrade.swapping') || 'Swapping...')
+      await publicClient.waitForTransactionReceipt({ hash })
+      setTxSuccess(true)
+      setTxStatus('')
+      setBuyAmount('')
+      setEstimatedBuy('0')
+      onTxConfirmed?.()
+    } catch (err: any) {
+      setTxError(err.message || 'Swap failed')
+    }
+    setLoading(false)
+  }
+
+  // Sell tokens for USDC
+  const handleSell = async () => {
+    if (!publicClient || !userAddress || !sellAmount || parseFloat(sellAmount) === 0) return
+    setLoading(true)
+    setTxError('')
+    setTxSuccess(false)
+
+    try {
+      const amountIn = parseEther(sellAmount)
+      const minOut = parseEther((parseFloat(estimatedSell) * (1 - slippage / 100)).toFixed(18))
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
+
+      const hash = await publicClient.writeContract({
+        account: userAddress,
+        address: routerAddress as `0x${string}`,
+        abi: ROUTER_ABI,
+        functionName: 'swapExactTokensForTokens',
+        args: [amountIn, minOut, [tokenAddress, usdcAddress] as any, userAddress, deadline],
+      })
+      setTxStatus(t('externalTrade.swapping') || 'Swapping...')
+      await publicClient.waitForTransactionReceipt({ hash })
+      setTxSuccess(true)
+      setTxStatus('')
+      setSellAmount('')
+      setEstimatedSell('0')
+      onTxConfirmed?.()
+    } catch (err: any) {
+      setTxError(err.message || 'Swap failed')
+    }
+    setLoading(false)
+  }
+
+  const needsUsdcApproval = parseFloat(usdcAllowance) < parseFloat(buyAmount || '0')
+  const needsTokenApproval = parseFloat(tokenAllowance) < parseFloat(sellAmount || '0')
+
+  if (configError) {
+    return (
+      <div className="card p-6">
+        <div className="text-center text-gray-400">
+          <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <p>{configError}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="card-dark">
-      <div className="flex mb-4 bg-dark-700 rounded-lg p-1">
+    <div className="card p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <ArrowRightLeft className="w-5 h-5" />
+          {t('externalTrade.title') || '外盘交易 (DEX)'}
+        </h3>
+        <div className="text-xs text-gray-500">
+          {t('externalTrade.router') || '路由'}: {routerAddress?.slice(0, 8)}...
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex bg-dark rounded-lg p-1">
         <button
-          className={cn(
-            'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
-            activeTab === 'buy' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
-          )}
-          onClick={() => { setActiveTab('buy'); setTxError(''); setTxSuccess(false) }}
+          onClick={() => setActiveTab('buy')}
+          className={cn('flex-1 py-2 rounded-md text-sm font-medium transition-colors', activeTab === 'buy' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white')}
         >
-          {t('tokenDetail.buy')}
+          {t('externalTrade.buy') || '买入'}
         </button>
         <button
-          className={cn(
-            'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all',
-            activeTab === 'sell' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
-          )}
-          onClick={() => { setActiveTab('sell'); setTxError(''); setTxSuccess(false) }}
+          onClick={() => setActiveTab('sell')}
+          className={cn('flex-1 py-2 rounded-md text-sm font-medium transition-colors', activeTab === 'sell' ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-white')}
         >
-          {t('tokenDetail.sell')}
+          {t('externalTrade.sell') || '卖出'}
         </button>
       </div>
 
-      <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg border"
-        style={{ backgroundColor: 'rgba(16,185,129,0.05)', borderColor: 'rgba(16,185,129,0.2)' }}
-      >
-        <ArrowRightLeft className="w-4 h-4 text-neon-green" />
-        <span className="text-xs text-neon-green font-medium">{t('tokenDetail.externalMarket')}</span>
+      {/* Slippage */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400">{t('externalTrade.slippage') || '滑点容忍'}:</span>
+        <div className="flex gap-1">
+          {[0.5, 1, 3].map((s) => (
+            <button
+              key={s}
+              onClick={() => setSlippage(s)}
+              className={cn('px-2 py-1 text-xs rounded', slippage === s ? 'bg-blue-500 text-white' : 'bg-dark text-gray-400')}
+            >
+              {s}%
+            </button>
+          ))}
+        </div>
       </div>
 
-      {configError ? (
-        <div className="bg-dark-700 rounded-lg p-4 text-center">
-          <p className="text-xs text-neon-red">{configError}</p>
-        </div>
-      ) : !configReady ? (
-        <div className="bg-dark-700 rounded-lg p-4 text-center">
-          <p className="text-xs text-gray-400">Loading DEX config...</p>
-        </div>
-      ) : activeTab === 'buy' ? (
-        <div className="space-y-4">
+      {activeTab === 'buy' ? (
+        <>
           <div>
-            <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.amount')} ({nativeSymbol})</label>
+            <label className="text-xs text-gray-400 block mb-1">{t('externalTrade.pay') || '支付'} (USDC)</label>
             <input
               type="number"
-              className="input-dark w-full"
-              placeholder="0.0"
               value={buyAmount}
               onChange={(e) => setBuyAmount(e.target.value)}
+              placeholder="0.0"
+              className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white"
             />
-          </div>
-          <div className="bg-dark-700 rounded-lg p-3">
-            <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            <p className="font-display font-bold text-lg">
-              {estimatedBuy !== '0' ? `${formatTokenAmount(estimatedBuy)} ${tokenSymbol}` : `0 ${tokenSymbol}`}
-            </p>
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-            <div className="flex gap-2">
-              {[0.5, 1, 3].map((s) => (
-                <button
-                  key={s}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                    slippage === s
-                      ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                      : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                  )}
-                  onClick={() => setSlippage(s)}
-                >
-                  {s}%
-                </button>
-              ))}
+            <div className="text-xs text-gray-500 mt-1">
+              {t('externalTrade.balance') || '余额'}: {parseFloat(userUsdcBal).toFixed(4)} USDC
             </div>
           </div>
-          {!isConnected ? (
-            <button className="btn-primary w-full text-center opacity-50 cursor-not-allowed" disabled>
-              {t('common.connect')}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">{t('externalTrade.receive') || '收到'} ({tokenSymbol})</label>
+            <div className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white">
+              {parseFloat(estimatedBuy).toFixed(6)}
+            </div>
+          </div>
+
+          {!needsUsdcApproval ? (
+            <button
+              onClick={handleBuy}
+              disabled={loading || !buyAmount || parseFloat(buyAmount) === 0}
+              className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white py-3 rounded-lg font-medium"
+            >
+              {loading ? txStatus || t('externalTrade.swapping') : t('externalTrade.buyToken', { token: tokenSymbol })}
             </button>
           ) : (
             <button
-              className="btn-primary w-full text-center"
-              onClick={handleBuy}
-              disabled={isBusy || !buyAmount || Number(buyAmount) <= 0}
+              onClick={handleApproveUsdc}
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white py-3 rounded-lg font-medium"
             >
-              {isBusy ? (txStatus || 'Processing...') : `${t('tokenDetail.buy')} ${tokenSymbol}`}
+              {loading ? txStatus : t('externalTrade.approveUsdc') || '授权 USDC'}
             </button>
           )}
-        </div>
+        </>
       ) : (
-        <div className="space-y-4">
+        <>
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm text-gray-400">{t('tokenDetail.amount')} ({tokenSymbol})</label>
-              {userTokenBal !== '0' && (
-                <button
-                  className="text-xs text-neon-green hover:underline"
-                  onClick={() => setSellAmount(formatEther(BigInt(userTokenBal)))}
-                >
-                  Max: {formatTokenAmount(userTokenBal)}
-                </button>
-              )}
-            </div>
+            <label className="text-xs text-gray-400 block mb-1">{t('externalTrade.sell') || '卖出'} ({tokenSymbol})</label>
             <input
               type="number"
-              className="input-dark w-full"
-              placeholder="0.0"
               value={sellAmount}
               onChange={(e) => setSellAmount(e.target.value)}
+              placeholder="0.0"
+              className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white"
             />
-          </div>
-          <div className="bg-dark-700 rounded-lg p-3">
-            <p className="text-xs text-gray-400 mb-1">{t('tokenDetail.youWillReceive')}</p>
-            <p className="font-display font-bold text-lg">
-              {estimatedSell !== '0' ? `${formatUsdc(Number(ethers.utils.formatEther(estimatedSell)))} ${nativeSymbol}` : `0 ${nativeSymbol}`}
-            </p>
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 mb-1 block">{t('tokenDetail.slippage')}</label>
-            <div className="flex gap-2">
-              {[0.5, 1, 3].map((s) => (
-                <button
-                  key={s}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                    slippage === s
-                      ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                      : 'bg-dark-700 text-gray-400 border border-dark-500 hover:text-white'
-                  )}
-                  onClick={() => setSlippage(s)}
-                >
-                  {s}%
-                </button>
-              ))}
+            <div className="text-xs text-gray-500 mt-1">
+              {t('externalTrade.balance') || '余额'}: {parseFloat(userTokenBal).toFixed(4)} {tokenSymbol}
             </div>
           </div>
-          {!isConnected ? (
-            <button className="btn-danger w-full text-center opacity-50 cursor-not-allowed" disabled>
-              {t('common.connect')}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">{t('externalTrade.receive') || '收到'} (USDC)</label>
+            <div className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white">
+              {parseFloat(estimatedSell).toFixed(6)}
+            </div>
+          </div>
+
+          {!needsTokenApproval ? (
+            <button
+              onClick={handleSell}
+              disabled={loading || !sellAmount || parseFloat(sellAmount) === 0}
+              className="w-full bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white py-3 rounded-lg font-medium"
+            >
+              {loading ? txStatus || t('externalTrade.swapping') : t('externalTrade.sellToken', { token: tokenSymbol })}
             </button>
           ) : (
             <button
-              className="btn-danger w-full text-center"
-              onClick={handleSell}
-              disabled={isBusy || !sellAmount || Number(sellAmount) <= 0}
+              onClick={handleApproveToken}
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white py-3 rounded-lg font-medium"
             >
-              {isBusy ? (txStatus || 'Processing...') : `${t('tokenDetail.sell')} ${tokenSymbol}`}
+              {loading ? txStatus : t('externalTrade.approveToken') || '授权代币'}
             </button>
           )}
-        </div>
+        </>
       )}
 
+      {/* Status messages */}
       {txError && (
-        <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3 mt-4">
-          <p className="text-xs text-neon-red break-all">{txError}</p>
+        <div className="flex items-center gap-2 text-red-400 text-sm">
+          <AlertCircle className="w-4 h-4" />
+          {txError}
         </div>
       )}
-
       {txSuccess && (
-        <div className="mt-3 flex items-start gap-2 text-neon-green text-xs bg-neon-green/10 rounded-lg p-2">
-          <span>{t('common.transactionConfirmed')}</span>
+        <div className="flex items-center gap-2 text-green-400 text-sm">
+          <CheckCircle className="w-4 h-4" />
+          {t('externalTrade.success') || '交易成功！'}
         </div>
       )}
 
-      {/* Debug panel - always visible for now to diagnose issues */}
-      <details className="mt-4">
-        <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">Debug Info</summary>
-        <pre className="text-xs text-gray-500 mt-2 p-2 bg-dark-800 rounded overflow-x-auto break-all whitespace-pre-wrap">{debugInfo}</pre>
-      </details>
+      {/* Info */}
+      <div className="text-xs text-gray-500 space-y-1 pt-2 border-t border-gray-700">
+        <p>{t('externalTrade.warning') || '外盘交易通过 DEX 路由器执行，可能产生滑点和手续费。'}</p>
+        <p>{t('externalTrade.routerInfo') || '路由合约'}: <a href={getBscScanUrl(chainId, 'address', routerAddress)} target="_blank" rel="noopener" className="text-blue-400 hover:underline">{routerAddress}</a></p>
+      </div>
     </div>
   )
 }
