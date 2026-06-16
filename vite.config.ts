@@ -4,7 +4,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { terser } from 'rollup-plugin-terser';
 
 export default defineConfig({
-  base: '/dogepad/',
+  base: '/',
   server: {
     host: '127.0.0.1',
     fs: {

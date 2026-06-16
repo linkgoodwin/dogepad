@@ -43,7 +43,9 @@ jobs:
         run: pnpm run build
 
       - name: Add 404.html for SPA routing
-        run: cp public/404.html dist/404.html
+        run: |
+          cp public/404.html dist/404.html
+          cp public/CNAME dist/CNAME
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
