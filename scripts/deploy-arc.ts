@@ -2,9 +2,28 @@ import { ethers } from "ethers";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load .env file manually if dotenv doesn't work
+function loadEnv() {
+  const envPath = path.resolve(__dirname, '../.env');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf8');
+    content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key && !process.env[key]) {
+          process.env[key] = valueParts.join('=');
+        }
+      }
+    });
+  }
+}
+loadEnv();
 
 function setEnvValue(key: string, value: string) {
   const envPath = path.resolve(__dirname, "../.env");

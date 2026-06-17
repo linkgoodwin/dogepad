@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { createChart, ColorType, IChartApi, ISeriesApi, Time } from 'lightweight-charts'
+import { createChart, ColorType, IChartApi, ISeriesApi, Time, CandlestickSeries, HistogramSeries } from 'lightweight-charts'
 
 export interface KLineData {
   time: number
@@ -112,7 +112,7 @@ export default function KLineChart({
       chartRef.current = chart
 
       // Add candlestick series
-      const candleSeries = chart.addCandlestickSeries({
+      const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: colorUp,
         downColor: colorDown,
         borderDownColor: colorDown,
@@ -124,7 +124,7 @@ export default function KLineChart({
 
       // Add volume series
       if (showVolume) {
-        const volumeSeries = chart.addHistogramSeries({
+        const volumeSeries = chart.addSeries(HistogramSeries, {
           color: '#6366f1',
           priceFormat: { type: 'volume' },
           priceScaleId: '',
