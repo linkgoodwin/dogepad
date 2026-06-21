@@ -196,6 +196,8 @@ send-createtoken.cjs
 check-failed-tx.cjs
 disasm-pc889.cjs
 deep-diagnose-createtoken.cjs
+diagnose-frontend.cjs
+update-launchdao-bc.cjs
 bc-interactions.json
 
 # Docs (generated)
