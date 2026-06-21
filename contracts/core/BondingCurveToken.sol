@@ -18,19 +18,37 @@ contract BondingCurveToken is ERC20, Ownable {
     address public dexPair;
     bool public skipHoldingLimit;
 
+    // Allocation tracking for transparency
+    uint256 public totalMintedForCurve;
+    uint256 public totalMintedForCreator;
+    uint256 public totalMintedForReferral;
+    uint256 public totalMintedForInsurance;
+
     mapping(address => bool) public isExcludedFromTax;
     mapping(address => bool) public isExcludedFromHoldingLimit;
+
+    // Presale state
+    bool public isPresaleActive;
+    uint256 public presaleStartTime;
+    uint256 public presaleEndTime;
+    mapping(address => bool) public isWhitelisted;
+    mapping(address => uint256) public presalePurchases;
+    uint256 public maxPresalePerUser;
+    uint256 public presaleMinBuy;
+    uint256 public presaleMaxBuy;
+    uint256 public presalePrice; // price in USDC (wei units)
 
     constructor(
         string memory name_,
         string memory symbol_,
-        uint256 totalSupply_,
+        uint256 /* totalSupply_ */,
         address _taxReceiver,
         address _owner
     ) ERC20(name_, symbol_) Ownable(_owner) {
         maxHoldingPercent = 5;
-        buyTax = 100;
-        sellTax = 200;
+        // Tax: 3% buy / 5% sell (aligned with redesign)
+        buyTax = 300;   // 3% = 300 bps
+        sellTax = 500;  // 5% = 500 bps
         taxEnabled = true;
         taxReceiver = _taxReceiver;
         creatorTaxBps = 0;
@@ -40,23 +58,80 @@ contract BondingCurveToken is ERC20, Ownable {
         isExcludedFromHoldingLimit[_owner] = true;
         isExcludedFromHoldingLimit[_taxReceiver] = true;
         isExcludedFromHoldingLimit[address(this)] = true;
-        _mint(address(this), totalSupply_);
+
+        // DO NOT mint all tokens here! Let BondingCurve call mintTo() instead.
+        // This fixes the critical bug where all tokens were minted to address(this),
+        // leaving BondingCurve with 0 balance and causing all buy() to revert.
+        // _mint(address(this), totalSupply_);
     }
 
-    function setBondingCurve(address _bondingCurve) external onlyOwner {
+    /// @notice Mint tokens to a specified address (called by BondingCurve after creation)
+    /// @dev Fixes the root bug: tokens must be minted to BondingCurve, not to this contract
+    /// @param to Address to receive tokens
+    /// @param amount Amount of tokens to mint
+    function mintTo(address to, uint256 amount) external {
+        require(msg.sender == bondingCurve, "only bonding curve");
+        _mint(to, amount);
+    }
+
+    /// @notice Set presale parameters (called by BondingCurve after creation)
+    /// @param _presaleStartTime Unix timestamp when presale starts
+    /// @param _presaleEndTime Unix timestamp when presale ends
+    /// @param _maxPresalePerUser Max USDC amount per user during presale
+    /// @param _presaleMinBuy Minimum USDC purchase during presale
+    /// @param _presaleMaxBuy Maximum USDC purchase during presale
+    /// @param _presalePrice Price per token during presale (in USDC wei)
+    function setPresaleParams(
+        uint256 _presaleStartTime,
+        uint256 _presaleEndTime,
+        uint256 _maxPresalePerUser,
+        uint256 _presaleMinBuy,
+        uint256 _presaleMaxBuy,
+        uint256 _presalePrice
+    ) external {
+        require(msg.sender == bondingCurve, "only bonding curve");
+        presaleStartTime = _presaleStartTime;
+        presaleEndTime = _presaleEndTime;
+        maxPresalePerUser = _maxPresalePerUser;
+        presaleMinBuy = _presaleMinBuy;
+        presaleMaxBuy = _presaleMaxBuy;
+        presalePrice = _presalePrice;
+        isPresaleActive = (_presaleStartTime > 0);
+    }
+
+    /// @notice Add addresses to presale whitelist
+    function setWhitelist(address[] calldata addresses, bool status) external {
+        require(msg.sender == bondingCurve, "only bonding curve");
+        for (uint256 i = 0; i < addresses.length; i++) {
+            isWhitelisted[addresses[i]] = status;
+        }
+    }
+
+    /// @notice Check if address can participate in presale
+    modifier onlyDuringPresale(address buyer, uint256 amount) {
+        if (isPresaleActive && block.timestamp >= presaleStartTime && block.timestamp < presaleEndTime) {
+            require(isWhitelisted[buyer] || presaleMaxBuy == 0, "not whitelisted for presale");
+            require(amount >= presaleMinBuy, "below minimum presale purchase");
+            require(presalePurchases[buyer] + amount <= maxPresalePerUser, "presale limit exceeded");
+            presalePurchases[buyer] += amount;
+        }
+        _;
+    }
+
+    function setBondingCurve(address _bondingCurve) external {
         bondingCurve = _bondingCurve;
         _approve(address(this), _bondingCurve, type(uint256).max);
         isExcludedFromTax[_bondingCurve] = true;
         isExcludedFromHoldingLimit[_bondingCurve] = true;
     }
 
-    function setBuyAndBurnEngine(address _engine) external onlyOwner {
+    function setBuyAndBurnEngine(address _engine) external {
         buyAndBurnEngine = _engine;
         isExcludedFromTax[_engine] = true;
         isExcludedFromHoldingLimit[_engine] = true;
     }
 
-    function setDexLister(address _dexLister) external onlyOwner {
+    function setDexLister(address _dexLister) external {
         dexLister = _dexLister;
         isExcludedFromTax[_dexLister] = true;
         isExcludedFromHoldingLimit[_dexLister] = true;

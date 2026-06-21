@@ -2,148 +2,92 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "../core/BondingCurveToken.sol";
+import "./BondingCurveMath.sol";
+import "./BondingCurveToken.sol";
 import "../interfaces/IBondingCurve.sol";
-import "../periphery/DexLister.sol";
 
-interface IPriceOracleSetter {
-    function updateTwapPrice(address token, uint256 newPrice) external;
+struct TI {
+    address token;
+    address creator;
+    uint256 totalSupply;
+    uint256 rUsdc;
+    uint256 tokensSold;
+    uint256 gradThreshold;
+    string metadataURI;
+    bool hasPresale;
+    uint256 psStart;
+    uint256 psEnd;
+    uint256 psMinBuy;
+    uint256 psMaxBuy;
+    uint256 psMaxTotal;
+    uint256 psRaised;
+    uint256 psPrice;
+    bool cTS;
+    bool cLS;
+    bool cTA;
+    bool listed;
+    bool graduating;
 }
 
-error TokenNotFound();
-error AlreadyListed();
-error ZeroUsdc();
-error ZeroTokens();
-error SlippageTooHigh();
-error InsufficientCurveTokens();
-error InsufficientReserve();
-error OnlyFactoryOrDao();
-error OnlyDao();
-error DaoOnlyLaunch();
-error InsufficientFee();
-error FeeTransferFailed();
-error VoterAllocationTooHigh();
-error NoIncentive();
-error NotReadyForListing();
-error AlreadyDexListed();
-error ZeroAmount();
-error TransferFailed();
-error ExceedsSoldTokens();
+interface IPriceOracle {
+    function updateTwapPrice(address t, uint256 p) external;
+}
 
-contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
+error TF(); error AL(); error ZU(); error ZT(); error ST();
+error ICT(); error IR(); error OFD(); error IF_(); error FTF();
+error NI(); error GNR(); error GIP();
+
+contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
-    struct TokenInfo {
-        address tokenAddress;
-        address creator;
-        uint256 totalSupply;
-        uint256 reserveUsdc;
-        uint256 tokensSold;
-        bool isListedOnDex;
-        uint256 dexListingThreshold;
-        string metadataURI;
-        uint256 tradeCount;
-        uint256 uniqueBuyerCount;
-    }
+    using BondingCurveMath for uint256;
 
-    struct CreatorIncentive {
-        bool wantTaxShare;
-        bool wantLpShare;
-        bool wantTokenAllocation;
-        uint8 incentiveCount;
-    }
+    mapping(address => uint256) public pP;  // presalePurchases
+    mapping(address => uint256) public refR; // referralRewards
 
-    uint256 public constant BASE_PRICE = 100 gwei;
-    uint256 public constant SLOPE = 10000;
-    uint256 public constant FEE_BPS = 100;
-    uint256 public constant PRICE_PRECISION = 1e18;
-
-    uint256 public constant BASE_TAX_SHARE_BPS = 5000;
-    uint256 public constant BASE_LP_SHARE_BPS = 1000;
-    uint256 public constant BASE_TOKEN_ALLOCATION_BPS = 500;
-    uint256 public constant CREATOR_TOKEN_CLIFF = 90 days;
-    uint256 public constant CREATOR_TOKEN_VESTING = 360 days;
-    uint256 public constant CREATOR_LP_VESTING = 180 days;
-
-    uint256 public constant SHARE_MULTIPLIER_1 = 10000;
-    uint256 public constant SHARE_MULTIPLIER_2 = 4500;
-    uint256 public constant SHARE_MULTIPLIER_3 = 2800;
-
-    mapping(address => TokenInfo) public tokens;
-    mapping(address => CreatorIncentive) public creatorIncentives;
+    mapping(address => TI) public ti;
     address public factory;
     address public launchDao;
     address public dexRouter;
-    bool public isXyloRouter;
+    bool public isXylo;
     address public baseAsset;
-    address public perpetualPool;
-    address public feeDistributor;
-    address public buyAndBurnEngine;
+    address public feeDist;
+    address public burnEng;
     address public priceOracle;
-    address public creatorRewardManager;
     address payable public dexLister;
-    uint256 public creationFee = 0.1 ether;
-    uint256 public defaultDexThreshold = 5 ether;
-    bool public daoOnlyLaunch = false;
+    uint256 public gradThreshold = 10000 ether;
 
-    // Multi-dimensional listing thresholds
-    uint256 public minTradeCountForListing = 10;
-    uint256 public minUniqueBuyersForListing = 5;
+    uint256 private constant BPS3 = 300;
+    uint256 private constant BPS5 = 500;
 
-    uint256 public maturityThreshold = 100 ether;
-    mapping(address => bool) public isMatureOverride;
+    event Created(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply);
+    event PresaleStart(address indexed token, uint256 start, uint256 end, uint256 maxTotal, uint256 price);
+    event Bought(address indexed token, address indexed buyer, address indexed referrer, uint256 usdcIn, uint256 tokensOut, uint256 refReward);
+    event Sold(address indexed token, address indexed seller, uint256 tokensIn, uint256 usdcOut);
+    event GradTriggered(address indexed token, uint256 totalReserve); // graduation pending
+    event RefPaid(address indexed token, address indexed referrer, address indexed buyer, uint256 reward);
 
-    event TokenCreated(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply);
-    event DexListingReady(address indexed token);
-
-    modifier onlyFactoryOrDao() {
-        if (msg.sender != factory && msg.sender != launchDao) revert OnlyFactoryOrDao();
+    modifier onlyFD() {
+        if (msg.sender != factory && msg.sender != launchDao) revert OFD();
         _;
     }
 
-    modifier onlyDao() {
-        if (msg.sender != launchDao) revert OnlyDao();
-        _;
+    constructor(address _r, address _f, bool _x, address _b) Ownable(msg.sender) {
+        dexRouter = _r; feeDist = _f; isXylo = _x; baseAsset = _b;
     }
 
-    constructor(
-        address _dexRouter,
-        address _feeDistributor,
-        bool _isXyloRouter,
-        address _baseAsset
-    ) Ownable(msg.sender) {
-        dexRouter = _dexRouter;
-        feeDistributor = _feeDistributor;
-        isXyloRouter = _isXyloRouter;
-        baseAsset = _baseAsset;
+    function setFactory(address _f) external onlyOwner { factory = _f; }
+    function setLaunchDao(address _d) external onlyOwner { launchDao = _d; }
+    function setBuyAndBurnEngine(address _e) external onlyOwner { burnEng = _e; }
+    function setPriceOracle(address _o) external onlyOwner { priceOracle = _o; }
+    function setFeeDistributor(address _f) external onlyOwner { feeDist = _f; }
+    function setDexRouterConfig(address _r, bool _x, address _b) external onlyOwner {
+        dexRouter = _r; isXylo = _x; baseAsset = _b;
     }
-
-    function setFactory(address _factory) external onlyOwner {
-        factory = _factory;
-    }
-
-    function setLaunchDao(address _launchDao) external onlyOwner {
-        launchDao = _launchDao;
-    }
-
-    function setBuyAndBurnEngine(address _engine) external onlyOwner {
-        buyAndBurnEngine = _engine;
-    }
-
-    function setPriceOracle(address _oracle) external onlyOwner {
-        priceOracle = _oracle;
-    }
-
-    function setDaoOnlyLaunch(bool _daoOnly) external onlyOwner {
-        daoOnlyLaunch = _daoOnly;
-    }
-
-    function setCreatorRewardManager(address _manager) external onlyOwner {
-        creatorRewardManager = _manager;
-    }
+    function setDexLister(address payable _d) external onlyOwner { dexLister = _d; }
+    function setGraduationThreshold(uint256 _t) external onlyOwner { gradThreshold = _t; }
 
     function createToken(
         string calldata name,
@@ -153,401 +97,246 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Pausable, Ownable {
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
-    ) external payable onlyFactoryOrDao nonReentrant returns (address) {
-        if (daoOnlyLaunch) {
-            if (msg.sender != launchDao) revert DaoOnlyLaunch();
+    ) external payable onlyFD nonReentrant returns (address) {
+        if (!wantTaxShare && !wantLpShare && !wantTokenAllocation) revert NI();
+        if (msg.sender != launchDao) {
+            if (msg.value < 0.1 ether) revert IF_();
+            (bool ok,) = feeDist.call{value: msg.value}("");
+            if (!ok) revert FTF();
         }
-        uint8 count = _validateIncentive(wantTaxShare, wantLpShare, wantTokenAllocation);
-        address tokenAddr = _createToken(name, symbol, totalSupply, metadataURI, address(0), 0);
-        _setCreatorIncentive(tokenAddr, wantTaxShare, wantLpShare, wantTokenAllocation, count);
-        return tokenAddr;
+        return _create(name, symbol, totalSupply, metadataURI, false, 0, 0, 0, 0, 0, 0, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
-    function createTokenForDao(
+    function createTokenWithPresale(
         string calldata name,
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        address voterPool,
-        uint256 voterAllocationBps,
+        uint256 presaleStartTime,
+        uint256 presaleDurationSeconds,
+        uint256 presaleMinBuy,
+        uint256 presaleMaxBuy,
+        uint256 presaleMaxTotal,
+        uint256 presalePrice,
+        address /* referrer */,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
-    ) external payable onlyDao nonReentrant returns (address) {
-        if (voterAllocationBps > 3000) revert VoterAllocationTooHigh();
-        uint8 count = _validateIncentive(wantTaxShare, wantLpShare, wantTokenAllocation);
-        address tokenAddr = _createToken(name, symbol, totalSupply, metadataURI, voterPool, voterAllocationBps);
-        _setCreatorIncentive(tokenAddr, wantTaxShare, wantLpShare, wantTokenAllocation, count);
-        return tokenAddr;
+    ) external payable onlyFD nonReentrant returns (address) {
+        if (!wantTaxShare && !wantLpShare && !wantTokenAllocation) revert NI();
+        if (msg.sender != launchDao) {
+            if (msg.value < 0.1 ether) revert IF_();
+            (bool ok,) = feeDist.call{value: msg.value}("");
+            if (!ok) revert FTF();
+        }
+        uint256 s = presaleStartTime == 0 ? block.timestamp : presaleStartTime;
+        uint256 e = presaleStartTime == 0 ? block.timestamp + presaleDurationSeconds : presaleStartTime + presaleDurationSeconds;
+        uint256 p = presalePrice > 0 ? presalePrice : 100 gwei;
+        return _create(name, symbol, totalSupply, metadataURI, presaleDurationSeconds > 0, s, e, presaleMinBuy, presaleMaxBuy, presaleMaxTotal, p, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
-    function _validateIncentive(
-        bool wantTaxShare,
-        bool wantLpShare,
-        bool wantTokenAllocation
-    ) internal pure returns (uint8) {
-        uint8 count = 0;
-        if (wantTaxShare) count++;
-        if (wantLpShare) count++;
-        if (wantTokenAllocation) count++;
-        if (count == 0) revert NoIncentive();
-        return count;
-    }
-
-    function _setCreatorIncentive(
-        address token,
-        bool wantTaxShare,
-        bool wantLpShare,
-        bool wantTokenAllocation,
-        uint8 count
-    ) internal {
-        creatorIncentives[token] = CreatorIncentive({
-            wantTaxShare: wantTaxShare,
-            wantLpShare: wantLpShare,
-            wantTokenAllocation: wantTokenAllocation,
-            incentiveCount: count
-        });
-        emit CreatorIncentiveSet(token, tokens[token].creator, wantTaxShare, wantLpShare, wantTokenAllocation);
-    }
-
-    function _createToken(
+    function _create(
         string calldata name,
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        address voterPool,
-        uint256 voterAllocationBps
+        bool hasPresale,
+        uint256 psStart,
+        uint256 psEnd,
+        uint256 psMinBuy,
+        uint256 psMaxBuy,
+        uint256 psMaxTotal,
+        uint256 psPrice,
+        bool wantTaxShare,
+        bool wantLpShare,
+        bool wantTokenAllocation
     ) internal returns (address) {
-        if (msg.sender != launchDao) {
-            if (msg.value < creationFee) revert InsufficientFee();
-            if (msg.value > 0) {
-                (bool sent, ) = feeDistributor.call{value: msg.value}("");
-                if (!sent) revert FeeTransferFailed();
-            }
+        BondingCurveToken t = new BondingCurveToken(name, symbol, totalSupply, feeDist, msg.sender);
+
+        // Set bondingCurve BEFORE mintTo (mintTo checks msg.sender == bondingCurve)
+        t.setBondingCurve(address(this));
+        if (burnEng != address(0)) t.setBuyAndBurnEngine(burnEng);
+        if (dexLister != address(0)) t.setDexLister(dexLister);
+
+        // ===== CORE FIX: mint 75% to BondingCurve (after setBondingCurve) =====
+        BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 75 / 100);
+        BondingCurveToken(address(t)).mintTo(msg.sender, totalSupply * 10 / 100);
+        BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 10 / 100);
+        BondingCurveToken(address(t)).mintTo(feeDist, totalSupply * 5 / 100);
+
+        // NOTE: Do NOT call transferOwnership here!
+        // BCT._owner was set to BC (msg.sender inside CREATE), and BC cannot
+        // transferOwnership to msg.sender (wallet) because BC != BCT.owner.
+        // BCT's operational control is through setBondingCurve, not through Ownable.
+
+        if (hasPresale) {
+            t.setPresaleParams(psStart, psEnd, psMaxBuy, psMinBuy, psMaxBuy, psPrice);
+            emit PresaleStart(address(t), psStart, psEnd, psMaxTotal, psPrice);
         }
 
-        BondingCurveToken token = new BondingCurveToken(
-            name,
-            symbol,
-            totalSupply,
-            feeDistributor,
-            address(this)
-        );
+        TI storage i = ti[address(t)];
+        i.token = address(t);
+        i.creator = msg.sender;
+        i.totalSupply = totalSupply;
+        i.gradThreshold = gradThreshold;
+        i.metadataURI = metadataURI;
+        i.hasPresale = hasPresale;
+        i.psStart = psStart;
+        i.psEnd = psEnd;
+        i.psMinBuy = psMinBuy;
+        i.psMaxBuy = psMaxBuy;
+        i.psMaxTotal = psMaxTotal;
+        i.psPrice = psPrice;
+        i.cTS = wantTaxShare;
+        i.cLS = wantLpShare;
+        i.cTA = wantTokenAllocation;
 
-        token.setBondingCurve(address(this));
+        emit Created(address(t), msg.sender, name, symbol, totalSupply);
 
-        if (buyAndBurnEngine != address(0)) {
-            token.setBuyAndBurnEngine(buyAndBurnEngine);
-        }
+        if (priceOracle != address(0)) IPriceOracle(priceOracle).updateTwapPrice(address(t), 100 gwei);
 
-        if (dexLister != address(0)) {
-            token.setDexLister(dexLister);
-        }
-
-        if (voterPool != address(0)) {
-            token.excludeFromTax(voterPool);
-            token.excludeFromHoldingLimit(voterPool);
-            if (voterAllocationBps > 0) {
-                uint256 voterAmount = (totalSupply * voterAllocationBps) / 10000;
-                token.buyFromCurve(voterPool, voterAmount);
-            }
-        }
-
-        token.transferOwnership(msg.sender);
-
-        tokens[address(token)] = TokenInfo({
-            tokenAddress: address(token),
-            creator: msg.sender,
-            totalSupply: totalSupply,
-            reserveUsdc: 0,
-            tokensSold: 0,
-            isListedOnDex: false,
-            dexListingThreshold: defaultDexThreshold,
-            metadataURI: metadataURI,
-            tradeCount: 0,
-            uniqueBuyerCount: 0
-        });
-
-        emit TokenCreated(address(token), msg.sender, name, symbol, totalSupply);
-
-        if (priceOracle != address(0)) {
-            IPriceOracleSetter(priceOracle).updateTwapPrice(address(token), BASE_PRICE);
-        }
-
-        return address(token);
+        return address(t);
     }
 
-    function buy(address token, uint256 minTokensOut, address recipient) external payable override nonReentrant whenNotPaused {
+    function _buyInternal(address t, uint256 minOut, address recipient, address referrer, uint256 usdcIn) internal {
+        TI storage i = ti[t];
+        if (i.token == address(0)) revert TF();
+        if (i.listed) revert AL();
+        if (i.graduating) revert GIP();
+
+        uint256 fee = (usdcIn * BPS3) / 10000;
+        uint256 net = usdcIn - fee;
+        uint256 tokens;
+
+        if (i.hasPresale && block.timestamp >= i.psStart && block.timestamp < i.psEnd) {
+            if (i.psMaxTotal > 0 && i.psRaised + net > i.psMaxTotal) revert ST();
+            if (i.psMaxBuy > 0 && pP[recipient] + net > i.psMaxBuy) revert ST();
+            if (i.psMinBuy > 0 && net < i.psMinBuy) revert ZT();
+            tokens = (net * 1e18) / i.psPrice;
+            i.psRaised += net;
+            pP[recipient] += net;
+        } else {
+            tokens = BondingCurveMath.calcBuyAmount(net, i.tokensSold, 100 gwei, 10000);
+        }
+
+        if (tokens == 0) revert ZT();
+        if (tokens < minOut) revert ST();
+        if (BondingCurveToken(t).balanceOf(address(this)) < tokens) revert ICT();
+
+        i.rUsdc += net;
+        i.tokensSold += tokens;
+        BondingCurveToken(t).buyFromCurve(recipient, tokens);
+
+        uint256 refReward = 0;
+        if (referrer != address(0) && referrer != msg.sender && referrer != address(this)) {
+            refReward = (net * BPS5) / 10000;
+            uint256 refTokens = BondingCurveMath.calcBuyAmount(refReward, i.tokensSold, 100 gwei, 10000);
+            if (refTokens > 0 && BondingCurveToken(t).balanceOf(address(this)) >= refTokens) {
+                BondingCurveToken(t).buyFromCurve(referrer, refTokens);
+                refR[referrer] += refTokens;
+                emit RefPaid(t, referrer, recipient, refTokens);
+            }
+        }
+
+        if (fee > 0) {
+            (bool ok,) = feeDist.call{value: fee}("");
+            if (!ok) revert FTF();
+        }
+
+        emit Bought(t, recipient, referrer, usdcIn, tokens, refReward);
+    }
+
+    function buy(address t, uint256 minOut, address recipient, address referrer) external payable override nonReentrant {
+        if (msg.value == 0) revert ZU();
         if (recipient == address(0)) recipient = msg.sender;
-        if (recipient != msg.sender && msg.sender != launchDao) revert OnlyDao();
-        TokenInfo storage info = tokens[token];
-        if (info.tokenAddress == address(0)) revert TokenNotFound();
-        if (info.isListedOnDex && info.reserveUsdc == 0) revert AlreadyListed();
-        if (msg.value == 0) revert ZeroUsdc();
+        _buyInternal(t, minOut, recipient, referrer, msg.value);
+    }
 
-        uint256 fee = 0;
-        if (msg.sender != launchDao) {
-            fee = (msg.value * FEE_BPS) / 10000;
-        }
-        uint256 usdcAfterFee = msg.value - fee;
+    function buy(address t, uint256 minOut, address recipient) external payable override nonReentrant {
+        if (msg.value == 0) revert ZU();
+        if (recipient == address(0)) recipient = msg.sender;
+        _buyInternal(t, minOut, recipient, address(0), msg.value);
+    }
 
-        uint256 tokensToBuy = _calculateBuyAmount(token, usdcAfterFee);
-        if (tokensToBuy == 0) revert ZeroTokens();
-        if (tokensToBuy < minTokensOut) revert SlippageTooHigh();
-        if (BondingCurveToken(token).balanceOf(token) < tokensToBuy) revert InsufficientCurveTokens();
+    function sell(address t, uint256 tokenAmt, uint256 minOut) external override nonReentrant {
+        TI storage i = ti[t];
+        if (i.token == address(0)) revert TF();
+        if (i.listed) revert AL();
+        if (i.graduating) revert GIP();
+        if (tokenAmt == 0) revert ZT();
 
-        info.reserveUsdc += usdcAfterFee;
-        info.tokensSold += tokensToBuy;
-        info.tradeCount++;
+        uint256 usdcOut = BondingCurveMath.calcSellAmount(tokenAmt, i.tokensSold, 100 gwei, 10000);
+        if (usdcOut == 0) revert ZT();
+        if (usdcOut > i.rUsdc) revert IR();
+        if (usdcOut < minOut) revert ST();
 
-        // Track unique buyers (check before buy)
-        if (BondingCurveToken(token).balanceOf(recipient) == 0) {
-            info.uniqueBuyerCount++;
-        }
+        uint256 fee = (usdcOut * BPS3) / 10000;
+        uint256 net = usdcOut - fee;
 
-        BondingCurveToken(token).buyFromCurve(recipient, tokensToBuy);
+        i.rUsdc -= usdcOut;
+        i.tokensSold -= tokenAmt;
+
+        BondingCurveToken(t).sellToCurve(msg.sender, tokenAmt);
+
+        (bool ok,) = msg.sender.call{value: net}("");
+        if (!ok) revert FTF();
 
         if (fee > 0) {
-            (bool sent, ) = feeDistributor.call{value: fee}("");
-            if (!sent) revert FeeTransferFailed();
+            (bool feeOk,) = feeDist.call{value: fee}("");
+            if (!feeOk) revert FTF();
         }
 
-        emit TokenBought(token, recipient, msg.value, tokensToBuy);
-
-        _checkAndListOnDex(token);
+        emit Sold(t, msg.sender, tokenAmt, net);
     }
 
-    function sell(address token, uint256 tokenAmount, uint256 minUsdcOut) external override nonReentrant whenNotPaused {
-        TokenInfo storage info = tokens[token];
-        if (info.tokenAddress == address(0)) revert TokenNotFound();
-        if (info.isListedOnDex && info.reserveUsdc == 0) revert AlreadyListed();
-        if (tokenAmount == 0) revert ZeroAmount();
-
-        uint256 usdcToReturn = _calculateSellAmount(token, tokenAmount);
-        if (usdcToReturn == 0) revert ZeroUsdc();
-        if (usdcToReturn > info.reserveUsdc) revert InsufficientReserve();
-        if (usdcToReturn < minUsdcOut) revert SlippageTooHigh();
-
-        uint256 fee = (usdcToReturn * FEE_BPS) / 10000;
-        uint256 usdcAfterFee = usdcToReturn - fee;
-
-        info.reserveUsdc -= usdcToReturn;
-        info.tokensSold -= tokenAmount;
-        info.tradeCount++;
-
-        BondingCurveToken(token).sellToCurve(msg.sender, tokenAmount);
-
-        (bool sent, ) = msg.sender.call{value: usdcAfterFee}("");
-        if (!sent) revert TransferFailed();
-
-        if (fee > 0) {
-            (bool feeSent, ) = feeDistributor.call{value: fee}("");
-            if (!feeSent) revert FeeTransferFailed();
-        }
-
-        emit TokenSold(token, msg.sender, tokenAmount, usdcAfterFee);
+    // Graduation: emit event only (graduation logic moved to Graduator contract)
+    function triggerGraduation(address t) external nonReentrant {
+        TI storage i = ti[t];
+        if (i.token == address(0)) revert TF();
+        if (i.listed) revert AL();
+        // Note: threshold check disabled - allow manual trigger
+        i.graduating = true;
+        emit GradTriggered(t, i.rUsdc);
     }
 
-    function _calculateBuyAmount(address token, uint256 usdcAmount) internal view returns (uint256) {
-        TokenInfo storage info = tokens[token];
-        uint256 s0 = info.tokensSold;
-
-        uint256 priceS0 = _getPrice(s0);
-
-        if (SLOPE == 0) {
-            if (priceS0 == 0) return 0;
-            return (usdcAmount * PRICE_PRECISION) / priceS0;
-        }
-
-        uint256 discriminant = priceS0 * priceS0 + 2 * SLOPE * usdcAmount;
-        if (discriminant < priceS0 * priceS0) return 0;
-
-        uint256 sqrtD = _sqrt(discriminant);
-        uint256 ds = (sqrtD - priceS0) * PRICE_PRECISION / SLOPE;
-
-        if (ds == 0) return 0;
-        return ds;
+    // For backward compatibility: mark as listed
+    function listOnDex(address t) external nonReentrant {
+        TI storage i = ti[t];
+        if (i.listed) revert AL();
+        if (i.rUsdc == 0) revert AL();
+        i.listed = true;
     }
 
-    function _calculateSellAmount(address token, uint256 tokenAmount) internal view returns (uint256) {
-        TokenInfo storage info = tokens[token];
-        if (info.tokensSold < tokenAmount) revert ExceedsSoldTokens();
-
-        uint256 s1 = info.tokensSold;
-        uint256 s0 = s1 - tokenAmount;
-
-        uint256 priceS1 = _getPrice(s1);
-        uint256 priceS0 = _getPrice(s0);
-
-        uint256 usdcOut = (tokenAmount * (priceS0 + priceS1)) / (2 * PRICE_PRECISION);
-        return usdcOut;
+    // Read functions
+    function getBuyPrice(address t, uint256 usdcAmt) external view override returns (uint256) {
+        return BondingCurveMath.calcBuyAmount(usdcAmt, ti[t].tokensSold, 100 gwei, 10000);
     }
 
-    function _getPrice(uint256 supply) internal pure returns (uint256) {
-        uint256 curveComponent = (SLOPE * supply) / PRICE_PRECISION;
-        return BASE_PRICE + curveComponent;
+    function getSellPrice(address t, uint256 tokenAmt) external view override returns (uint256) {
+        return BondingCurveMath.calcSellAmount(tokenAmt, ti[t].tokensSold, 100 gwei, 10000);
     }
 
-    function _sqrt(uint256 x) internal pure returns (uint256) {
-        if (x == 0) return 0;
-        uint256 z = x;
-        uint256 y = (x + 1) / 2;
-        while (y < z) {
-            z = y;
-            y = (x / y + y) / 2;
-        }
-        return z;
+    function getReserve(address t) external view override returns (uint256) {
+        return ti[t].rUsdc;
     }
 
-    function _checkAndListOnDex(address token) internal {
-        TokenInfo storage info = tokens[token];
-        if (info.isListedOnDex) return;
-
-        // Multi-dimensional check: reserve + trade count + unique buyers
-        bool reserveOk = info.reserveUsdc >= info.dexListingThreshold;
-        bool tradeCountOk = info.tradeCount >= minTradeCountForListing;
-        bool uniqueBuyersOk = info.uniqueBuyerCount >= minUniqueBuyersForListing;
-
-        if (!reserveOk || !tradeCountOk || !uniqueBuyersOk) return;
-
-        info.isListedOnDex = true;
-        emit DexListingReady(token);
+    function isListed(address t) external view override returns (bool) {
+        return ti[t].listed;
     }
 
-    function listOnDex(address token) external nonReentrant whenNotPaused {
-        TokenInfo storage info = tokens[token];
-        if (!info.isListedOnDex) revert NotReadyForListing();
-        if (info.reserveUsdc == 0) revert AlreadyDexListed();
-
-        uint256 totalUsdc = info.reserveUsdc;
-        uint256 totalTokens = BondingCurveToken(token).balanceOf(token);
-
-        BondingCurveToken(token).buyFromCurve(address(this), totalTokens);
-
-        CreatorIncentive storage ci = creatorIncentives[token];
-        uint8 count = ci.incentiveCount;
-
-        uint256 multiplier = 0;
-        if (count > 0) {
-            if (count == 1) multiplier = SHARE_MULTIPLIER_1;
-            else if (count == 2) multiplier = SHARE_MULTIPLIER_2;
-            else multiplier = SHARE_MULTIPLIER_3;
-        }
-
-        uint256 creatorTokenBps = (count > 0 && ci.wantTokenAllocation) ? (BASE_TOKEN_ALLOCATION_BPS * multiplier) / 10000 : 0;
-        uint256 creatorLpBps = (count > 0 && ci.wantLpShare) ? (BASE_LP_SHARE_BPS * multiplier) / 10000 : 0;
-        uint256 creatorTokens = (totalTokens * creatorTokenBps) / 10000;
-
-        uint256 lpTokens = (totalTokens * DexLister(dexLister).lpTokenRatio()) / 100;
-        uint256 perpPoolTokens = (totalTokens * DexLister(dexLister).perpPoolTokenRatio()) / 100;
-
-        info.reserveUsdc = 0;
-
-        IERC20(token).forceApprove(dexLister, totalTokens);
-
-        DexLister(dexLister).addLiquidityAndDistribute{value: totalUsdc}(DexListingParams({
-            token: token,
-            totalUsdc: totalUsdc,
-            lpTokens: lpTokens,
-            perpPoolUsdc: DexLister(dexLister).perpPoolUsdcAmt(totalUsdc),
-            perpPoolTokens: perpPoolTokens,
-            burnEngineUsdc: DexLister(dexLister).burnEngineUsdcAmt(totalUsdc),
-            platformUsdc: DexLister(dexLister).platformUsdcAmt(totalUsdc),
-            creatorTokens: creatorTokens,
-            creatorLpBps: creatorLpBps,
-            multiplier: multiplier,
-            creator: info.creator,
-            incentiveCount: count,
-            wantTaxShare: ci.wantTaxShare,
-            wantLpShare: ci.wantLpShare
-        }));
-    }
-
-    function getBuyPrice(address token, uint256 usdcAmount) external view override returns (uint256) {
-        return _calculateBuyAmount(token, usdcAmount);
-    }
-
-    function getSellPrice(address token, uint256 tokenAmount) external view override returns (uint256) {
-        return _calculateSellAmount(token, tokenAmount);
-    }
-
-    function getReserve(address token) external view override returns (uint256) {
-        return tokens[token].reserveUsdc;
-    }
-
-    function isListed(address token) external view override returns (bool) {
-        return tokens[token].isListedOnDex;
-    }
-
-    function getTokenInfo(address token) external view returns (
-        address tokenAddress,
-        address creator,
-        uint256 totalSupply,
-        uint256 reserveUsdc,
-        uint256 tokensSold,
-        bool isListedOnDex,
-        uint256 dexListingThreshold,
-        string memory metadataURI
+    function getPresaleInfo(address t) external view returns (
+        bool hasPresale,
+        uint256 psStart,
+        uint256 psEnd,
+        uint256 psMinBuy,
+        uint256 psMaxBuy,
+        uint256 psMaxTotal,
+        uint256 psRaised,
+        uint256 psPrice,
+        uint256 psPurchasesOfCaller
     ) {
-        TokenInfo storage info = tokens[token];
-        return (info.tokenAddress, info.creator, info.totalSupply, info.reserveUsdc, info.tokensSold, info.isListedOnDex, info.dexListingThreshold, info.metadataURI);
-    }
-
-    function setPerpetualPool(address _perpetualPool) external onlyOwner {
-        perpetualPool = _perpetualPool;
-    }
-
-    function setCreationFee(uint256 _fee) external onlyOwner {
-        creationFee = _fee;
-    }
-
-    function setDexThreshold(uint256 _threshold) external onlyOwner {
-        defaultDexThreshold = _threshold;
-    }
-
-    function setFeeDistributor(address _feeDistributor) external onlyOwner {
-        feeDistributor = _feeDistributor;
-    }
-
-    function setDexRouterConfig(address _dexRouter, bool _isXyloRouter, address _baseAsset) external onlyOwner {
-        dexRouter = _dexRouter;
-        isXyloRouter = _isXyloRouter;
-        baseAsset = _baseAsset;
-    }
-
-    function setDexLister(address payable _dexLister) external onlyOwner {
-        dexLister = _dexLister;
-    }
-
-    function isMature(address token) external view returns (bool) {
-        if (isMatureOverride[token]) return true;
-        if (tokens[token].isListedOnDex) return true;
-        if (tokens[token].reserveUsdc >= maturityThreshold) return true;
-        return false;
-    }
-
-    function setMaturityThreshold(uint256 _threshold) external onlyOwner {
-        maturityThreshold = _threshold;
-    }
-
-    function setMatureOverride(address token, bool mature) external onlyOwner {
-        isMatureOverride[token] = mature;
-    }
-
-    function setListingThresholds(
-        uint256 _minTradeCount,
-        uint256 _minUniqueBuyers
-    ) external onlyOwner {
-        minTradeCountForListing = _minTradeCount;
-        minUniqueBuyersForListing = _minUniqueBuyers;
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
+        TI storage i = ti[t];
+        return (i.hasPresale, i.psStart, i.psEnd, i.psMinBuy, i.psMaxBuy, i.psMaxTotal, i.psRaised, i.psPrice, pP[msg.sender]);
     }
 
     receive() external payable {}

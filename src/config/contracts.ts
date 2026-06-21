@@ -453,6 +453,7 @@ export const LAUNCH_DAO_ABI = [
 ] as const
 
 export const BONDING_CURVE_ABI = [
+  // --- Ownership & Core Config ---
   {
     inputs: [],
     name: 'launchDao',
@@ -468,6 +469,69 @@ export const BONDING_CURVE_ABI = [
     type: 'function',
   },
   {
+    inputs: [],
+    name: 'graduationThreshold',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: '_threshold', type: 'uint256' }],
+    name: 'setGraduationThreshold',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'defaultPresaleDuration',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'defaultPresaleMaxPerUser',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'defaultPresaleMinBuy',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'defaultPresaleMaxTotal',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'defaultPresalePrice',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'uint256', name: '_duration', type: 'uint256' },
+      { internalType: 'uint256', name: '_maxPerUser', type: 'uint256' },
+      { internalType: 'uint256', name: '_minBuy', type: 'uint256' },
+      { internalType: 'uint256', name: '_maxTotal', type: 'uint256' },
+      { internalType: 'uint256', name: '_price', type: 'uint256' },
+    ],
+    name: 'setPresaleDefaults',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // --- Buy (v1: 3 params) ---
+  {
     inputs: [
       { internalType: 'address', name: 'token', type: 'address' },
       { internalType: 'uint256', name: 'minTokensOut', type: 'uint256' },
@@ -478,6 +542,20 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'payable',
     type: 'function',
   },
+  // --- Buy (v2: 4 params with referrer) ---
+  {
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'minTokensOut', type: 'uint256' },
+      { internalType: 'address', name: 'recipient', type: 'address' },
+      { internalType: 'address', name: 'referrer', type: 'address' },
+    ],
+    name: 'buy',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  // --- Sell ---
   {
     inputs: [
       { internalType: 'address', name: 'token', type: 'address' },
@@ -489,6 +567,7 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  // --- Pricing ---
   {
     inputs: [
       { internalType: 'address', name: 'token', type: 'address' },
@@ -509,6 +588,7 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  // --- Reserve / Status ---
   {
     inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
     name: 'getReserve',
@@ -523,6 +603,7 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  // --- Token Info (v1) ---
   {
     inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
     name: 'getTokenInfo',
@@ -539,6 +620,7 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  // --- List on DEX ---
   {
     inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
     name: 'listOnDex',
@@ -546,6 +628,56 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  // --- Graduation ---
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'triggerGraduation',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // --- Presale ---
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getPresaleInfo',
+    outputs: [
+      { internalType: 'bool', name: 'hasPresale', type: 'bool' },
+      { internalType: 'uint256', name: 'presaleStartTime', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleEndTime', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMinBuy', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMaxBuy', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMaxTotal', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleRaised', type: 'uint256' },
+      { internalType: 'uint256', name: 'presalePrice', type: 'uint256' },
+      { internalType: 'uint256', name: 'presalePurchasesOfCaller', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  // --- Create with Presale (new) ---
+  {
+    inputs: [
+      { internalType: 'string', name: 'name', type: 'string' },
+      { internalType: 'string', name: 'symbol', type: 'string' },
+      { internalType: 'uint256', name: 'totalSupply', type: 'uint256' },
+      { internalType: 'string', name: 'metadataURI', type: 'string' },
+      { internalType: 'uint256', name: 'presaleStartTime', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleDurationSeconds', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMinBuy', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMaxBuy', type: 'uint256' },
+      { internalType: 'uint256', name: 'presaleMaxTotal', type: 'uint256' },
+      { internalType: 'uint256', name: 'presalePrice', type: 'uint256' },
+      { internalType: 'address', name: 'referrer', type: 'address' },
+      { internalType: 'bool', name: 'wantTaxShare', type: 'bool' },
+      { internalType: 'bool', name: 'wantLpShare', type: 'bool' },
+      { internalType: 'bool', name: 'wantTokenAllocation', type: 'bool' },
+    ],
+    name: 'createTokenWithPresale',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  // --- Router / DEX config ---
   {
     inputs: [],
     name: 'dexRouter',
@@ -572,6 +704,67 @@ export const BONDING_CURVE_ABI = [
     name: 'dexLister',
     outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'view',
+    type: 'function',
+  },
+  // --- Factory ---
+  {
+    inputs: [],
+    name: 'factory',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_factory', type: 'address' }],
+    name: 'setFactory',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // --- FeeDist ---
+  {
+    inputs: [],
+    name: 'feeDist',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_feeDist', type: 'address' }],
+    name: 'setFeeDistributor',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // --- Create Token (no presale) ---
+  {
+    inputs: [
+      { internalType: 'string', name: 'name', type: 'string' },
+      { internalType: 'string', name: 'symbol', type: 'string' },
+      { internalType: 'uint256', name: 'totalSupply', type: 'uint256' },
+      { internalType: 'string', name: 'metadataURI', type: 'string' },
+      { internalType: 'bool', name: 'wantTaxShare', type: 'bool' },
+      { internalType: 'bool', name: 'wantLpShare', type: 'bool' },
+      { internalType: 'bool', name: 'wantTokenAllocation', type: 'bool' },
+    ],
+    name: 'createToken',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  // --- Owner ---
+  {
+    inputs: [],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'newOwner', type: 'address' }],
+    name: 'transferOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
     type: 'function',
   },
 ] as const
@@ -1197,7 +1390,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   },
   [ARC_TESTNET]: {
     launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0x4aA53a4e95ff30d9395342F8d111858Cf2704AAA'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x4deacE8D2824938fC131a8750aECE108afbf379a'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0xcad29860b3b0dcCE0dFB3D042833a2e189439963'),
     dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x9E8cE555C8ad970D385E743b92Bf321Cd7053B79'),
     perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0x6538Ee7C326347b01Dc37db3eBa2c037ad8B1778'),
     buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x2940F9B412A4817f3c4327EaB0016a74112E9102'),
