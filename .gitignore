@@ -198,7 +198,12 @@ disasm-pc889.cjs
 deep-diagnose-createtoken.cjs
 diagnose-frontend.cjs
 update-launchdao-bc.cjs
+full-redeploy.cjs
+authorize-and-test.cjs
+test-createtoken-v7.cjs
+test-createtoken-v7-fee.cjs
 bc-interactions.json
+.deploy-v7-record.json
 
 # Docs (generated)
 docs/tokenomics-redesign.md
