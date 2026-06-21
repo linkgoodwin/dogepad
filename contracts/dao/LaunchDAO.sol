@@ -27,10 +27,7 @@ interface IBondingCurveLaunch {
 interface IBondingCurveTokenExclude {
     function excludeFromTax(address account) external;
     function excludeFromHoldingLimit(address account) external;
-}
-
-interface IBondingCurveTokenHoldingLimit {
-    function maxHoldingPercent() external view returns (uint256);
+    function setSkipHoldingLimit(bool skip) external;
 }
 
 contract LaunchDAO is ReentrancyGuard, Ownable {
@@ -162,8 +159,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     uint256 public currentDay;
     uint256 public lastLaunchDay;
-    uint256 public maxLaunchsPerDay = 1;
-    uint256 public launchHour = 4;
+    uint256 public maxLaunchsPerDay = 3;
+    uint256 public launchHour = 0;
     uint256 public lastQueueDay;
     mapping(uint256 => uint256) public dayLaunchCount;
     mapping(uint256 => EpochInfo) public epochInfo;
@@ -660,7 +657,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
             _distributeLaunchedTokens(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
 
-            try IBondingCurveLaunch(bondingCurve).listOnDex(token) {} catch {}
+            // DEX listing — no try/catch, let errors propagate (Jeremy Allaire: deterministic settlement)
+            IBondingCurveLaunch(bondingCurve).listOnDex(token);
 
             queueHead++;
 
@@ -690,7 +688,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     ) internal {
         if (tokensReceived == 0 || usdcUsed == 0) return;
 
-        address proposer = candidates[candidateId].proposer;
+        // Skip holding limit during distribution (LaunchDAO is BCT owner)
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(true);
 
         address[] storage supporters = candidateSupporters[candidateId];
         for (uint256 i = 0; i < supporters.length; i++) {
@@ -706,45 +705,23 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             }
 
             uint256 share = (userUsdcUsed * tokensReceived) / usdcUsed;
-            uint256 actualTransfer = share;
 
             if (share > 0) {
-                if (supporter == proposer) {
-                    try IBondingCurveTokenExclude(token).excludeFromHoldingLimit(supporter) {} catch {}
-                } else {
-                    try IBondingCurveTokenHoldingLimit(token).maxHoldingPercent() returns (uint256 holdPercent) {
-                        if (holdPercent > 0) {
-                            uint256 circulatingSupply = IERC20(token).totalSupply() - IERC20(token).balanceOf(token);
-                            uint256 maxHold = (circulatingSupply * holdPercent) / 100;
-                            uint256 currentBalance = IERC20(token).balanceOf(supporter);
-                            if (maxHold > currentBalance) {
-                                uint256 maxTransferable = maxHold - currentBalance;
-                                if (actualTransfer > maxTransferable) {
-                                    actualTransfer = maxTransferable;
-                                }
-                            } else {
-                                actualTransfer = 0;
-                            }
-                        }
-                    } catch {}
-                }
-
-                if (actualTransfer > 0) {
-                    IERC20(token).safeTransfer(supporter, actualTransfer);
-                }
+                IERC20(token).safeTransfer(supporter, share);
             }
 
-            if (actualTransfer >= share) {
-                sub.hasClaimed = true;
-            }
+            sub.hasClaimed = true;
 
             if (userExcessUsdc > 0) {
                 (bool success, ) = payable(supporter).call{value: userExcessUsdc}("");
                 require(success, "rf");
             }
 
-            emit SubscriptionClaimed(supporter, candidateId, token, actualTransfer);
+            emit SubscriptionClaimed(supporter, candidateId, token, share);
         }
+
+        // Re-enable holding limit
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
     }
 
     function claimSubscription(uint256 candidateId) external nonReentrant {
@@ -1056,24 +1033,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         return _calcAllPendingRights(user);
     }
 
-    function getStakePositionCount(address user) external view returns (uint256) {
-        return userStakePositions[user].length;
-    }
-
-    function getStakePosition(address user, uint256 index) external view returns (
-        address token,
-        uint256 amount,
-        uint256 startTime,
-        StakeDuration duration,
-        uint256 maturityTime,
-        bool withdrawn,
-        uint256 lastRightsClaimTime
-    ) {
-        require(index < userStakePositions[user].length, "invalid index");
-        StakePosition storage pos = userStakePositions[user][index];
-        return (pos.token, pos.amount, pos.startTime, pos.duration, pos.maturityTime, pos.withdrawn, pos.lastRightsClaimTime);
-    }
-
     function getStakePositions(address user) external view returns (
         address[] memory tokens,
         uint256[] memory amounts,
@@ -1106,11 +1065,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             return launchQueueItems.length - queueHead;
         }
         return 0;
-    }
-
-    function getQueueItem(uint256 index) external view returns (uint256) {
-        require(queueHead + index < launchQueueItems.length, "out of bounds");
-        return launchQueueItems[queueHead + index];
     }
 
     function getEpochTimeRemaining() external view returns (uint256) {
@@ -1232,18 +1186,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function getCandidateCount() external view returns (uint256) {
         return candidates.length;
-    }
-
-    function getCandidateStatus(uint256 candidateId) external view returns (CandidateStatus) {
-        require(candidateId < candidates.length, "invalid candidate");
-        Candidate storage c = candidates[candidateId];
-        if (c.status == CandidateStatus.Active && block.timestamp > c.expireTime) {
-            if (block.timestamp > c.gracePeriodEnd) {
-                return CandidateStatus.Recyclable;
-            }
-            return CandidateStatus.GracePeriod;
-        }
-        return c.status;
     }
 
     function getSubscription(address user, uint256 candidateId) external view returns (

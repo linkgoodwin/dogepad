@@ -26,7 +26,6 @@ contract BondingCurveFactory is Ownable {
         bool wantLpShare,
         bool wantTokenAllocation
     ) external payable returns (address) {
-        // Fixed creation fee: 0.1 ETH (saved bytecode by removing state var from BC)
         if (msg.value < 0.1 ether) revert();
 
         address token = BondingCurve(bondingCurve).createToken{value: msg.value}(
@@ -34,46 +33,6 @@ contract BondingCurveFactory is Ownable {
             symbol,
             totalSupply,
             metadataURI,
-            wantTaxShare,
-            wantLpShare,
-            wantTokenAllocation
-        );
-
-        _registerToken(token);
-        return token;
-    }
-
-    /// @notice Create a token with presale configuration
-    function createTokenWithPresale(
-        string calldata name,
-        string calldata symbol,
-        uint256 totalSupply,
-        string calldata metadataURI,
-        uint256 presaleStartTime,
-        uint256 presaleDurationSeconds,
-        uint256 presaleMinBuy,
-        uint256 presaleMaxBuy,
-        uint256 presaleMaxTotal,
-        uint256 presalePrice,
-        address referrer,
-        bool wantTaxShare,
-        bool wantLpShare,
-        bool wantTokenAllocation
-    ) external payable returns (address) {
-        if (msg.value < 0.1 ether) revert();
-
-        address token = BondingCurve(bondingCurve).createTokenWithPresale{value: msg.value}(
-            name,
-            symbol,
-            totalSupply,
-            metadataURI,
-            presaleStartTime,
-            presaleDurationSeconds,
-            presaleMinBuy,
-            presaleMaxBuy,
-            presaleMaxTotal,
-            presalePrice,
-            referrer,
             wantTaxShare,
             wantLpShare,
             wantTokenAllocation

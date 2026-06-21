@@ -272,5 +272,70 @@ contract DexLister is Ownable {
         return (totalUsdc * platformRatio) / 100;
     }
 
+    /// @notice Simplified DEX listing for DAO-launched tokens
+    /// @dev Called by BondingCurve with msg.value = USDC for LP, tokens transferred via safeTransferFrom
+    /// @param token Token address to list
+    /// @param creator Creator address (for potential future use)
+    function listTokenSimple(address token, address creator) external payable {
+        if (msg.sender != bondingCurve && msg.sender != owner()) revert OwnableUnauthorizedAccount(msg.sender);
+
+        uint256 tokenBalance = IERC20(token).balanceOf(msg.sender);
+        require(tokenBalance > 0, "no tokens");
+        require(msg.value > 0, "no usdc");
+
+        // Transfer all tokens from caller (BondingCurve) to DexLister
+        IERC20(token).safeTransferFrom(msg.sender, address(this), tokenBalance);
+
+        BondingCurveToken(token).setSkipHoldingLimit(true);
+        IERC20(token).forceApprove(dexRouter, tokenBalance);
+
+        uint256 lpUsdc = msg.value;
+
+        if (!isXyloRouter) {
+            IUniswapV2Router02(dexRouter).addLiquidityETH{value: lpUsdc}(
+                token,
+                tokenBalance,
+                (tokenBalance * 95) / 100,
+                (lpUsdc * 95) / 100,
+                address(this),
+                block.timestamp + 300
+            );
+        } else {
+            IWUSDC(baseAsset).deposit{value: lpUsdc}();
+            IERC20(baseAsset).forceApprove(dexRouter, lpUsdc);
+            IUniswapV2Router02(dexRouter).addLiquidity(
+                baseAsset,
+                token,
+                lpUsdc,
+                tokenBalance,
+                (lpUsdc * 95) / 100,
+                (tokenBalance * 95) / 100,
+                address(this),
+                block.timestamp + 300
+            );
+        }
+
+        // Set dexPair so tax/holding limit switches to DEX mode
+        address lpToken = _getLpToken(token);
+        if (lpToken != address(0)) {
+            BondingCurveToken(token).setDexPair(lpToken);
+            // Burn LP tokens (lock forever)
+            uint256 remainingLp = IERC20(lpToken).balanceOf(address(this));
+            if (remainingLp > 0) {
+                IERC20(lpToken).transfer(0x000000000000000000000000000000000000dEaD, remainingLp);
+            }
+        }
+
+        // Burn any remaining tokens
+        uint256 actualRemaining = IERC20(token).balanceOf(address(this));
+        if (actualRemaining > 0) {
+            BondingCurveToken(token).burn(actualRemaining);
+        }
+
+        BondingCurveToken(token).setSkipHoldingLimit(false);
+
+        emit DexListed(token, lpUsdc, tokenBalance);
+    }
+
     receive() external payable {}
 }

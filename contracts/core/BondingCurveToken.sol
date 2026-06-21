@@ -192,15 +192,17 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function setSkipHoldingLimit(bool skip) external {
-        require(msg.sender == bondingCurve || msg.sender == dexLister, "only bonding curve");
+        require(msg.sender == bondingCurve || msg.sender == dexLister || msg.sender == owner(), "not authorized");
         skipHoldingLimit = skip;
     }
 
-    function excludeFromTax(address account) external onlyOwner {
+    function excludeFromTax(address account) external {
+        require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         isExcludedFromTax[account] = true;
     }
 
-    function excludeFromHoldingLimit(address account) external onlyOwner {
+    function excludeFromHoldingLimit(address account) external {
+        require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         isExcludedFromHoldingLimit[account] = true;
     }
 

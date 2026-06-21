@@ -17,14 +17,6 @@ struct TI {
     uint256 tokensSold;
     uint256 gradThreshold;
     string metadataURI;
-    bool hasPresale;
-    uint256 psStart;
-    uint256 psEnd;
-    uint256 psMinBuy;
-    uint256 psMaxBuy;
-    uint256 psMaxTotal;
-    uint256 psRaised;
-    uint256 psPrice;
     bool cTS;
     bool cLS;
     bool cTA;
@@ -36,6 +28,10 @@ interface IPriceOracle {
     function updateTwapPrice(address t, uint256 p) external;
 }
 
+interface IDexLister {
+    function listTokenSimple(address token, address creator) external payable;
+}
+
 error TF(); error AL(); error ZU(); error ZT(); error ST();
 error ICT(); error IR(); error OFD(); error IF_(); error FTF();
 error NI(); error GNR(); error GIP();
@@ -44,7 +40,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
     using BondingCurveMath for uint256;
 
-    mapping(address => uint256) public pP;  // presalePurchases
     mapping(address => uint256) public refR; // referralRewards
 
     mapping(address => TI) public ti;
@@ -63,10 +58,9 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
     uint256 private constant BPS5 = 500;
 
     event Created(address indexed token, address indexed creator, string name, string symbol, uint256 totalSupply);
-    event PresaleStart(address indexed token, uint256 start, uint256 end, uint256 maxTotal, uint256 price);
     event Bought(address indexed token, address indexed buyer, address indexed referrer, uint256 usdcIn, uint256 tokensOut, uint256 refReward);
     event Sold(address indexed token, address indexed seller, uint256 tokensIn, uint256 usdcOut);
-    event GradTriggered(address indexed token, uint256 totalReserve); // graduation pending
+    event GradTriggered(address indexed token, uint256 totalReserve);
     event RefPaid(address indexed token, address indexed referrer, address indexed buyer, uint256 reward);
 
     modifier onlyFD() {
@@ -104,35 +98,24 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
             (bool ok,) = feeDist.call{value: msg.value}("");
             if (!ok) revert FTF();
         }
-        return _create(name, symbol, totalSupply, metadataURI, false, 0, 0, 0, 0, 0, 0, wantTaxShare, wantLpShare, wantTokenAllocation);
+        return _create(name, symbol, totalSupply, metadataURI, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
-    function createTokenWithPresale(
+    /// @notice Create token for LaunchDAO (no creation fee)
+    /// @dev Implements IBondingCurveLaunch interface expected by LaunchDAO
+    function createTokenForDao(
         string calldata name,
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        uint256 presaleStartTime,
-        uint256 presaleDurationSeconds,
-        uint256 presaleMinBuy,
-        uint256 presaleMaxBuy,
-        uint256 presaleMaxTotal,
-        uint256 presalePrice,
-        address /* referrer */,
+        address /* voterPool */,
+        uint256 /* voterAllocationBps */,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
-    ) external payable onlyFD nonReentrant returns (address) {
+    ) external onlyFD nonReentrant returns (address) {
         if (!wantTaxShare && !wantLpShare && !wantTokenAllocation) revert NI();
-        if (msg.sender != launchDao) {
-            if (msg.value < 0.1 ether) revert IF_();
-            (bool ok,) = feeDist.call{value: msg.value}("");
-            if (!ok) revert FTF();
-        }
-        uint256 s = presaleStartTime == 0 ? block.timestamp : presaleStartTime;
-        uint256 e = presaleStartTime == 0 ? block.timestamp + presaleDurationSeconds : presaleStartTime + presaleDurationSeconds;
-        uint256 p = presalePrice > 0 ? presalePrice : 100 gwei;
-        return _create(name, symbol, totalSupply, metadataURI, presaleDurationSeconds > 0, s, e, presaleMinBuy, presaleMaxBuy, presaleMaxTotal, p, wantTaxShare, wantLpShare, wantTokenAllocation);
+        return _create(name, symbol, totalSupply, metadataURI, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
     function _create(
@@ -140,39 +123,20 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        bool hasPresale,
-        uint256 psStart,
-        uint256 psEnd,
-        uint256 psMinBuy,
-        uint256 psMaxBuy,
-        uint256 psMaxTotal,
-        uint256 psPrice,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
     ) internal returns (address) {
         BondingCurveToken t = new BondingCurveToken(name, symbol, totalSupply, feeDist, msg.sender);
 
-        // Set bondingCurve BEFORE mintTo (mintTo checks msg.sender == bondingCurve)
         t.setBondingCurve(address(this));
         if (burnEng != address(0)) t.setBuyAndBurnEngine(burnEng);
         if (dexLister != address(0)) t.setDexLister(dexLister);
 
-        // ===== CORE FIX: mint 75% to BondingCurve (after setBondingCurve) =====
         BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 75 / 100);
         BondingCurveToken(address(t)).mintTo(msg.sender, totalSupply * 10 / 100);
         BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 10 / 100);
         BondingCurveToken(address(t)).mintTo(feeDist, totalSupply * 5 / 100);
-
-        // NOTE: Do NOT call transferOwnership here!
-        // BCT._owner was set to BC (msg.sender inside CREATE), and BC cannot
-        // transferOwnership to msg.sender (wallet) because BC != BCT.owner.
-        // BCT's operational control is through setBondingCurve, not through Ownable.
-
-        if (hasPresale) {
-            t.setPresaleParams(psStart, psEnd, psMaxBuy, psMinBuy, psMaxBuy, psPrice);
-            emit PresaleStart(address(t), psStart, psEnd, psMaxTotal, psPrice);
-        }
 
         TI storage i = ti[address(t)];
         i.token = address(t);
@@ -180,13 +144,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         i.totalSupply = totalSupply;
         i.gradThreshold = gradThreshold;
         i.metadataURI = metadataURI;
-        i.hasPresale = hasPresale;
-        i.psStart = psStart;
-        i.psEnd = psEnd;
-        i.psMinBuy = psMinBuy;
-        i.psMaxBuy = psMaxBuy;
-        i.psMaxTotal = psMaxTotal;
-        i.psPrice = psPrice;
         i.cTS = wantTaxShare;
         i.cLS = wantLpShare;
         i.cTA = wantTokenAllocation;
@@ -206,18 +163,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
 
         uint256 fee = (usdcIn * BPS3) / 10000;
         uint256 net = usdcIn - fee;
-        uint256 tokens;
-
-        if (i.hasPresale && block.timestamp >= i.psStart && block.timestamp < i.psEnd) {
-            if (i.psMaxTotal > 0 && i.psRaised + net > i.psMaxTotal) revert ST();
-            if (i.psMaxBuy > 0 && pP[recipient] + net > i.psMaxBuy) revert ST();
-            if (i.psMinBuy > 0 && net < i.psMinBuy) revert ZT();
-            tokens = (net * 1e18) / i.psPrice;
-            i.psRaised += net;
-            pP[recipient] += net;
-        } else {
-            tokens = BondingCurveMath.calcBuyAmount(net, i.tokensSold, 100 gwei, 10000);
-        }
+        uint256 tokens = BondingCurveMath.calcBuyAmount(net, i.tokensSold, 100 gwei, 10000);
 
         if (tokens == 0) revert ZT();
         if (tokens < minOut) revert ST();
@@ -289,25 +235,29 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         emit Sold(t, msg.sender, tokenAmt, net);
     }
 
-    // Graduation: emit event only (graduation logic moved to Graduator contract)
     function triggerGraduation(address t) external nonReentrant {
         TI storage i = ti[t];
         if (i.token == address(0)) revert TF();
         if (i.listed) revert AL();
-        // Note: threshold check disabled - allow manual trigger
         i.graduating = true;
         emit GradTriggered(t, i.rUsdc);
     }
 
-    // For backward compatibility: mark as listed
+    /// @notice List token on DEX — calls DexLister to add liquidity, then marks as listed
     function listOnDex(address t) external nonReentrant {
         TI storage i = ti[t];
+        if (i.token == address(0)) revert TF();
         if (i.listed) revert AL();
         if (i.rUsdc == 0) revert AL();
+
+        if (dexLister != address(0)) {
+            IERC20(t).approve(dexLister, type(uint256).max);
+            IDexLister(dexLister).listTokenSimple{value: i.rUsdc}(t, i.creator);
+        }
+
         i.listed = true;
     }
 
-    // Read functions
     function getBuyPrice(address t, uint256 usdcAmt) external view override returns (uint256) {
         return BondingCurveMath.calcBuyAmount(usdcAmt, ti[t].tokensSold, 100 gwei, 10000);
     }
@@ -322,21 +272,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
 
     function isListed(address t) external view override returns (bool) {
         return ti[t].listed;
-    }
-
-    function getPresaleInfo(address t) external view returns (
-        bool hasPresale,
-        uint256 psStart,
-        uint256 psEnd,
-        uint256 psMinBuy,
-        uint256 psMaxBuy,
-        uint256 psMaxTotal,
-        uint256 psRaised,
-        uint256 psPrice,
-        uint256 psPurchasesOfCaller
-    ) {
-        TI storage i = ti[t];
-        return (i.hasPresale, i.psStart, i.psEnd, i.psMinBuy, i.psMaxBuy, i.psMaxTotal, i.psRaised, i.psPrice, pP[msg.sender]);
     }
 
     receive() external payable {}
