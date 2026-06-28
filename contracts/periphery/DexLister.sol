@@ -41,6 +41,12 @@ interface IPerpetualPoolDeposit {
     function depositUsdcToInsurance(address token) external payable;
 }
 
+interface ISharedLiquidityPoolDeposit {
+    function addLiquidity(address token) external payable;
+    function addTokenLiquidity(address token, uint256 amount) external;
+    function activateToken(address token) external;
+}
+
 interface ICreatorRewardManager {
     function createVesting(address asset, address beneficiary, uint256 amount, uint256 cliffDuration, uint256 vestingDuration) external;
 }
@@ -72,6 +78,7 @@ contract DexLister is Ownable {
     bool public isXyloRouter;
     address public baseAsset;
     address public perpetualPool;
+    address public sharedLiquidityPool; // SLP — shared liquidity pool
     address public feeDistributor;
     address public buyAndBurnEngine;
     address public creatorRewardManager;
@@ -111,6 +118,10 @@ contract DexLister is Ownable {
 
     function setPerpetualPool(address _perpetualPool) external onlyOwner {
         perpetualPool = _perpetualPool;
+    }
+
+    function setSharedLiquidityPool(address _slp) external onlyOwner {
+        sharedLiquidityPool = _slp;
     }
 
     function setFeeDistributor(address _feeDistributor) external onlyOwner {
@@ -326,10 +337,18 @@ contract DexLister is Ownable {
             }
         }
 
-        // Burn any remaining tokens
+        // Burn any remaining tokens (or inject into SLP if configured)
         uint256 actualRemaining = IERC20(token).balanceOf(address(this));
         if (actualRemaining > 0) {
-            BondingCurveToken(token).burn(actualRemaining);
+            if (sharedLiquidityPool != address(0)) {
+                // Inject remaining tokens into SLP as token liquidity
+                IERC20(token).forceApprove(sharedLiquidityPool, actualRemaining);
+                ISharedLiquidityPoolDeposit(sharedLiquidityPool).addTokenLiquidity(token, actualRemaining);
+                // Activate token for perp trading
+                try ISharedLiquidityPoolDeposit(sharedLiquidityPool).activateToken(token) {} catch {}
+            } else {
+                BondingCurveToken(token).burn(actualRemaining);
+            }
         }
 
         BondingCurveToken(token).setSkipHoldingLimit(false);

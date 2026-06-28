@@ -57,6 +57,16 @@ struct TpslOrder {
     bool isActive;
 }
 
+interface ISharedLiquidityPool {
+    function depositMargin(address token, address user) external payable;
+    function settlePosition(address token, address payable user, uint256 margin, int256 pnl) external;
+    function updateOI(address token, uint256 longDelta, uint256 shortDelta, bool isAdd) external;
+    function getPoolInfo(address token) external view returns (
+        uint256 usdcBalance, uint256 tokenBalance, uint256 longOI, uint256 shortOI,
+        uint256 maxOI, bool active, bool solvent
+    );
+}
+
 contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
 
@@ -65,6 +75,7 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     address public bondingCurve;
     address public dexLister;
     address public platformTreasury;
+    address public sharedLiquidityPool; // SLP — shared liquidity pool for settlement
 
     uint256 public constant MAINTENANCE_MARGIN_RATIO = 15e16; // 15% (was 6%)
     uint256 public constant LIQUIDATION_FEE = 5e16;
@@ -238,6 +249,17 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
             tokenShortOpenInterest[token] += size;
         }
 
+        // Route margin to SharedLiquidityPool if configured
+        if (sharedLiquidityPool != address(0)) {
+            ISharedLiquidityPool(sharedLiquidityPool).depositMargin{value: marginUsdc}(token, msg.sender);
+            // Update OI in SLP for risk monitoring
+            if (isLong) {
+                ISharedLiquidityPool(sharedLiquidityPool).updateOI(token, size, 0, true);
+            } else {
+                ISharedLiquidityPool(sharedLiquidityPool).updateOI(token, 0, size, true);
+            }
+        }
+
         uint256 protocolFee = (marginUsdc * protocolFeeBps) / 10000;
         if (protocolFee > 0 && burnEngine != address(0)) {
             (bool sent, ) = payable(burnEngine).call{value: protocolFee}("");
@@ -301,10 +323,23 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
             tokenShortOpenInterest[token] -= closeSize;
         }
 
+        // Update OI in SLP
+        if (sharedLiquidityPool != address(0)) {
+            if (pos.isLong) {
+                ISharedLiquidityPool(sharedLiquidityPool).updateOI(token, closeSize, 0, false);
+            } else {
+                ISharedLiquidityPool(sharedLiquidityPool).updateOI(token, 0, closeSize, false);
+            }
+        }
+
         // Update position
         if (closeSize == pos.size) {
-            // Full close
-            if (returnAmount > 0 && returnAmount <= address(this).balance) {
+            // Full close — settle via SLP if configured, else direct transfer
+            if (sharedLiquidityPool != address(0)) {
+                ISharedLiquidityPool(sharedLiquidityPool).settlePosition(
+                    token, payable(user), marginToReturn, closePnl
+                );
+            } else if (returnAmount > 0 && returnAmount <= address(this).balance) {
                 (bool success, ) = payable(user).call{value: returnAmount}("");
                 require(success, "transfer failed");
             }
@@ -318,7 +353,11 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
             pos.lastFundingTime = block.timestamp;
             pos.fundingDebt = 0;
 
-            if (returnAmount > 0 && returnAmount <= address(this).balance) {
+            if (sharedLiquidityPool != address(0)) {
+                ISharedLiquidityPool(sharedLiquidityPool).settlePosition(
+                    token, payable(user), marginToReturn, closePnl
+                );
+            } else if (returnAmount > 0 && returnAmount <= address(this).balance) {
                 (bool success, ) = payable(user).call{value: returnAmount}("");
                 require(success, "transfer failed");
             }
@@ -855,87 +894,8 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
     }
 
     // P1: Get liquidation price
-    function getLiquidationPrice(address user, address token) external view returns (uint256) {
-        Position memory pos = positions[user][token];
-        if (!pos.isActive) return 0;
-
-        uint256 effectiveMargin = pos.margin;
-        if (effectiveMargin == 0) return 0;
-
-        if (pos.isLong) {
-            // Long liquidation: marginRatio = (margin - loss) / positionValue < MAINTENANCE
-            // loss = size * (entryPrice - liqPrice) / entryPrice
-            // (margin - size*(entry-liq)/entry) / (size*liq/entry) = MAINTENANCE
-            // Solving: liqPrice = entryPrice * margin / (size * (1 + MAINTENANCE))
-            uint256 numerator = pos.entryPrice * effectiveMargin;
-            uint256 denominator = pos.size * (1e18 + MAINTENANCE_MARGIN_RATIO) / 1e18;
-            return denominator > 0 ? numerator / denominator : 0;
-        } else {
-            // Short liquidation
-            uint256 numerator = pos.entryPrice * effectiveMargin;
-            uint256 denominator = pos.size * (1e18 - MAINTENANCE_MARGIN_RATIO) / 1e18;
-            return denominator > 0 ? numerator / denominator : type(uint256).max;
-        }
-    }
-
-    // P1: Get margin health (0-100)
-    function getMarginHealth(address user, address token) external view returns (uint256) {
-        Position memory pos = positions[user][token];
-        if (!pos.isActive) return 100;
-
-        uint256 liqPrice = this.getLiquidationPrice(user, token);
-        uint256 markPrice = oracle.getPrice(token);
-        if (markPrice == 0) return 0;
-
-        if (pos.isLong) {
-            if (markPrice <= liqPrice) return 0;
-            uint256 totalRange = pos.entryPrice > liqPrice ? pos.entryPrice - liqPrice : 1;
-            uint256 currentRange = markPrice - liqPrice;
-            return (currentRange * 100) / totalRange;
-        } else {
-            if (markPrice >= liqPrice) return 0;
-            uint256 totalRange = liqPrice > pos.entryPrice ? liqPrice - pos.entryPrice : 1;
-            uint256 currentRange = liqPrice - markPrice;
-            return (currentRange * 100) / totalRange;
-        }
-    }
-
     function getOpenInterest(address token) external view returns (uint256 longOI, uint256 shortOI) {
         return (tokenLongOpenInterest[token], tokenShortOpenInterest[token]);
-    }
-
-    function getNextFundingTime(address token) external view returns (uint256) {
-        if (lastFundingTime[token] == 0) return block.timestamp + FUNDING_INTERVAL;
-        return lastFundingTime[token] + FUNDING_INTERVAL;
-    }
-
-    function getCurrentFundingRate(address token) external view returns (int256) {
-        uint256 longOI = tokenLongOpenInterest[token];
-        uint256 shortOI = tokenShortOpenInterest[token];
-
-        if (longOI == 0 && shortOI == 0) return 0;
-
-        if (longOI > shortOI) {
-            uint256 ratio = (longOI * 1e18) / (shortOI > 0 ? shortOI : 1);
-            int256 rate = int256((baseFundingRate * ratio) / 1e18);
-            if (rate > int256(MAX_FUNDING_RATE)) {
-                rate = int256(MAX_FUNDING_RATE);
-            }
-            return rate;
-        } else if (shortOI > longOI) {
-            uint256 ratio = (shortOI * 1e18) / (longOI > 0 ? longOI : 1);
-            int256 rate = -int256((baseFundingRate * ratio) / 1e18);
-            if (-rate > int256(MAX_FUNDING_RATE)) {
-                rate = -int256(MAX_FUNDING_RATE);
-            }
-            return rate;
-        }
-
-        return 0;
-    }
-
-    function getMarkPrice(address token) external view returns (uint256) {
-        return oracle.getPrice(token);
     }
 
     function setOracle(address _oracle) external onlyOwner {
@@ -956,6 +916,10 @@ contract PerpetualPool is ReentrancyGuard, Pausable, Ownable {
 
     function setPlatformTreasury(address _treasury) external onlyOwner {
         platformTreasury = _treasury;
+    }
+
+    function setSharedLiquidityPool(address _slp) external onlyOwner {
+        sharedLiquidityPool = _slp;
     }
 
     function setBaseFundingRate(uint256 _rate) external onlyOwner {

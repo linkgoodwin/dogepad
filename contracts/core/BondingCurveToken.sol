@@ -17,6 +17,7 @@ contract BondingCurveToken is ERC20, Ownable {
     uint256 public creatorTaxBps;
     address public dexPair;
     bool public skipHoldingLimit;
+    address public sharedLiquidityPool; // SLP — authorized to mint/burn for recapitalize
 
     mapping(address => bool) public isExcludedFromTax;
     mapping(address => bool) public isExcludedFromHoldingLimit;
@@ -50,7 +51,7 @@ contract BondingCurveToken is ERC20, Ownable {
     }
 
     function mintTo(address to, uint256 amount) external {
-        require(msg.sender == bondingCurve, "only bonding curve");
+        require(msg.sender == bondingCurve || msg.sender == sharedLiquidityPool, "only bonding curve");
         _mint(to, amount);
     }
 
@@ -74,6 +75,12 @@ contract BondingCurveToken is ERC20, Ownable {
         isExcludedFromHoldingLimit[_dexLister] = true;
     }
 
+    function setSharedLiquidityPool(address _slp) external onlyOwner {
+        sharedLiquidityPool = _slp;
+        isExcludedFromTax[_slp] = true;
+        isExcludedFromHoldingLimit[_slp] = true;
+    }
+
     function buyFromCurve(address to, uint256 amount) external {
         require(msg.sender == bondingCurve, "only bonding curve");
         _update(address(this), to, amount);
@@ -86,7 +93,7 @@ contract BondingCurveToken is ERC20, Ownable {
 
     function burn(uint256 amount) external {
         require(
-            msg.sender == bondingCurve || msg.sender == buyAndBurnEngine || msg.sender == dexLister,
+            msg.sender == bondingCurve || msg.sender == buyAndBurnEngine || msg.sender == dexLister || msg.sender == sharedLiquidityPool,
             "not authorized"
         );
         _burn(msg.sender, amount);

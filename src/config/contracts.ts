@@ -711,7 +711,101 @@ export const BONDING_CURVE_ABI = [
   },
 ] as const
 
+export const SHARED_LIQUIDITY_POOL_ABI = [
+  {
+    inputs: [],
+    name: 'totalShares',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'totalUsdcValue',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'lpShares',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getPoolInfo',
+    outputs: [
+      { internalType: 'uint256', name: 'usdcBalance', type: 'uint256' },
+      { internalType: 'uint256', name: 'tokenBalance', type: 'uint256' },
+      { internalType: 'uint256', name: 'longOI', type: 'uint256' },
+      { internalType: 'uint256', name: 'shortOI', type: 'uint256' },
+      { internalType: 'uint256', name: 'maxOI', type: 'uint256' },
+      { internalType: 'bool', name: 'active', type: 'bool' },
+      { internalType: 'bool', name: 'solvent', type: 'bool' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getNetExposure',
+    outputs: [{ internalType: 'int256', name: '', type: 'int256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'getHealthFactor',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'lp', type: 'address' },
+      { internalType: 'address', name: 'token', type: 'address' },
+    ],
+    name: 'getLPShareValue',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
+    name: 'addLiquidity',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { internalType: 'address', name: 'token', type: 'address' },
+      { internalType: 'uint256', name: 'shareAmount', type: 'uint256' },
+    ],
+    name: 'removeLiquidity',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const
+
 export const PERPETUAL_POOL_ABI = [
+  {
+    inputs: [],
+    name: 'sharedLiquidityPool',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_slp', type: 'address' }],
+    name: 'setSharedLiquidityPool',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
   {
     inputs: [
       { internalType: 'address', name: 'token', type: 'address' },
@@ -866,53 +960,12 @@ export const PERPETUAL_POOL_ABI = [
     type: 'function',
   },
   {
-    inputs: [
-      { internalType: 'address', name: 'user', type: 'address' },
-      { internalType: 'address', name: 'token', type: 'address' },
-    ],
-    name: 'getLiquidationPrice',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { internalType: 'address', name: 'user', type: 'address' },
-      { internalType: 'address', name: 'token', type: 'address' },
-    ],
-    name: 'getMarginHealth',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
     inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
     name: 'getOpenInterest',
     outputs: [
       { internalType: 'uint256', name: 'longOI', type: 'uint256' },
       { internalType: 'uint256', name: 'shortOI', type: 'uint256' },
     ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getCurrentFundingRate',
-    outputs: [{ internalType: 'int256', name: '', type: 'int256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getNextFundingTime',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getMarkPrice',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
   },
@@ -1278,6 +1331,7 @@ export interface ContractAddresses {
   bondingCurve: `0x${string}`
   dexLister: `0x${string}`
   perpetualPool: `0x${string}`
+  sharedLiquidityPool?: `0x${string}`
   buyAndBurn: `0x${string}`
   priceOracle: `0x${string}`
   feeDistributor: `0x${string}`
@@ -1331,15 +1385,16 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_MONAD_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xDe486b6f56555DabEaf792D48070dA2B6850C6Ac'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x74bF3cC93A5931C7f03B883a73dbafFF8Bd5a70d'),
-    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x546e824972bB883ba1Fc23C2C8B619E464BD192d'),
-    perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0x6538Ee7C326347b01Dc37db3eBa2c037ad8B1778'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xB9BA56A58CaC96CbdC64BF903Ceb8B307Be2B18B'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0xF1B31012A93cbF9853544dAA0323e70b79EfFb7E'),
+    dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0xdc5C1C7EA7F3Ad58c2565B3A8e5E695717435742'),
+    perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0xBD3155CBb17DbE6358D31d93cd2D5F6e2E3bb499'),
+    sharedLiquidityPool: resolveAddr('VITE_ARC_TESTNET_SHARED_LIQUIDITY_POOL_ADDRESS', 'VITE_SHARED_LIQUIDITY_POOL_ADDRESS', '0x962351e0e920AdE762EFB978EA3FAD138478a173'),
     buyAndBurn: resolveAddr('VITE_ARC_TESTNET_BUY_AND_BURN_ADDRESS', 'VITE_BUY_AND_BURN_ADDRESS', '0x2940F9B412A4817f3c4327EaB0016a74112E9102'),
     priceOracle: resolveAddr('VITE_ARC_TESTNET_PRICE_ORACLE_ADDRESS', 'VITE_PRICE_ORACLE_ADDRESS', '0xbCeC9B5bE183efeC684dfCB53642cCbF4398050c'),
     feeDistributor: resolveAddr('VITE_ARC_TESTNET_FEE_DISTRIBUTOR_ADDRESS', 'VITE_FEE_DISTRIBUTOR_ADDRESS', '0x447ac9048637f8A0a3f30E1b29Cf84cFBc62e5b0'),
     creatorRewardManager: resolveAddr('VITE_ARC_TESTNET_CREATOR_REWARD_MANAGER_ADDRESS', 'VITE_CREATOR_REWARD_MANAGER_ADDRESS', '0xBad4691B5DCd50bC023295B448ae4952425bA894'),
-    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0xeF92DCe8B6D22618Fb6eDAa8115DCfCFF74769ff'),
+    factory: resolveAddr('VITE_ARC_TESTNET_FACTORY_ADDRESS', 'VITE_FACTORY_ADDRESS', '0x533AF2EE8018865350da76c90cF12b99ed2b2E09'),
     simpleFactory: resolveAddr('VITE_ARC_TESTNET_SIMPLE_FACTORY_ADDRESS', 'VITE_SIMPLE_FACTORY_ADDRESS', '0xe33B42e94A58d7191196209aFd61B19c776FDcA1'),
     simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x307E97e90025e5924FD00CD5Af005AC18333a669'),
     wusdc: resolveAddr('VITE_ARC_TESTNET_WUSDC_ADDRESS', 'VITE_WUSDC_ADDRESS', '0x911b4000D3422F482F4062a913885f7b035382Df'),
