@@ -34,14 +34,13 @@ interface IDexLister {
 
 error TF(); error AL(); error ZU(); error ZT(); error ST();
 error ICT(); error IR(); error OFD(); error IF_(); error FTF();
-error NI(); error GNR(); error GIP();
+error NI(); error GNR(); error GIP(); error NA();
 
 contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
     using BondingCurveMath for uint256;
 
-    mapping(address => uint256) public refR; // referralRewards
-
+    mapping(address => uint256) public refR;
     mapping(address => TI) public ti;
     address public factory;
     address public launchDao;
@@ -88,6 +87,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
+        address creator,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
@@ -98,24 +98,22 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
             (bool ok,) = feeDist.call{value: msg.value}("");
             if (!ok) revert FTF();
         }
-        return _create(name, symbol, totalSupply, metadataURI, wantTaxShare, wantLpShare, wantTokenAllocation);
+        return _create(name, symbol, totalSupply, metadataURI, creator, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
-    /// @notice Create token for LaunchDAO (no creation fee)
-    /// @dev Implements IBondingCurveLaunch interface expected by LaunchDAO
     function createTokenForDao(
         string calldata name,
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        address /* voterPool */,
+        address creator,
         uint256 /* voterAllocationBps */,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
     ) external onlyFD nonReentrant returns (address) {
         if (!wantTaxShare && !wantLpShare && !wantTokenAllocation) revert NI();
-        return _create(name, symbol, totalSupply, metadataURI, wantTaxShare, wantLpShare, wantTokenAllocation);
+        return _create(name, symbol, totalSupply, metadataURI, creator, wantTaxShare, wantLpShare, wantTokenAllocation);
     }
 
     function _create(
@@ -123,24 +121,26 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
+        address creator,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
     ) internal returns (address) {
-        BondingCurveToken t = new BondingCurveToken(name, symbol, totalSupply, feeDist, msg.sender);
+        // Bug #2 fix: bondingCurve set in constructor, no external setBondingCurve needed
+        BondingCurveToken t = new BondingCurveToken(name, symbol, totalSupply, feeDist, creator, address(this));
 
-        t.setBondingCurve(address(this));
+        // These still need manual calls since BC owns the config
         if (burnEng != address(0)) t.setBuyAndBurnEngine(burnEng);
         if (dexLister != address(0)) t.setDexLister(dexLister);
 
-        BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 75 / 100);
-        BondingCurveToken(address(t)).mintTo(msg.sender, totalSupply * 10 / 100);
-        BondingCurveToken(address(t)).mintTo(address(this), totalSupply * 10 / 100);
-        BondingCurveToken(address(t)).mintTo(feeDist, totalSupply * 5 / 100);
+        t.mintTo(address(this), totalSupply * 75 / 100);
+        t.mintTo(creator, totalSupply * 10 / 100);
+        t.mintTo(address(this), totalSupply * 10 / 100);
+        t.mintTo(feeDist, totalSupply * 5 / 100);
 
         TI storage i = ti[address(t)];
         i.token = address(t);
-        i.creator = msg.sender;
+        i.creator = creator;
         i.totalSupply = totalSupply;
         i.gradThreshold = gradThreshold;
         i.metadataURI = metadataURI;
@@ -148,7 +148,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         i.cLS = wantLpShare;
         i.cTA = wantTokenAllocation;
 
-        emit Created(address(t), msg.sender, name, symbol, totalSupply);
+        emit Created(address(t), creator, name, symbol, totalSupply);
 
         if (priceOracle != address(0)) IPriceOracle(priceOracle).updateTwapPrice(address(t), 100 gwei);
 
@@ -173,12 +173,14 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         i.tokensSold += tokens;
         BondingCurveToken(t).buyFromCurve(recipient, tokens);
 
+        // Bug #6 fix: count referral tokens in tokensSold
         uint256 refReward = 0;
         if (referrer != address(0) && referrer != msg.sender && referrer != address(this)) {
             refReward = (net * BPS5) / 10000;
             uint256 refTokens = BondingCurveMath.calcBuyAmount(refReward, i.tokensSold, 100 gwei, 10000);
             if (refTokens > 0 && BondingCurveToken(t).balanceOf(address(this)) >= refTokens) {
                 BondingCurveToken(t).buyFromCurve(referrer, refTokens);
+                i.tokensSold += refTokens;  // Fix: track referral tokens
                 refR[referrer] += refTokens;
                 emit RefPaid(t, referrer, recipient, refTokens);
             }
@@ -235,26 +237,31 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         emit Sold(t, msg.sender, tokenAmt, net);
     }
 
+    // Bug #8 fix: add permission control
     function triggerGraduation(address t) external nonReentrant {
         TI storage i = ti[t];
         if (i.token == address(0)) revert TF();
         if (i.listed) revert AL();
+        if (msg.sender != factory && msg.sender != launchDao && msg.sender != i.creator) revert NA();
         i.graduating = true;
         emit GradTriggered(t, i.rUsdc);
     }
 
-    /// @notice List token on DEX — calls DexLister to add liquidity, then marks as listed
+    // Bug #4 fix: add permission control (onlyFD or creator)
     function listOnDex(address t) external nonReentrant {
         TI storage i = ti[t];
         if (i.token == address(0)) revert TF();
         if (i.listed) revert AL();
         if (i.rUsdc == 0) revert AL();
+        if (msg.sender != factory && msg.sender != launchDao && msg.sender != i.creator) revert NA();
 
         if (dexLister != address(0)) {
             IERC20(t).approve(dexLister, type(uint256).max);
             IDexLister(dexLister).listTokenSimple{value: i.rUsdc}(t, i.creator);
         }
 
+        // Bug #7 fix: clear rUsdc after sending to DexLister
+        i.rUsdc = 0;
         i.listed = true;
     }
 

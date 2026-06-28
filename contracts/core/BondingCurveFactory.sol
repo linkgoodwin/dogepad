@@ -28,26 +28,28 @@ contract BondingCurveFactory is Ownable {
     ) external payable returns (address) {
         if (msg.value < 0.1 ether) revert();
 
+        // Bug #5 fix: pass msg.sender as creator so BCT owner is the real user
         address token = BondingCurve(bondingCurve).createToken{value: msg.value}(
             name,
             symbol,
             totalSupply,
             metadataURI,
+            msg.sender,  // creator = real caller
             wantTaxShare,
             wantLpShare,
             wantTokenAllocation
         );
 
-        _registerToken(token);
+        _registerToken(token, msg.sender, name, symbol, totalSupply);
         return token;
     }
 
-    function _registerToken(address token) internal {
+    function _registerToken(address token, address creator, string calldata name, string calldata symbol, uint256 totalSupply) internal {
         allTokens.push(token);
         tokenToCurve[token] = bondingCurve;
         isTokenCreated[token] = true;
         tokenCount++;
-        emit TokenCreated(token, msg.sender, "", "", 0);
+        emit TokenCreated(token, creator, name, symbol, totalSupply);
     }
 
     function allTokensLength() external view returns (uint256) {

@@ -12,7 +12,7 @@ interface IBondingCurveLaunch {
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
-        address voterPool,
+        address creator,
         uint256 voterAllocationBps,
         bool wantTaxShare,
         bool wantLpShare,
@@ -35,7 +35,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     uint256 public constant EPOCH_DURATION = 1 days;
     uint256 public constant RIGHTS_CYCLE = 8 hours;
-    uint256 public constant LAUNCH_THRESHOLD = 20 ether;
+    uint256 public launchThreshold = 20 ether; // 鍙厤缃? 娴嬭瘯缃?0U, 涓荤綉20000U
     uint256 public constant FIXED_TOTAL_SUPPLY = 1_000_000_000e18;
     uint256 public constant MIN_SUBSCRIBE_USDC = 1 ether;
     uint256 public constant MIN_STAKE = 1e17;
@@ -267,7 +267,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
 
-        if (c.status == CandidateStatus.Active && c.totalSubUsdc >= LAUNCH_THRESHOLD) {
+        if (c.status == CandidateStatus.Active && c.totalSubUsdc >= launchThreshold) {
             _enqueueCandidate(candidateId);
         }
 
@@ -528,7 +528,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         Candidate storage c = candidates[candidateId];
         require(c.proposer == msg.sender, "not proposer");
         require(c.status == CandidateStatus.Active, "not active");
-        require(c.totalSubUsdc >= LAUNCH_THRESHOLD, "blt");
+        require(c.totalSubUsdc >= launchThreshold, "blt");
 
         _enqueueCandidate(candidateId);
 
@@ -632,9 +632,9 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             uint256 usdcUsed = c.totalSubUsdc;
             uint256 excessUsdc = 0;
 
-            if (c.totalSubUsdc > LAUNCH_THRESHOLD) {
-                excessUsdc = c.totalSubUsdc - LAUNCH_THRESHOLD;
-                usdcUsed = LAUNCH_THRESHOLD;
+            if (c.totalSubUsdc > launchThreshold) {
+                excessUsdc = c.totalSubUsdc - launchThreshold;
+                usdcUsed = launchThreshold;
             }
 
             if (usdcUsed > 0 && address(this).balance >= usdcUsed) {
@@ -657,7 +657,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
             _distributeLaunchedTokens(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
 
-            // DEX listing — no try/catch, let errors propagate (Jeremy Allaire: deterministic settlement)
+            // DEX listing 鈥?no try/catch, let errors propagate (Jeremy Allaire: deterministic settlement)
             IBondingCurveLaunch(bondingCurve).listOnDex(token);
 
             queueHead++;
@@ -883,7 +883,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 eligibleCount = 0;
         for (uint256 i = 0; i < activeCandidateIds.length; i++) {
             uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= LAUNCH_THRESHOLD) {
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= launchThreshold) {
                 eligibleCount++;
             }
         }
@@ -899,7 +899,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         for (uint256 i = 0; i < activeCandidateIds.length; i++) {
             uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= LAUNCH_THRESHOLD) {
+            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= launchThreshold) {
                 eligibleIds[idx] = cid;
                 scores[idx] = candidates[cid].totalSubUsdc + candidates[cid].totalWeight * DOGE_SCORE_MULTIPLIER;
                 idx++;
@@ -1208,6 +1208,11 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         feeDistributor = _feeDistributor;
     }
 
+    function setLaunchThreshold(uint256 _threshold) external onlyOwner {
+        require(_threshold > 0, "zero");
+        launchThreshold = _threshold;
+    }
+
     function setMaxLaunchsPerDay(uint256 _max) external onlyOwner {
         require(_max >= 1 && _max <= 3, "mx");
         maxLaunchsPerDay = _max;
@@ -1231,3 +1236,4 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     receive() external payable {}
 }
+

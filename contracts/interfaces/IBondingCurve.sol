@@ -10,12 +10,12 @@ interface IBondingCurve {
     function getReserve(address token) external view returns (uint256);
     function isListed(address token) external view returns (bool);
 
-    // Token creation
     function createToken(
         string calldata name,
         string calldata symbol,
         uint256 totalSupply,
         string calldata metadataURI,
+        address creator,
         bool wantTaxShare,
         bool wantLpShare,
         bool wantTokenAllocation
