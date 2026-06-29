@@ -130,7 +130,8 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         if (burnEng != address(0)) t.setBuyAndBurnEngine(burnEng);
         if (dexLister != address(0)) t.setDexLister(dexLister);
 
-        t.mintTo(address(this), totalSupply * 75 / 100);
+        // Mint: 75% to BCT contract (for bonding curve sales), 10% to creator, 10% to BC (perp/burn reserve), 5% to feeDist
+        t.mintTo(address(t), totalSupply * 75 / 100);
         t.mintTo(creator, totalSupply * 10 / 100);
         t.mintTo(address(this), totalSupply * 10 / 100);
         t.mintTo(feeDist, totalSupply * 5 / 100);
