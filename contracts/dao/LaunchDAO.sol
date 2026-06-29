@@ -37,7 +37,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     // === Subscription Parameters (all configurable) ===
     uint256 public constant SUBSCRIBE_DURATION = 1 hours;
     uint256 public constant FIXED_TOTAL_SUPPLY = 1_000_000_000e18;
-    uint256 public launchThreshold = 20 ether;       // gradThreshold: testnet 20U, mainnet 20000U
+    uint256 public launchThreshold = 20 ether;       // testnet 20U, mainnet 20000U
     uint256 public minSubThreshold = 3 ether;         // min total subscription: testnet 3U, mainnet 1000U
     uint256 public minWallets = 3;                    // min unique wallets: testnet 3, mainnet 10
     uint256 public minSubscribeUsdc = 1 ether;        // min per tx: testnet 1U, mainnet 10U

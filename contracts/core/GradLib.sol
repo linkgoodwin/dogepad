@@ -51,7 +51,6 @@ struct TI {
     uint256 tokensSold;
     bool listed;
     bool graduating;
-    uint256 gradThreshold;
     string metadataURI;
     bool hasPresale;
     uint256 psStart;

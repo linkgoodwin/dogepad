@@ -15,7 +15,6 @@ struct TI {
     uint256 totalSupply;
     uint256 rUsdc;
     uint256 tokensSold;
-    uint256 gradThreshold;
     string metadataURI;
     bool cTS;
     bool cLS;
@@ -51,7 +50,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
     address public burnEng;
     address public priceOracle;
     address payable public dexLister;
-    uint256 public gradThreshold = 10000 ether;
 
     uint256 private constant BPS3 = 300;
     uint256 private constant BPS5 = 500;
@@ -80,7 +78,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         dexRouter = _r; isXylo = _x; baseAsset = _b;
     }
     function setDexLister(address payable _d) external onlyOwner { dexLister = _d; }
-    function setGraduationThreshold(uint256 _t) external onlyOwner { gradThreshold = _t; }
 
     function createToken(
         string calldata name,
@@ -142,7 +139,6 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         i.token = address(t);
         i.creator = creator;
         i.totalSupply = totalSupply;
-        i.gradThreshold = gradThreshold;
         i.metadataURI = metadataURI;
         i.cTS = wantTaxShare;
         i.cLS = wantLpShare;

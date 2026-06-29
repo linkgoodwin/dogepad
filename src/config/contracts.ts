@@ -391,20 +391,6 @@ export const BONDING_CURVE_ABI = [
   },
   {
     inputs: [],
-    name: 'graduationThreshold',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ internalType: 'uint256', name: '_threshold', type: 'uint256' }],
-    name: 'setGraduationThreshold',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [],
     name: 'defaultPresaleDuration',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
@@ -649,14 +635,6 @@ export const BONDING_CURVE_ABI = [
     name: 'createTokenForDao',
     outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  // --- Graduation Threshold ---
-  {
-    inputs: [],
-    name: 'gradThreshold',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
     type: 'function',
   },
   {
