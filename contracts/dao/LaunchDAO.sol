@@ -253,14 +253,20 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         c.launchedTokenSupply = tokensReceived;
         c.launchedUsdcUsed = totalUsdc;
 
-        // 4. Distribute bought tokens to subscribers proportionally
+        // 4. Skip holding limit for internal distribution
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(true);
+
+        // 5. Distribute bought tokens to subscribers proportionally
         _distributeTokens(candidateId, token, totalUsdc, tokensReceived);
 
-        // 5. Transfer creator allocation (10%) to proposer
+        // 6. Transfer creator allocation (10%) to proposer
         uint256 creatorBal = IERC20(token).balanceOf(address(this));
         if (creatorBal > 0) {
             IERC20(token).safeTransfer(c.proposer, creatorBal);
         }
+
+        // 7. Re-enable holding limit
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
 
         // 6. Set dogeToken if not set (for staking)
         if (dogeToken == address(0)) dogeToken = token;
@@ -285,7 +291,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     ) internal {
         if (tokensReceived == 0 || totalUsdc == 0) return;
 
-        IBondingCurveTokenExclude(token).setSkipHoldingLimit(true);
+        // skipHoldingLimit is already set to true by _launchToken before calling this
 
         address[] storage supporters = candidateSupporters[candidateId];
         for (uint256 i = 0; i < supporters.length; i++) {
@@ -300,8 +306,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             sub.hasClaimed = true;
             emit SubscriptionClaimed(supporter, candidateId, token, share);
         }
-
-        IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
+        // skipHoldingLimit reset is deferred to _launchToken after all transfers
     }
 
     /// @notice Graduate a launched token to DEX after market trading pushes reserve to threshold.
