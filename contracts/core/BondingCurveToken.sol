@@ -63,19 +63,22 @@ contract BondingCurveToken is ERC20, Ownable {
         isExcludedFromHoldingLimit[_bondingCurve] = true;
     }
 
-    function setBuyAndBurnEngine(address _engine) external onlyOwner {
+    function setBuyAndBurnEngine(address _engine) external {
+        require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         buyAndBurnEngine = _engine;
         isExcludedFromTax[_engine] = true;
         isExcludedFromHoldingLimit[_engine] = true;
     }
 
-    function setDexLister(address _dexLister) external onlyOwner {
+    function setDexLister(address _dexLister) external {
+        require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         dexLister = _dexLister;
         isExcludedFromTax[_dexLister] = true;
         isExcludedFromHoldingLimit[_dexLister] = true;
     }
 
-    function setSharedLiquidityPool(address _slp) external onlyOwner {
+    function setSharedLiquidityPool(address _slp) external {
+        require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         sharedLiquidityPool = _slp;
         isExcludedFromTax[_slp] = true;
         isExcludedFromHoldingLimit[_slp] = true;
