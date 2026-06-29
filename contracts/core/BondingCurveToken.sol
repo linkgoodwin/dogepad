@@ -140,6 +140,13 @@ contract BondingCurveToken is ERC20, Ownable {
         skipHoldingLimit = skip;
     }
 
+    /// @notice Renounce ownership after DEX listing for full decentralization (pump.fun style).
+    ///         Tax and LP dividend logic are internal and continue to work after renouncement.
+    function renounceByLister() external {
+        require(msg.sender == dexLister, "not dex lister");
+        _transferOwnership(address(0));
+    }
+
     function excludeFromTax(address account) external {
         require(msg.sender == owner() || msg.sender == bondingCurve, "not authorized");
         isExcludedFromTax[account] = true;

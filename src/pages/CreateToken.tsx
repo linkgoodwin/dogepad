@@ -1,18 +1,11 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { parseEther } from 'viem'
 import { Flame, Info, Globe, Twitter, MessageCircle, Users, Upload, Clock, CheckCircle, Loader2, AlertTriangle, Wallet, X, Wifi, ChevronDown, ChevronUp, Zap } from 'lucide-react'
 import { useT } from '@/i18n/useT'
 import { cn } from '@/lib/utils'
 import { uploadToIpfs } from '@/lib/ipfs'
 import { LAUNCH_DAO_ABI, getContractAddress, isZeroAddress, isTestnet, getNetworkName, getNativeSymbol } from '@/config/contracts'
 import { useTargetChainId } from '@/hooks/useNetwork'
-
-const DURATION_TIERS = [
-  { value: 0, feeBnb: 0.1, labelKey: 'create.tier3Days' as const, descKey: 'create.tier3Desc' as const },
-  { value: 1, feeBnb: 0.5, labelKey: 'create.tier7Days' as const, descKey: 'create.tier7Desc' as const },
-  { value: 2, feeBnb: 1, labelKey: 'create.tier30Days' as const, descKey: 'create.tier30Desc' as const },
-]
 
 export default function CreateToken() {
   const t = useT()
@@ -35,7 +28,6 @@ export default function CreateToken() {
   const [discord, setDiscord] = useState('')
   const [aboutCoin, setAboutCoin] = useState('')
   const [description, setDescription] = useState('')
-  const [selectedTier, setSelectedTier] = useState(1)
   const [wantTaxShare, setWantTaxShare] = useState(true)
   const [wantLpShare, setWantLpShare] = useState(true)
   const [wantTokenAllocation, setWantTokenAllocation] = useState(true)
@@ -45,14 +37,7 @@ export default function CreateToken() {
   const [txError, setTxError] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const selectedTierInfo = DURATION_TIERS[selectedTier]
   const isContractNotDeployed = isZeroAddress(daoAddress)
-
-  const totalFee = useMemo(() => {
-    return selectedTierInfo.feeBnb
-  }, [selectedTierInfo.feeBnb])
-
-  const totalFeeStr = `${totalFee.toFixed(2)} ${nativeSymbol}`
 
   const sanitizeUrl = (url: string): string => {
     if (!url) return ''
@@ -137,14 +122,13 @@ export default function CreateToken() {
     setTxError('')
     try {
       const metadataURI = buildMetadataURI()
-      const feeWei = parseEther(totalFee.toFixed(4))
 
       const hash = await writeContractAsync({
         address: daoAddress,
         abi: LAUNCH_DAO_ABI,
         functionName: 'submitCandidate',
-        args: [name, symbol, metadataURI, selectedTier, wantTaxShare, wantLpShare, wantTokenAllocation],
-        value: feeWei,
+        args: [name, symbol, metadataURI, wantTaxShare, wantLpShare, wantTokenAllocation],
+        value: 0n,
         chainId,
         gas: 5_000_000n,
       } as any)
@@ -168,7 +152,6 @@ export default function CreateToken() {
     setName(''); setSymbol(''); setAvatarUrl(''); setWebsite('')
     setTwitter(''); setTelegram(''); setDiscord('')
     setAboutCoin(''); setDescription('')
-    setSelectedTier(1)
   }
 
   useEffect(() => {
@@ -203,34 +186,13 @@ export default function CreateToken() {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-2 text-sm mb-2">
+            <div className="rounded-xl border border-doge-gold/20 bg-doge-gold/5 p-4">
+              <div className="flex items-center gap-2 text-sm mb-1">
                 <Clock className="w-4 h-4 text-doge-gold" />
-                <span className="font-semibold text-white">{t('create.durationTier')}</span>
+                <span className="font-semibold text-doge-gold">{t('create.durationTier')}</span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                {DURATION_TIERS.map((tier) => (
-                  <button
-                    key={tier.value}
-                    className={cn(
-                      'rounded-xl border-2 p-3 text-center transition-all duration-200',
-                      selectedTier === tier.value
-                        ? 'border-doge-gold bg-doge-gold/10 shadow-lg shadow-doge-gold/10'
-                        : 'border-dark-500 bg-dark-600 hover:border-dark-400'
-                    )}
-                    onClick={() => setSelectedTier(tier.value)}
-                  >
-                    <div className={cn('text-base font-display font-bold', selectedTier === tier.value ? 'text-doge-gold' : 'text-gray-300')}>
-                      {t(tier.labelKey)}
-                    </div>
-                    <div className={cn('text-sm font-display font-semibold mt-0.5', selectedTier === tier.value ? 'text-doge-gold' : 'text-gray-400')}>
-                      {tier.feeBnb.toFixed(2)} {nativeSymbol}
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">{t(tier.descKey)}</div>
-                    {selectedTier === tier.value && <CheckCircle className="w-3.5 h-3.5 text-doge-gold mx-auto mt-1.5" />}
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-gray-400">{t('create.tier1Hour')}</p>
+              <p className="text-[10px] text-gray-500 mt-1">{t('create.tier1HourDesc')}</p>
             </div>
 
             <div>
@@ -423,13 +385,9 @@ export default function CreateToken() {
                 <span className="text-gray-400">{t('create.totalSupply')}</span>
                 <span className="text-doge-gold font-semibold">1,000,000,000</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">{t('create.durationFee')}</span>
-                <span className="text-doge-gold font-semibold">{selectedTierInfo.feeBnb.toFixed(2)} {nativeSymbol}</span>
-              </div>
               <div className="flex justify-between pt-2 border-t border-dark-500/30">
                 <span className="text-gray-400">{t('create.expiry')}</span>
-                <span className="text-doge-gold font-semibold">{t(selectedTierInfo.labelKey)}</span>
+                <span className="text-doge-gold font-semibold">{t('create.tier1Hour')}</span>
               </div>
             </div>
           </div>
@@ -441,8 +399,8 @@ export default function CreateToken() {
                 <p className="text-xs text-gray-400">{t('create.totalCostDesc')}</p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-display font-bold text-doge-gold">{totalFeeStr}</p>
-                <p className="text-xs text-gray-400">{t(selectedTierInfo.labelKey)} {t('create.campaign')}</p>
+                <p className="text-2xl font-display font-bold text-doge-gold">0 {nativeSymbol}</p>
+                <p className="text-xs text-gray-400">{t('create.tier1Hour')} {t('create.campaign')}</p>
               </div>
             </div>
           </div>
@@ -506,7 +464,7 @@ export default function CreateToken() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">{t('create.durationTier')}</span>
-                      <span className="font-semibold">{t(selectedTierInfo.labelKey)}</span>
+                      <span className="font-semibold">{t('create.tier1Hour')}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">{t('create.creatorIncentives')}</span>
@@ -522,7 +480,7 @@ export default function CreateToken() {
 
                   <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 flex items-center justify-between">
                     <span className="text-sm text-doge-gold font-semibold">{t('create.totalCost')}</span>
-                    <span className="text-xl font-display font-bold text-doge-gold">{totalFeeStr}</span>
+                    <span className="text-xl font-display font-bold text-doge-gold">0 {nativeSymbol}</span>
                   </div>
 
                   <div className="flex items-start gap-2 bg-neon-yellow/5 border border-neon-yellow/20 rounded-lg p-3">

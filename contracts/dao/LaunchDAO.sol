@@ -20,8 +20,9 @@ interface IBondingCurveLaunch {
     ) external returns (address);
 
     function buy(address token, uint256 minTokensOut, address recipient) external payable;
-
     function listOnDex(address token) external;
+    function triggerGraduation(address token) external;
+    function getReserve(address token) external view returns (uint256);
 }
 
 interface IBondingCurveTokenExclude {
@@ -33,81 +34,60 @@ interface IBondingCurveTokenExclude {
 contract LaunchDAO is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 public constant EPOCH_DURATION = 1 days;
-    uint256 public constant RIGHTS_CYCLE = 8 hours;
-    uint256 public launchThreshold = 20 ether; // 鍙厤缃? 娴嬭瘯缃?0U, 涓荤綉20000U
+    // === Subscription Parameters (all configurable) ===
+    uint256 public constant SUBSCRIBE_DURATION = 1 hours;
     uint256 public constant FIXED_TOTAL_SUPPLY = 1_000_000_000e18;
-    uint256 public constant MIN_SUBSCRIBE_USDC = 1 ether;
+    uint256 public launchThreshold = 20 ether;       // gradThreshold: testnet 20U, mainnet 20000U
+    uint256 public minSubThreshold = 3 ether;         // min total subscription: testnet 3U, mainnet 1000U
+    uint256 public minWallets = 3;                    // min unique wallets: testnet 3, mainnet 10
+    uint256 public minSubscribeUsdc = 1 ether;        // min per tx: testnet 1U, mainnet 10U
+
+    // === Staking Constants ===
     uint256 public constant MIN_STAKE = 1e17;
     uint256 public constant MAX_STAKE = 300 ether;
-    uint256 public constant DOGE_USDC_RATE = 100;
-    uint256 public constant DAILY_QUEUE_LIMIT = 3;
-
+    uint256 public constant RIGHTS_CYCLE = 8 hours;
     uint256 public constant RIGHTS_DENOMINATOR = 6e21;
-    uint256 public constant DOGE_SCORE_MULTIPLIER = 3;
-
     uint256 public constant USDC_RIGHTS_BASE = 600;
     uint256 public constant DOGE_RIGHTS_BASE = 6;
     uint256 public constant CONVERGE_THRESHOLD = 500;
     uint256 public constant MAX_EFFECTIVE_RIGHTS = 1000;
-
-    uint256 public constant SUBSCRIBE_DENOM = 1e20;
-    uint256 public constant SUBSCRIBE_USDC_WEIGHT = 10000;
-
     uint256 public constant DEMAND_BPS = 100;
     uint256 public constant FIXED_30_BPS = 150;
     uint256 public constant FIXED_90_BPS = 200;
     uint256 public constant FIXED_180_BPS = 300;
-
     uint256 public constant FIXED_30_DURATION = 30 days;
     uint256 public constant FIXED_90_DURATION = 90 days;
     uint256 public constant FIXED_180_DURATION = 180 days;
+    uint256 public constant SUBSCRIBE_DENOM = 1e20;
+    uint256 public constant SUBSCRIBE_USDC_WEIGHT = 10000;
 
-    uint256 public constant SETTLE_REWARD = 10e18;
-    uint256 public constant LAUNCH_REWARD = 20e18;
-
-    uint256 public constant TIER_1_DURATION = 3 days;
-    uint256 public constant TIER_7_DURATION = 7 days;
-    uint256 public constant TIER_30_DURATION = 30 days;
-    uint256 public constant TIER_1_FEE = 0.1 ether;
-    uint256 public constant TIER_7_FEE = 0.5 ether;
-    uint256 public constant TIER_30_FEE = 1 ether;
-
-    enum CandidateStatus { Active, Queued, Expired, GracePeriod, Recyclable, ReadyToLaunch, Launched }
-    enum DurationTier { Day3, Day7, Day30 }
+    // === Enums ===
+    enum CandidateStatus { Active, Launched, Failed }
     enum StakeDuration { Demand, Days30, Days90, Days180 }
 
+    // === Structs ===
     struct Candidate {
         address proposer;
         string name;
         string symbol;
         string metadataURI;
-        uint256 totalWeight;
         uint256 totalSubUsdc;
-        uint256 totalSubDoge;
+        uint256 totalWeight;
         uint256 totalRightsVotes;
         uint256 submitTime;
-        uint256 durationTier;
         uint256 expireTime;
-        uint256 gracePeriodEnd;
         CandidateStatus status;
-        bool wasLaunched;
         address launchedToken;
         uint256 launchedTokenSupply;
         uint256 launchedUsdcUsed;
-        uint256 launchedExcessUsdc;
-        uint256 launchedDogeUsed;
-        uint256 launchedExcessDoge;
-        uint256 queueTime;
-        uint256 launchAt;
         bool wantTaxShare;
         bool wantLpShare;
         bool wantTokenAllocation;
+        uint256 walletCount;
     }
 
     struct Subscription {
         uint256 usdcAmount;
-        uint256 dogeAmount;
         uint256 subscribeTime;
         bool isActive;
         bool hasClaimed;
@@ -124,98 +104,248 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         uint256 lastRightsClaimTime;
     }
 
-    struct EpochInfo {
-        uint256 dayStart;
-        uint256 winningCandidateId;
-        bool isSettled;
-        bool settleRewardClaimed;
-        bool launchRewardClaimed;
-    }
-
+    // === State ===
     address public bondingCurve;
     address public feeDistributor;
     address public dogeToken;
 
-    bool public defaultWantTaxShare = true;
-    bool public defaultWantLpShare = true;
-    bool public defaultWantTokenAllocation = true;
-
     Candidate[] public candidates;
-    uint256[] public activeCandidateIds;
-    uint256[] public launchQueueItems;
-    uint256 public queueHead;
-    mapping(uint256 => uint256) public queueScore;
-
     mapping(address => mapping(uint256 => Subscription)) public userSubscriptions;
     mapping(address => StakePosition[]) public userStakePositions;
     mapping(address => uint256) public userRawRights;
     mapping(address => uint256) public userEffectiveSpent;
     uint256 public totalStakedUsdc;
     uint256 public totalStakedDoge;
-    uint256 public rewardPool;
-
     mapping(uint256 => address[]) public candidateSupporters;
     mapping(uint256 => mapping(address => bool)) public isSupporter;
 
-    uint256 public currentDay;
-    uint256 public lastLaunchDay;
-    uint256 public maxLaunchsPerDay = 3;
-    uint256 public launchHour = 0;
-    uint256 public lastQueueDay;
-    mapping(uint256 => uint256) public dayLaunchCount;
-    mapping(uint256 => EpochInfo) public epochInfo;
-
-    event Subscribed(address indexed user, uint256 indexed candidateId, uint256 usdcAmount, uint256 dogeAmount, uint256 weight);
+    // === Events ===
+    event Subscribed(address indexed user, uint256 indexed candidateId, uint256 usdcAmount, uint256 weight);
     event SubscriptionClaimed(address indexed user, uint256 indexed candidateId, address token, uint256 tokenAmount);
-    event SubscriptionRefunded(address indexed user, uint256 indexed candidateId, uint256 usdcAmount, uint256 dogeAmount);
+    event SubscriptionRefunded(address indexed user, uint256 indexed candidateId, uint256 usdcAmount);
     event Staked(address indexed user, address token, uint256 amount, StakeDuration duration, uint256 positionId);
     event Unstaked(address indexed user, uint256 positionId, address token, uint256 amount);
     event RightsClaimed(address indexed user, uint256 amount);
     event RightsVoted(address indexed user, uint256 indexed candidateId, uint256 amount);
-    event CandidateSubmitted(uint256 indexed candidateId, address indexed proposer, string name, string symbol, DurationTier tier);
-    event CandidateQueued(uint256 indexed candidateId);
-    event CandidateRenewed(uint256 indexed candidateId, address indexed proposer, DurationTier tier);
-    event CandidateRecycled(uint256 indexed candidateId, address indexed newProposer, DurationTier tier);
-    event EpochSettled(uint256 indexed day, uint256 winningCandidateId);
-    event DailyEnqueue(uint256 indexed day, uint256 count);
-    event TokenLaunched(uint256 indexed candidateId, address token, uint256 usdcUsed, uint256 tokensReceived, uint256 excessUsdc);
-    event CandidateReadyToLaunch(uint256 indexed candidateId, address token);
-    event RewardsDeposited(address indexed from, uint256 amount);
+    event CandidateSubmitted(uint256 indexed candidateId, address indexed proposer, string name, string symbol);
+    event TokenLaunched(uint256 indexed candidateId, address token, uint256 usdcUsed, uint256 tokensReceived);
+    event SubscriptionFinalized(uint256 indexed candidateId, bool success, uint256 totalUsdc, uint256 walletCount);
+    event TokenGraduated(uint256 indexed candidateId, address token);
 
-    error InvalidDurationTier();
-    error InsufficientFee();
-    error CandidateNotExpired();
-    error NotInGracePeriod();
-    error NotRecyclable();
-    error NotProposer();
-    error CandidateNotActive();
-
+    // === Constructor ===
     constructor(address _bondingCurve, address _feeDistributor) Ownable(msg.sender) {
         bondingCurve = _bondingCurve;
         feeDistributor = _feeDistributor;
-        currentDay = _today();
-        epochInfo[currentDay] = EpochInfo({
-            dayStart: _dayStart(currentDay),
-            winningCandidateId: type(uint256).max,
-            isSettled: false,
-            settleRewardClaimed: false,
-            launchRewardClaimed: false
-        });
     }
 
-    function getTierDuration(DurationTier tier) public pure returns (uint256) {
-        if (tier == DurationTier.Day3) return TIER_1_DURATION;
-        if (tier == DurationTier.Day7) return TIER_7_DURATION;
-        if (tier == DurationTier.Day30) return TIER_30_DURATION;
-        revert InvalidDurationTier();
+    // ========================================
+    //  Core: 1-Hour Subscription Model
+    // ========================================
+
+    /// @notice Submit a new token candidate. Starts a 1-hour subscription period.
+    function submitCandidate(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI,
+        bool _wantTaxShare,
+        bool _wantLpShare,
+        bool _wantTokenAllocation
+    ) external payable nonReentrant {
+        require(bytes(name).length > 0 && bytes(name).length <= 64, "invalid name");
+        require(bytes(symbol).length >= 1 && bytes(symbol).length <= 11, "invalid symbol");
+        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
+
+        if (msg.value > 0) {
+            (bool sent, ) = feeDistributor.call{value: msg.value}("");
+            require(sent, "ftf");
+        }
+
+        candidates.push(Candidate({
+            proposer: msg.sender,
+            name: name,
+            symbol: symbol,
+            metadataURI: metadataURI,
+            totalSubUsdc: 0,
+            totalWeight: 0,
+            totalRightsVotes: 0,
+            submitTime: block.timestamp,
+            expireTime: block.timestamp + SUBSCRIBE_DURATION,
+            status: CandidateStatus.Active,
+            launchedToken: address(0),
+            launchedTokenSupply: 0,
+            launchedUsdcUsed: 0,
+            wantTaxShare: _wantTaxShare,
+            wantLpShare: _wantLpShare,
+            wantTokenAllocation: _wantTokenAllocation,
+            walletCount: 0
+        }));
+
+        emit CandidateSubmitted(candidates.length - 1, msg.sender, name, symbol);
     }
 
-    function getTierFee(DurationTier tier) public pure returns (uint256) {
-        if (tier == DurationTier.Day3) return TIER_1_FEE;
-        if (tier == DurationTier.Day7) return TIER_7_FEE;
-        if (tier == DurationTier.Day30) return TIER_30_FEE;
-        revert InvalidDurationTier();
+    /// @notice Subscribe USDC to a candidate during its 1-hour window. No refunds during this period.
+    function subscribeUsdc(uint256 candidateId) external payable nonReentrant {
+        require(candidateId < candidates.length, "invalid candidate");
+        require(msg.value >= minSubscribeUsdc, "below min");
+
+        Candidate storage c = candidates[candidateId];
+        require(c.status == CandidateStatus.Active, "not active");
+        require(block.timestamp <= c.expireTime, "ended");
+
+        uint256 weight = msg.value * SUBSCRIBE_USDC_WEIGHT / SUBSCRIBE_DENOM;
+
+        Subscription storage sub = userSubscriptions[msg.sender][candidateId];
+        sub.usdcAmount += msg.value;
+        sub.subscribeTime = block.timestamp;
+        sub.isActive = true;
+
+        if (!isSupporter[candidateId][msg.sender]) {
+            isSupporter[candidateId][msg.sender] = true;
+            candidateSupporters[candidateId].push(msg.sender);
+            c.walletCount++;
+        }
+
+        c.totalSubUsdc += msg.value;
+        c.totalWeight += weight;
+
+        emit Subscribed(msg.sender, candidateId, msg.value, weight);
     }
+
+    /// @notice Finalize subscription after 1 hour. Anyone can call.
+    ///         If threshold met: create token, inject USDC to BondingCurve, distribute tokens.
+    ///         If not met: mark as Failed for refund.
+    function finalizeSubscription(uint256 candidateId) external nonReentrant {
+        require(candidateId < candidates.length, "invalid candidate");
+        Candidate storage c = candidates[candidateId];
+        require(c.status == CandidateStatus.Active, "not active");
+        require(block.timestamp > c.expireTime, "not ended");
+
+        if (c.totalSubUsdc >= minSubThreshold && c.walletCount >= minWallets) {
+            _launchToken(candidateId);
+        } else {
+            c.status = CandidateStatus.Failed;
+            emit SubscriptionFinalized(candidateId, false, c.totalSubUsdc, c.walletCount);
+        }
+    }
+
+    function _launchToken(uint256 candidateId) internal {
+        Candidate storage c = candidates[candidateId];
+        uint256 totalUsdc = c.totalSubUsdc;
+
+        // 1. Create token (creator = LaunchDAO for permission control)
+        address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
+            c.name, c.symbol, FIXED_TOTAL_SUPPLY, c.metadataURI,
+            address(this), 0, c.wantTaxShare, c.wantLpShare, c.wantTokenAllocation
+        );
+
+        // 2. Exclude LaunchDAO from tax/holding for distribution
+        IBondingCurveTokenExclude(token).excludeFromTax(address(this));
+        IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
+
+        // 3. Buy tokens with ALL subscription USDC → injects USDC as BondingCurve reserve
+        //    balBefore includes the 10% creator allocation minted to LaunchDAO
+        uint256 balBefore = IERC20(token).balanceOf(address(this));
+        IBondingCurveLaunch(bondingCurve).buy{value: totalUsdc}(token, 0, address(this));
+        uint256 tokensReceived = IERC20(token).balanceOf(address(this)) - balBefore;
+
+        c.status = CandidateStatus.Launched;
+        c.launchedToken = token;
+        c.launchedTokenSupply = tokensReceived;
+        c.launchedUsdcUsed = totalUsdc;
+
+        // 4. Distribute bought tokens to subscribers proportionally
+        _distributeTokens(candidateId, token, totalUsdc, tokensReceived);
+
+        // 5. Transfer creator allocation (10%) to proposer
+        uint256 creatorBal = IERC20(token).balanceOf(address(this));
+        if (creatorBal > 0) {
+            IERC20(token).safeTransfer(c.proposer, creatorBal);
+        }
+
+        // 6. Set dogeToken if not set (for staking)
+        if (dogeToken == address(0)) dogeToken = token;
+
+        emit TokenLaunched(candidateId, token, totalUsdc, tokensReceived);
+        emit SubscriptionFinalized(candidateId, true, totalUsdc, c.walletCount);
+
+        // 7. Auto-graduate if reserve already meets threshold
+        uint256 reserve = IBondingCurveLaunch(bondingCurve).getReserve(token);
+        if (reserve >= launchThreshold) {
+            IBondingCurveLaunch(bondingCurve).triggerGraduation(token);
+            IBondingCurveLaunch(bondingCurve).listOnDex(token);
+            emit TokenGraduated(candidateId, token);
+        }
+    }
+
+    function _distributeTokens(
+        uint256 candidateId,
+        address token,
+        uint256 totalUsdc,
+        uint256 tokensReceived
+    ) internal {
+        if (tokensReceived == 0 || totalUsdc == 0) return;
+
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(true);
+
+        address[] storage supporters = candidateSupporters[candidateId];
+        for (uint256 i = 0; i < supporters.length; i++) {
+            address supporter = supporters[i];
+            Subscription storage sub = userSubscriptions[supporter][candidateId];
+            if (!sub.isActive || sub.hasClaimed) continue;
+
+            uint256 share = (sub.usdcAmount * tokensReceived) / totalUsdc;
+            if (share > 0) {
+                IERC20(token).safeTransfer(supporter, share);
+            }
+            sub.hasClaimed = true;
+            emit SubscriptionClaimed(supporter, candidateId, token, share);
+        }
+
+        IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
+    }
+
+    /// @notice Graduate a launched token to DEX after market trading pushes reserve to threshold.
+    function graduateToken(uint256 candidateId) external nonReentrant {
+        require(candidateId < candidates.length, "invalid candidate");
+        Candidate storage c = candidates[candidateId];
+        require(c.status == CandidateStatus.Launched, "not launched");
+        require(c.launchedToken != address(0), "no token");
+
+        address token = c.launchedToken;
+        uint256 reserve = IBondingCurveLaunch(bondingCurve).getReserve(token);
+        require(reserve >= launchThreshold, "below threshold");
+
+        IBondingCurveLaunch(bondingCurve).triggerGraduation(token);
+        IBondingCurveLaunch(bondingCurve).listOnDex(token);
+
+        emit TokenGraduated(candidateId, token);
+    }
+
+    /// @notice Refund subscription if candidate failed to meet threshold.
+    function refundSubscription(uint256 candidateId) external nonReentrant {
+        require(candidateId < candidates.length, "invalid candidate");
+        Candidate storage c = candidates[candidateId];
+        require(c.status == CandidateStatus.Failed, "not failed");
+
+        Subscription storage sub = userSubscriptions[msg.sender][candidateId];
+        require(sub.isActive, "nosub");
+        require(!sub.hasRefunded, "refunded");
+
+        sub.hasRefunded = true;
+        sub.isActive = false;
+
+        uint256 usdcReturn = sub.usdcAmount;
+        if (usdcReturn > 0) {
+            (bool success, ) = payable(msg.sender).call{value: usdcReturn}("");
+            require(success, "tf");
+        }
+
+        emit SubscriptionRefunded(msg.sender, candidateId, usdcReturn);
+    }
+
+    // ========================================
+    //  Staking (Rights & Rewards)
+    // ========================================
 
     function getStakeDurationSeconds(StakeDuration d) public pure returns (uint256) {
         if (d == StakeDuration.Demand) return 0;
@@ -236,57 +366,20 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
     function _getRightsBase(address token) internal view returns (uint256) {
         if (token == address(0)) return USDC_RIGHTS_BASE;
         if (token == dogeToken) return DOGE_RIGHTS_BASE;
-        revert("unsupported token");
-    }
-
-    function subscribeUsdc(uint256 candidateId) external payable nonReentrant {
-        require(candidateId < candidates.length, "invalid candidate");
-        require(msg.value >= MIN_SUBSCRIBE_USDC, "below min sub");
-
-        _tryAdvanceDay();
-        _updateCandidateStatus(candidateId);
-
-        Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "nAQ");
-
-        uint256 weight = msg.value * SUBSCRIBE_USDC_WEIGHT / SUBSCRIBE_DENOM;
-
-        Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        sub.usdcAmount += msg.value;
-        sub.subscribeTime = block.timestamp;
-        sub.isActive = true;
-
-        if (!isSupporter[candidateId][msg.sender]) {
-            isSupporter[candidateId][msg.sender] = true;
-            candidateSupporters[candidateId].push(msg.sender);
-        }
-
-        c.totalSubUsdc += msg.value;
-        c.totalWeight += weight;
-        c.totalRightsVotes += weight;
-
-        emit Subscribed(msg.sender, candidateId, msg.value, 0, weight);
-
-        if (c.status == CandidateStatus.Active && c.totalSubUsdc >= launchThreshold) {
-            _enqueueCandidate(candidateId);
-        }
-
-        _processQueueInternal();
+        revert("unsupported");
     }
 
     function stakeUsdc(StakeDuration duration) external payable nonReentrant {
         require(msg.value >= MIN_STAKE, "min stk");
-        uint256 newUsdc = msg.value;
-        require(newUsdc <= MAX_STAKE, "max stk");
+        require(msg.value <= MAX_STAKE, "max stk");
 
         uint256 maturityTime = duration == StakeDuration.Demand
-            ? 0
-            : block.timestamp + getStakeDurationSeconds(duration);
+            ? 0 : block.timestamp + getStakeDurationSeconds(duration);
 
         uint256 posId = userStakePositions[msg.sender].length;
         userStakePositions[msg.sender].push(StakePosition({
             token: address(0),
-            amount: newUsdc,
+            amount: msg.value,
             startTime: block.timestamp,
             duration: duration,
             maturityTime: maturityTime,
@@ -294,21 +387,17 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             lastRightsClaimTime: block.timestamp
         }));
 
-        totalStakedUsdc += newUsdc;
-
-        emit Staked(msg.sender, address(0), newUsdc, duration, posId);
-        _processQueueInternal();
+        totalStakedUsdc += msg.value;
+        emit Staked(msg.sender, address(0), msg.value, duration, posId);
     }
 
     function stakeDoge(uint256 amount, StakeDuration duration) external nonReentrant {
-        require(amount > 0, "zero amount");
+        require(amount > 0, "zero");
         require(dogeToken != address(0), "dtns");
-
         IERC20(dogeToken).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 maturityTime = duration == StakeDuration.Demand
-            ? 0
-            : block.timestamp + getStakeDurationSeconds(duration);
+            ? 0 : block.timestamp + getStakeDurationSeconds(duration);
 
         uint256 posId = userStakePositions[msg.sender].length;
         userStakePositions[msg.sender].push(StakePosition({
@@ -322,25 +411,19 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }));
 
         totalStakedDoge += amount;
-
         emit Staked(msg.sender, dogeToken, amount, duration, posId);
-        _processQueueInternal();
     }
 
     function unstakePosition(uint256 positionId) external nonReentrant {
-        require(positionId < userStakePositions[msg.sender].length, "invalid position");
+        require(positionId < userStakePositions[msg.sender].length, "invalid");
         StakePosition storage pos = userStakePositions[msg.sender][positionId];
-        require(!pos.withdrawn, "already withdrawn");
-        require(pos.amount > 0, "zero amount");
+        require(!pos.withdrawn, "withdrawn");
+        require(pos.amount > 0, "zero");
 
-        if (pos.maturityTime > 0) {
-            require(block.timestamp >= pos.maturityTime, "not matured");
-        }
+        if (pos.maturityTime > 0) require(block.timestamp >= pos.maturityTime, "not matured");
 
         uint256 pending = _calcPositionRights(pos);
-        if (pending > 0) {
-            userRawRights[msg.sender] += pending;
-        }
+        if (pending > 0) userRawRights[msg.sender] += pending;
 
         pos.withdrawn = true;
         uint256 amount = pos.amount;
@@ -348,8 +431,8 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
         if (token == address(0)) {
             totalStakedUsdc -= amount;
-            (bool success, ) = payable(msg.sender).call{value: amount}("");
-            require(success, "tf");
+            (bool s, ) = payable(msg.sender).call{value: amount}("");
+            require(s, "tf");
         } else if (token == dogeToken) {
             totalStakedDoge -= amount;
             IERC20(dogeToken).safeTransfer(msg.sender, amount);
@@ -360,7 +443,7 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
 
     function claimRights() external nonReentrant {
         uint256 total = _calcAllPendingRights(msg.sender);
-        require(total > 0, "no pending rights");
+        require(total > 0, "none");
 
         StakePosition[] storage positions = userStakePositions[msg.sender];
         for (uint256 i = 0; i < positions.length; i++) {
@@ -368,22 +451,17 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
                 positions[i].lastRightsClaimTime = block.timestamp;
             }
         }
-
         userRawRights[msg.sender] += total;
-
         emit RightsClaimed(msg.sender, total);
     }
 
     function voteWithRights(uint256 candidateId, uint256 amount) external nonReentrant {
-        require(candidateId < candidates.length, "invalid candidate");
-        require(amount > 0, "zero amount");
-        require(amount <= getEffectiveRights(msg.sender), "insufficient rights");
-
-        _tryAdvanceDay();
-        _updateCandidateStatus(candidateId);
+        require(candidateId < candidates.length, "invalid");
+        require(amount > 0, "zero");
+        require(amount <= getEffectiveRights(msg.sender), "insufficient");
 
         Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active || c.status == CandidateStatus.Queued, "nAQ");
+        require(c.status == CandidateStatus.Active, "not active");
 
         userEffectiveSpent[msg.sender] += amount;
         c.totalRightsVotes += amount;
@@ -395,413 +473,14 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
 
         emit RightsVoted(msg.sender, candidateId, amount);
-        _processQueueInternal();
     }
 
-    function submitCandidate(
-        string calldata name,
-        string calldata symbol,
-        string calldata metadataURI,
-        DurationTier tier,
-        bool _wantTaxShare,
-        bool _wantLpShare,
-        bool _wantTokenAllocation
-    ) external payable nonReentrant {
-        uint256 fee = getTierFee(tier);
-        if (msg.value < fee) revert InsufficientFee();
-        require(bytes(name).length > 0 && bytes(name).length <= 64, "invalid name");
-        require(bytes(symbol).length >= 1 && bytes(symbol).length <= 11, "invalid symbol");
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
-
-        _tryAdvanceDay();
-
-        if (msg.value > 0) {
-            (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "ftf");
-        }
-
-        uint256 duration = getTierDuration(tier);
-
-        candidates.push(Candidate({
-            proposer: msg.sender,
-            name: name,
-            symbol: symbol,
-            metadataURI: metadataURI,
-            totalWeight: 0,
-            totalSubUsdc: 0,
-            totalSubDoge: 0,
-            totalRightsVotes: 0,
-            submitTime: block.timestamp,
-            durationTier: uint256(tier),
-            expireTime: block.timestamp + duration,
-            gracePeriodEnd: block.timestamp + duration + duration,
-            status: CandidateStatus.Active,
-            wasLaunched: false,
-            launchedToken: address(0),
-            launchedTokenSupply: 0,
-            launchedUsdcUsed: 0,
-            launchedExcessUsdc: 0,
-            launchedDogeUsed: 0,
-            launchedExcessDoge: 0,
-            queueTime: 0,
-            launchAt: 0,
-            wantTaxShare: _wantTaxShare,
-            wantLpShare: _wantLpShare,
-            wantTokenAllocation: _wantTokenAllocation
-        }));
-        activeCandidateIds.push(candidates.length - 1);
-
-        emit CandidateSubmitted(candidates.length - 1, msg.sender, name, symbol, tier);
-    }
-
-    function renewCandidate(uint256 candidateId, DurationTier tier, bool _wantTaxShare, bool _wantLpShare, bool _wantTokenAllocation) external payable nonReentrant {
-        if (candidateId >= candidates.length) revert CandidateNotActive();
-        Candidate storage c = candidates[candidateId];
-        if (c.proposer != msg.sender) revert NotProposer();
-        if (c.status != CandidateStatus.GracePeriod) revert NotInGracePeriod();
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
-
-        uint256 fee = getTierFee(tier);
-        if (msg.value < fee) revert InsufficientFee();
-
-        if (msg.value > 0) {
-            (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "ftf");
-        }
-
-        uint256 duration = getTierDuration(tier);
-        c.durationTier = uint256(tier);
-        c.expireTime = block.timestamp + duration;
-        c.gracePeriodEnd = block.timestamp + duration + duration;
-        c.status = CandidateStatus.Active;
-        c.wantTaxShare = _wantTaxShare;
-        c.wantLpShare = _wantLpShare;
-        c.wantTokenAllocation = _wantTokenAllocation;
-
-        if (!_isInActiveList(candidateId)) {
-            activeCandidateIds.push(candidateId);
-        }
-
-        emit CandidateRenewed(candidateId, msg.sender, tier);
-    }
-
-    function claimRecycled(uint256 candidateId, DurationTier tier, bool _wantTaxShare, bool _wantLpShare, bool _wantTokenAllocation) external payable nonReentrant {
-        if (candidateId >= candidates.length) revert CandidateNotActive();
-        Candidate storage c = candidates[candidateId];
-        if (c.status != CandidateStatus.Recyclable) revert NotRecyclable();
-        require(_wantTaxShare || _wantLpShare || _wantTokenAllocation, "1+");
-
-        uint256 fee = getTierFee(tier);
-        if (msg.value < fee) revert InsufficientFee();
-
-        if (msg.value > 0) {
-            (bool sent, ) = feeDistributor.call{value: msg.value}("");
-            require(sent, "ftf");
-        }
-
-        uint256 duration = getTierDuration(tier);
-        c.proposer = msg.sender;
-        c.durationTier = uint256(tier);
-        c.submitTime = block.timestamp;
-        c.expireTime = block.timestamp + duration;
-        c.gracePeriodEnd = block.timestamp + duration + duration;
-        c.totalWeight = 0;
-        c.totalSubUsdc = 0;
-        c.totalSubDoge = 0;
-        c.totalRightsVotes = 0;
-        c.status = CandidateStatus.Active;
-        c.wantTaxShare = _wantTaxShare;
-        c.wantLpShare = _wantLpShare;
-        c.wantTokenAllocation = _wantTokenAllocation;
-
-        if (!_isInActiveList(candidateId)) {
-            activeCandidateIds.push(candidateId);
-        }
-
-        emit CandidateRecycled(candidateId, msg.sender, tier);
-    }
-
-    event CandidateEarlyQueued(uint256 indexed candidateId, address indexed proposer);
-
-    function earlyQueue(uint256 candidateId) external nonReentrant {
-        require(candidateId < candidates.length, "invalid candidate");
-        Candidate storage c = candidates[candidateId];
-        require(c.proposer == msg.sender, "not proposer");
-        require(c.status == CandidateStatus.Active, "not active");
-        require(c.totalSubUsdc >= launchThreshold, "blt");
-
-        _enqueueCandidate(candidateId);
-
-        emit CandidateEarlyQueued(candidateId, msg.sender);
-        _processQueueInternal();
-    }
-
-    function settleEpoch() external nonReentrant {
-        _tryAdvanceDay();
-        _cleanupActiveCandidates();
-
-        EpochInfo storage epoch = epochInfo[currentDay];
-        require(!epoch.isSettled, "settled");
-        require(block.timestamp >= epoch.dayStart + EPOCH_DURATION, "ene");
-
-        uint256 winningId = type(uint256).max;
-        uint256 maxWeight = 0;
-
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            uint256 cid = activeCandidateIds[i];
-            _updateCandidateStatus(cid);
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalWeight > maxWeight) {
-                maxWeight = candidates[cid].totalWeight;
-                winningId = cid;
-            }
-        }
-
-        if (winningId != type(uint256).max && maxWeight > 0) {
-            // Mark winning candidate as ready to launch
-            candidates[winningId].status = CandidateStatus.ReadyToLaunch;
-            candidates[winningId].launchAt = block.timestamp;
-            emit CandidateReadyToLaunch(winningId, candidates[winningId].launchedToken);
-        }
-
-        epoch.winningCandidateId = winningId;
-        epoch.isSettled = true;
-
-        if (dogeToken != address(0) && rewardPool >= SETTLE_REWARD && !epoch.settleRewardClaimed) {
-            epoch.settleRewardClaimed = true;
-            rewardPool -= SETTLE_REWARD;
-            IERC20(dogeToken).safeTransfer(msg.sender, SETTLE_REWARD);
-        }
-
-        emit EpochSettled(currentDay, winningId);
-        _processQueueInternal();
-    }
-
-    function _processQueueInternal() internal {
-        uint256 today = _today();
-        if (dayLaunchCount[today] >= maxLaunchsPerDay) return;
-        if ((block.timestamp % EPOCH_DURATION) / 1 hours < launchHour) return;
-
-        _cleanupExpiredQueuedCandidates();
-
-        uint256 launched = 0;
-        while (launched < maxLaunchsPerDay && dayLaunchCount[today] < maxLaunchsPerDay) {
-            while (queueHead < launchQueueItems.length && candidates[launchQueueItems[queueHead]].status != CandidateStatus.Queued) {
-                queueHead++;
-            }
-
-            if (queueHead >= launchQueueItems.length) break;
-
-            uint256 bestIdx = queueHead;
-            uint256 bestScore = queueScore[launchQueueItems[queueHead]];
-            for (uint256 i = queueHead + 1; i < launchQueueItems.length; i++) {
-                uint256 cid = launchQueueItems[i];
-                if (candidates[cid].status == CandidateStatus.Queued && queueScore[cid] > bestScore) {
-                    bestScore = queueScore[cid];
-                    bestIdx = i;
-                }
-            }
-
-            if (bestIdx != queueHead) {
-                uint256 temp = launchQueueItems[queueHead];
-                launchQueueItems[queueHead] = launchQueueItems[bestIdx];
-                launchQueueItems[bestIdx] = temp;
-            }
-
-            uint256 candidateId = launchQueueItems[queueHead];
-            Candidate storage c = candidates[candidateId];
-
-            lastLaunchDay = today;
-            dayLaunchCount[today]++;
-
-            address token = IBondingCurveLaunch(bondingCurve).createTokenForDao(
-                c.name,
-                c.symbol,
-                FIXED_TOTAL_SUPPLY,
-                c.metadataURI,
-                address(this),
-                0,
-                c.wantTaxShare,
-                c.wantLpShare,
-                c.wantTokenAllocation
-            );
-
-            IBondingCurveTokenExclude(token).excludeFromTax(address(this));
-            IBondingCurveTokenExclude(token).excludeFromHoldingLimit(address(this));
-
-            uint256 tokensReceived = 0;
-            uint256 usdcUsed = c.totalSubUsdc;
-            uint256 excessUsdc = 0;
-
-            if (c.totalSubUsdc > launchThreshold) {
-                excessUsdc = c.totalSubUsdc - launchThreshold;
-                usdcUsed = launchThreshold;
-            }
-
-            if (usdcUsed > 0 && address(this).balance >= usdcUsed) {
-                uint256 balBefore = IERC20(token).balanceOf(address(this));
-                IBondingCurveLaunch(bondingCurve).buy{value: usdcUsed}(token, 0, address(this));
-                tokensReceived = IERC20(token).balanceOf(address(this)) - balBefore;
-            }
-
-            c.launchedUsdcUsed = usdcUsed;
-            c.launchedExcessUsdc = excessUsdc;
-
-            if (dogeToken == address(0)) {
-                dogeToken = token;
-            }
-
-            c.wasLaunched = true;
-            c.status = CandidateStatus.Launched;
-            c.launchedToken = token;
-            c.launchedTokenSupply = tokensReceived;
-
-            _distributeLaunchedTokens(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
-
-            // DEX listing 鈥?no try/catch, let errors propagate (Jeremy Allaire: deterministic settlement)
-            IBondingCurveLaunch(bondingCurve).listOnDex(token);
-
-            queueHead++;
-
-            emit TokenLaunched(candidateId, token, usdcUsed, tokensReceived, excessUsdc);
-
-            launched++;
-        }
-
-        EpochInfo storage epoch = epochInfo[currentDay];
-        if (dogeToken != address(0) && rewardPool >= LAUNCH_REWARD && !epoch.launchRewardClaimed) {
-            epoch.launchRewardClaimed = true;
-            rewardPool -= LAUNCH_REWARD;
-            IERC20(dogeToken).safeTransfer(msg.sender, LAUNCH_REWARD);
-        }
-    }
-
-    function processQueue() external nonReentrant {
-        _processQueueInternal();
-    }
-
-    function _distributeLaunchedTokens(
-        uint256 candidateId,
-        address token,
-        uint256 usdcUsed,
-        uint256 tokensReceived,
-        uint256 excessUsdc
-    ) internal {
-        if (tokensReceived == 0 || usdcUsed == 0) return;
-
-        // Skip holding limit during distribution (LaunchDAO is BCT owner)
-        IBondingCurveTokenExclude(token).setSkipHoldingLimit(true);
-
-        address[] storage supporters = candidateSupporters[candidateId];
-        for (uint256 i = 0; i < supporters.length; i++) {
-            address supporter = supporters[i];
-            Subscription storage sub = userSubscriptions[supporter][candidateId];
-            if (!sub.isActive || sub.hasClaimed) continue;
-
-            uint256 userUsdcUsed = sub.usdcAmount;
-            uint256 userExcessUsdc = 0;
-            if (excessUsdc > 0 && candidates[candidateId].totalSubUsdc > 0) {
-                userExcessUsdc = (sub.usdcAmount * excessUsdc) / candidates[candidateId].totalSubUsdc;
-                userUsdcUsed = sub.usdcAmount > userExcessUsdc ? sub.usdcAmount - userExcessUsdc : 0;
-            }
-
-            uint256 share = (userUsdcUsed * tokensReceived) / usdcUsed;
-
-            if (share > 0) {
-                IERC20(token).safeTransfer(supporter, share);
-            }
-
-            sub.hasClaimed = true;
-
-            if (userExcessUsdc > 0) {
-                (bool success, ) = payable(supporter).call{value: userExcessUsdc}("");
-                require(success, "rf");
-            }
-
-            emit SubscriptionClaimed(supporter, candidateId, token, share);
-        }
-
-        // Re-enable holding limit
-        IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
-    }
-
-    function claimSubscription(uint256 candidateId) external nonReentrant {
-        require(candidateId < candidates.length, "invalid candidate");
-        Candidate storage c = candidates[candidateId];
-        require(c.wasLaunched, "not launched");
-        require(c.launchedToken != address(0), "no token");
-
-        Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        require(sub.isActive, "nosub");
-        require(!sub.hasClaimed, "already claimed");
-
-        sub.hasClaimed = true;
-
-        uint256 userUsdcUsed = sub.usdcAmount;
-        if (c.launchedExcessUsdc > 0 && c.totalSubUsdc > 0) {
-            uint256 userExcessUsdc = (sub.usdcAmount * c.launchedExcessUsdc) / c.totalSubUsdc;
-            userUsdcUsed = sub.usdcAmount > userExcessUsdc ? sub.usdcAmount - userExcessUsdc : 0;
-        }
-
-        require(c.launchedUsdcUsed > 0, "zero total");
-
-        uint256 share = (userUsdcUsed * c.launchedTokenSupply) / c.launchedUsdcUsed;
-
-        if (share > 0) {
-            IERC20(c.launchedToken).safeTransfer(msg.sender, share);
-        }
-
-        if (c.launchedExcessUsdc > 0 && sub.usdcAmount > 0) {
-            uint256 refundUsdc = (sub.usdcAmount * c.launchedExcessUsdc) / c.totalSubUsdc;
-            if (refundUsdc > 0) {
-                (bool success, ) = payable(msg.sender).call{value: refundUsdc}("");
-                require(success, "rf");
-            }
-        }
-
-        emit SubscriptionClaimed(msg.sender, candidateId, c.launchedToken, share);
-    }
-
-    function refundSubscription(uint256 candidateId) external nonReentrant {
-        require(candidateId < candidates.length, "invalid candidate");
-        _updateCandidateStatus(candidateId);
-
-        Candidate storage c = candidates[candidateId];
-        require(
-            c.status == CandidateStatus.Expired ||
-            c.status == CandidateStatus.GracePeriod ||
-            c.status == CandidateStatus.Recyclable,
-            "not expired"
-        );
-        require(!c.wasLaunched, "was launched");
-
-        Subscription storage sub = userSubscriptions[msg.sender][candidateId];
-        require(sub.isActive, "nosub");
-        require(!sub.hasRefunded, "already refunded");
-
-        sub.hasRefunded = true;
-        sub.isActive = false;
-
-        uint256 usdcReturn = sub.usdcAmount;
-
-        if (usdcReturn > 0) {
-            (bool success, ) = payable(msg.sender).call{value: usdcReturn}("");
-            require(success, "tf");
-        }
-
-        emit SubscriptionRefunded(msg.sender, candidateId, usdcReturn, 0);
-    }
-
-    function depositRewards(uint256 amount) external nonReentrant {
-        require(dogeToken != address(0), "dtns");
-        IERC20(dogeToken).safeTransferFrom(msg.sender, address(this), amount);
-        rewardPool += amount;
-
-        emit RewardsDeposited(msg.sender, amount);
-    }
+    // ========================================
+    //  Internal: Rights Calculation
+    // ========================================
 
     function _calcPositionRights(StakePosition storage pos) internal view returns (uint256) {
         if (pos.withdrawn || pos.amount == 0) return 0;
-
         uint256 baseRate = _getRightsBase(pos.token);
         uint256 multiplier = getStakeMultiplierBps(pos.duration);
         uint256 rights;
@@ -812,7 +491,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
             if (fixedCycles > 0) {
                 rights = pos.amount * fixedCycles * baseRate * multiplier / RIGHTS_DENOMINATOR;
             }
-
             uint256 demandElapsed = block.timestamp - pos.maturityTime;
             uint256 demandCycles = demandElapsed / RIGHTS_CYCLE;
             if (demandCycles > 0) {
@@ -825,7 +503,6 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
                 rights = pos.amount * cycles * baseRate * multiplier / RIGHTS_DENOMINATOR;
             }
         }
-
         return rights;
     }
 
@@ -852,6 +529,25 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         return 0;
     }
 
+    // ========================================
+    //  View Functions
+    // ========================================
+
+    function getCandidateCount() external view returns (uint256) {
+        return candidates.length;
+    }
+
+    function getSubscription(address user, uint256 candidateId) external view returns (
+        uint256 usdcAmount, uint256 subscribeTime, bool isActive, bool hasClaimed, bool hasRefunded
+    ) {
+        Subscription storage sub = userSubscriptions[user][candidateId];
+        return (sub.usdcAmount, sub.subscribeTime, sub.isActive, sub.hasClaimed, sub.hasRefunded);
+    }
+
+    function getPendingRights(address user) external view returns (uint256) {
+        return _calcAllPendingRights(user);
+    }
+
     function getUserTotalEffectiveRights(address user) external view returns (uint256) {
         uint256 totalRaw = userRawRights[user] + _calcAllPendingRights(user);
         uint256 effective = _convergeRights(totalRaw);
@@ -860,186 +556,15 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         return 0;
     }
 
-    function _enqueueCandidate(uint256 candidateId) internal {
-        Candidate storage c = candidates[candidateId];
-        require(c.status == CandidateStatus.Active, "not active");
-
-        uint256 score = c.totalSubUsdc + c.totalWeight * DOGE_SCORE_MULTIPLIER;
-
-        c.status = CandidateStatus.Queued;
-        c.queueTime = block.timestamp;
-        launchQueueItems.push(candidateId);
-        queueScore[candidateId] = score;
-
-        _removeFromActiveList(candidateId);
-
-        emit CandidateQueued(candidateId);
-    }
-
-    function _dailyEnqueueTopCandidates() internal {
-        if (lastQueueDay >= currentDay) return;
-        lastQueueDay = currentDay;
-
-        uint256 eligibleCount = 0;
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= launchThreshold) {
-                eligibleCount++;
-            }
-        }
-
-        if (eligibleCount == 0) {
-            emit DailyEnqueue(currentDay, 0);
-            return;
-        }
-
-        uint256[] memory eligibleIds = new uint256[](eligibleCount);
-        uint256[] memory scores = new uint256[](eligibleCount);
-        uint256 idx = 0;
-
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalSubUsdc >= launchThreshold) {
-                eligibleIds[idx] = cid;
-                scores[idx] = candidates[cid].totalSubUsdc + candidates[cid].totalWeight * DOGE_SCORE_MULTIPLIER;
-                idx++;
-            }
-        }
-
-        uint256 toEnqueue = eligibleCount < DAILY_QUEUE_LIMIT ? eligibleCount : DAILY_QUEUE_LIMIT;
-        bool[] memory taken = new bool[](eligibleCount);
-        uint256 enqueuedCount = 0;
-
-        for (uint256 rank = 0; rank < toEnqueue; rank++) {
-            uint256 bestIdx = type(uint256).max;
-            uint256 bestScore = 0;
-            for (uint256 j = 0; j < eligibleCount; j++) {
-                if (!taken[j] && scores[j] > bestScore) {
-                    bestScore = scores[j];
-                    bestIdx = j;
-                }
-            }
-            if (bestIdx == type(uint256).max || bestScore == 0) break;
-
-            taken[bestIdx] = true;
-            _enqueueCandidate(eligibleIds[bestIdx]);
-            enqueuedCount++;
-        }
-
-        emit DailyEnqueue(currentDay, enqueuedCount);
-    }
-
-    function _cleanupExpiredQueuedCandidates() internal {
-        for (uint256 i = queueHead; i < launchQueueItems.length; i++) {
-            uint256 cid = launchQueueItems[i];
-            Candidate storage c = candidates[cid];
-            if (c.status == CandidateStatus.Queued && block.timestamp > c.expireTime) {
-                c.status = CandidateStatus.GracePeriod;
-            }
-        }
-    }
-
-    function _updateCandidateStatus(uint256 candidateId) internal {
-        Candidate storage c = candidates[candidateId];
-        if (c.status == CandidateStatus.Active && block.timestamp > c.expireTime) {
-            c.status = CandidateStatus.GracePeriod;
-        }
-        if (c.status == CandidateStatus.Queued && block.timestamp > c.expireTime) {
-            c.status = CandidateStatus.GracePeriod;
-        }
-        if (c.status == CandidateStatus.GracePeriod && block.timestamp > c.gracePeriodEnd) {
-            c.status = CandidateStatus.Recyclable;
-        }
-    }
-
-    function _isInActiveList(uint256 candidateId) internal view returns (bool) {
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            if (activeCandidateIds[i] == candidateId) return true;
-        }
-        return false;
-    }
-
-    function _removeFromActiveList(uint256 candidateId) internal {
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            if (activeCandidateIds[i] == candidateId) {
-                activeCandidateIds[i] = activeCandidateIds[activeCandidateIds.length - 1];
-                activeCandidateIds.pop();
-                return;
-            }
-        }
-    }
-
-    function _cleanupActiveCandidates() internal {
-        uint256 i = 0;
-        while (i < activeCandidateIds.length) {
-            uint256 cid = activeCandidateIds[i];
-            _updateCandidateStatus(cid);
-            if (candidates[cid].status != CandidateStatus.Active) {
-                activeCandidateIds[i] = activeCandidateIds[activeCandidateIds.length - 1];
-                activeCandidateIds.pop();
-            } else {
-                i++;
-            }
-        }
-    }
-
-    function _tryAdvanceDay() internal {
-        uint256 iterations;
-        while (block.timestamp >= _dayStart(currentDay + 1) && iterations < 7) {
-            iterations++;
-
-            _dailyEnqueueTopCandidates();
-            _cleanupExpiredQueuedCandidates();
-
-            EpochInfo storage epoch = epochInfo[currentDay];
-            if (!epoch.isSettled) {
-                if (_hasActiveCandidates()) {
-                    break;
-                }
-                epoch.isSettled = true;
-            }
-            currentDay++;
-            if (epochInfo[currentDay].dayStart == 0) {
-                epochInfo[currentDay] = EpochInfo({
-                    dayStart: _dayStart(currentDay),
-                    winningCandidateId: type(uint256).max,
-                    isSettled: false,
-                    settleRewardClaimed: false,
-                    launchRewardClaimed: false
-                });
-            }
-        }
-    }
-
-    function _hasActiveCandidates() internal view returns (bool) {
-        for (uint256 i = 0; i < activeCandidateIds.length; i++) {
-            uint256 cid = activeCandidateIds[i];
-            if (candidates[cid].status == CandidateStatus.Active && candidates[cid].totalWeight > 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function _today() internal view returns (uint256) {
-        return block.timestamp / EPOCH_DURATION;
-    }
-
-    function _dayStart(uint256 day) internal pure returns (uint256) {
-        return day * EPOCH_DURATION;
-    }
-
-    function getPendingRights(address user) external view returns (uint256) {
-        return _calcAllPendingRights(user);
+    function getSubscribeTimeRemaining(uint256 candidateId) external view returns (uint256) {
+        require(candidateId < candidates.length, "invalid");
+        if (block.timestamp >= candidates[candidateId].expireTime) return 0;
+        return candidates[candidateId].expireTime - block.timestamp;
     }
 
     function getStakePositions(address user) external view returns (
-        address[] memory tokens,
-        uint256[] memory amounts,
-        uint256[] memory startTimes,
-        uint256[] memory durations,
-        uint256[] memory maturityTimes,
-        bool[] memory withdrawns
+        address[] memory tokens, uint256[] memory amounts, uint256[] memory startTimes,
+        uint256[] memory durations, uint256[] memory maturityTimes, bool[] memory withdrawns
     ) {
         uint256 count = userStakePositions[user].length;
         tokens = new address[](count);
@@ -1060,38 +585,23 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         }
     }
 
-    function getQueueLength() external view returns (uint256) {
-        if (launchQueueItems.length > queueHead) {
-            return launchQueueItems.length - queueHead;
-        }
-        return 0;
-    }
-
-    function getEpochTimeRemaining() external view returns (uint256) {
-        uint256 dayEnd = epochInfo[currentDay].dayStart + EPOCH_DURATION;
-        if (block.timestamp >= dayEnd) return 0;
-        return dayEnd - block.timestamp;
-    }
-
     function getActiveCandidates() external view returns (
-        uint256[] memory ids,
-        string[] memory names,
-        string[] memory symbols,
-        uint256[] memory weights,
-        uint256[] memory subUsdcs,
-        uint256[] memory subDoges
+        uint256[] memory ids, string[] memory names, string[] memory symbols,
+        uint256[] memory subUsdcs, uint256[] memory weights, uint256[] memory expireTimes,
+        uint256[] memory walletCounts, address[] memory proposers
     ) {
         uint256 count = 0;
         for (uint256 i = 0; i < candidates.length; i++) {
             if (candidates[i].status == CandidateStatus.Active) count++;
         }
-
         ids = new uint256[](count);
         names = new string[](count);
         symbols = new string[](count);
-        weights = new uint256[](count);
         subUsdcs = new uint256[](count);
-        subDoges = new uint256[](count);
+        weights = new uint256[](count);
+        expireTimes = new uint256[](count);
+        walletCounts = new uint256[](count);
+        proposers = new address[](count);
 
         uint256 idx = 0;
         for (uint256 i = 0; i < candidates.length; i++) {
@@ -1099,141 +609,73 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
                 ids[idx] = i;
                 names[idx] = candidates[i].name;
                 symbols[idx] = candidates[i].symbol;
-                weights[idx] = candidates[i].totalWeight;
                 subUsdcs[idx] = candidates[i].totalSubUsdc;
-                subDoges[idx] = candidates[i].totalSubDoge;
-                idx++;
-            }
-        }
-    }
-
-    function getQueuedCandidates() external view returns (
-        uint256[] memory ids,
-        string[] memory names,
-        string[] memory symbols,
-        uint256[] memory queueTimes
-    ) {
-        uint256 len = launchQueueItems.length - queueHead;
-        ids = new uint256[](len);
-        names = new string[](len);
-        symbols = new string[](len);
-        queueTimes = new uint256[](len);
-
-        for (uint256 i = 0; i < len; i++) {
-            uint256 cid = launchQueueItems[queueHead + i];
-            ids[i] = cid;
-            names[i] = candidates[cid].name;
-            symbols[i] = candidates[cid].symbol;
-            queueTimes[i] = candidates[cid].queueTime;
-        }
-    }
-
-    function getGracePeriodCandidates() external view returns (
-        uint256[] memory ids,
-        string[] memory names,
-        uint256[] memory gracePeriodEnds,
-        address[] memory proposers
-    ) {
-        uint256 count = 0;
-        for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].status == CandidateStatus.GracePeriod) count++;
-        }
-
-        ids = new uint256[](count);
-        names = new string[](count);
-        gracePeriodEnds = new uint256[](count);
-        proposers = new address[](count);
-
-        uint256 idx = 0;
-        for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].status == CandidateStatus.GracePeriod) {
-                ids[idx] = i;
-                names[idx] = candidates[i].name;
-                gracePeriodEnds[idx] = candidates[i].gracePeriodEnd;
+                weights[idx] = candidates[i].totalWeight;
+                expireTimes[idx] = candidates[i].expireTime;
+                walletCounts[idx] = candidates[i].walletCount;
                 proposers[idx] = candidates[i].proposer;
                 idx++;
             }
         }
     }
 
-    function getRecyclableCandidates() external view returns (
-        uint256[] memory ids,
-        string[] memory names,
-        string[] memory symbols,
-        string[] memory metadataURIs
+    function getLaunchedCandidates() external view returns (
+        uint256[] memory ids, string[] memory names, address[] memory tokens, uint256[] memory subUsdcs
     ) {
         uint256 count = 0;
         for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].status == CandidateStatus.Recyclable) count++;
+            if (candidates[i].status == CandidateStatus.Launched) count++;
         }
-
         ids = new uint256[](count);
         names = new string[](count);
-        symbols = new string[](count);
-        metadataURIs = new string[](count);
+        tokens = new address[](count);
+        subUsdcs = new uint256[](count);
 
         uint256 idx = 0;
         for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].status == CandidateStatus.Recyclable) {
+            if (candidates[i].status == CandidateStatus.Launched) {
                 ids[idx] = i;
                 names[idx] = candidates[i].name;
-                symbols[idx] = candidates[i].symbol;
-                metadataURIs[idx] = candidates[i].metadataURI;
+                tokens[idx] = candidates[i].launchedToken;
+                subUsdcs[idx] = candidates[i].launchedUsdcUsed;
                 idx++;
             }
         }
     }
 
-    function getCandidateCount() external view returns (uint256) {
-        return candidates.length;
-    }
-
-    function getSubscription(address user, uint256 candidateId) external view returns (
-        uint256 usdcAmount,
-        uint256 dogeAmount,
-        uint256 subscribeTime,
-        bool isActive,
-        bool hasClaimed,
-        bool hasRefunded
+    function getFailedCandidates() external view returns (
+        uint256[] memory ids, string[] memory names, uint256[] memory subUsdcs
     ) {
-        Subscription storage sub = userSubscriptions[user][candidateId];
-        return (sub.usdcAmount, sub.dogeAmount, sub.subscribeTime, sub.isActive, sub.hasClaimed, sub.hasRefunded);
+        uint256 count = 0;
+        for (uint256 i = 0; i < candidates.length; i++) {
+            if (candidates[i].status == CandidateStatus.Failed) count++;
+        }
+        ids = new uint256[](count);
+        names = new string[](count);
+        subUsdcs = new uint256[](count);
+
+        uint256 idx = 0;
+        for (uint256 i = 0; i < candidates.length; i++) {
+            if (candidates[i].status == CandidateStatus.Failed) {
+                ids[idx] = i;
+                names[idx] = candidates[i].name;
+                subUsdcs[idx] = candidates[i].totalSubUsdc;
+                idx++;
+            }
+        }
     }
 
-    function setBondingCurve(address _bondingCurve) external onlyOwner {
-        bondingCurve = _bondingCurve;
-    }
+    // ========================================
+    //  Admin
+    // ========================================
 
-    function setFeeDistributor(address _feeDistributor) external onlyOwner {
-        feeDistributor = _feeDistributor;
-    }
-
-    function setLaunchThreshold(uint256 _threshold) external onlyOwner {
-        require(_threshold > 0, "zero");
-        launchThreshold = _threshold;
-    }
-
-    function setMaxLaunchsPerDay(uint256 _max) external onlyOwner {
-        require(_max >= 1 && _max <= 3, "mx");
-        maxLaunchsPerDay = _max;
-    }
-
-    function setLaunchHour(uint256 _hour) external onlyOwner {
-        require(_hour < 24, "invalid hour");
-        launchHour = _hour;
-    }
-
-    function setDogeToken(address _dogeToken) external onlyOwner {
-        dogeToken = _dogeToken;
-    }
-
-    function setDefaultIncentives(bool _tax, bool _lp, bool _token) external onlyOwner {
-        require(_tax || _lp || _token, "1+");
-        defaultWantTaxShare = _tax;
-        defaultWantLpShare = _lp;
-        defaultWantTokenAllocation = _token;
-    }
+    function setBondingCurve(address _bc) external onlyOwner { bondingCurve = _bc; }
+    function setFeeDistributor(address _fd) external onlyOwner { feeDistributor = _fd; }
+    function setLaunchThreshold(uint256 _t) external onlyOwner { launchThreshold = _t; }
+    function setMinSubThreshold(uint256 _t) external onlyOwner { minSubThreshold = _t; }
+    function setMinWallets(uint256 _m) external onlyOwner { minWallets = _m; }
+    function setMinSubscribeUsdc(uint256 _m) external onlyOwner { minSubscribeUsdc = _m; }
+    function setDogeToken(address _d) external onlyOwner { dogeToken = _d; }
 
     receive() external payable {}
 }
-

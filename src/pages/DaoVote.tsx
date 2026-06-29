@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
-import { Vote, Clock, Flame, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkles, Inbox, Recycle, RefreshCw, ShieldAlert, Loader2, WifiOff, Globe, Twitter, MessageCircle, UsersRound, Rocket, Wallet, ArrowDownToLine, HandCoins, Zap, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { Vote, TrendingUp, Coins, AlertCircle, Timer, Gem, Sparkles, Inbox, RefreshCw, Loader2, WifiOff, Globe, Twitter, MessageCircle, UsersRound, Rocket, Wallet, ArrowDownToLine, Zap, ChevronDown, ChevronUp, GraduationCap, Undo2 } from 'lucide-react'
 import { cn, parseMetadata, sanitizeHref, formatUsdc } from '@/lib/utils'
 import type { TokenMeta } from '@/lib/utils'
 import { useT } from '@/i18n/useT'
@@ -47,39 +47,30 @@ const ERC20_ABI = [
   },
 ] as const
 
+// v11 CandidateStatus enum
+const STATUS_ACTIVE = 0
+const STATUS_LAUNCHED = 1
+const STATUS_FAILED = 2
+
 interface Candidate {
   id: number
   name: string
   symbol: string
   proposer: string
+  metadataURI: string
+  totalSubUsdc: bigint
   totalWeight: bigint
-  totalSubBnb: bigint
-  totalSubDoge: bigint
   totalRightsVotes: bigint
   submitTime: bigint
   expireTime: bigint
-  gracePeriodEnd: bigint
-  durationTier: number
   status: number
-  metadataURI: string
-  wasLaunched: boolean
   launchedToken: string
-  queueTime: bigint
-}
-
-const DURATION_TIERS = [
-  { value: 0, labelKey: 'create.tier3Days', duration: '3d', fee: '3', feeBnb: 3 },
-  { value: 1, labelKey: 'create.tier7Days', duration: '7d', fee: '5', feeBnb: 5 },
-  { value: 2, labelKey: 'create.tier30Days', duration: '30d', fee: '10', feeBnb: 10 },
-]
-
-const STATUS_MAP: Record<number, { labelKey: string; color: string }> = {
-  0: { labelKey: 'dao.activeTab', color: 'text-neon-green' },
-  1: { labelKey: 'dao.queuedBadge', color: 'text-doge-cyan' },
-  2: { labelKey: 'dao.statusExpired', color: 'text-gray-400' },
-  3: { labelKey: 'dao.graceTab', color: 'text-neon-yellow' },
-  4: { labelKey: 'dao.statusRecyclable', color: 'text-neon-red' },
-  5: { labelKey: 'dao.launched', color: 'text-doge-gold' },
+  launchedTokenSupply: bigint
+  launchedUsdcUsed: bigint
+  wantTaxShare: boolean
+  wantLpShare: boolean
+  wantTokenAllocation: boolean
+  walletCount: bigint
 }
 
 const STAKE_DURATIONS = [
@@ -107,20 +98,26 @@ function CandidateDetailCard({
   variant,
   daoAddress,
   abi,
+  bondingCurveAddress,
+  launchThreshold,
   doWrite,
   onError,
   currentAddress,
+  isBusy,
 }: {
   candidateId: number
   isSelected: boolean
   onSelect: () => void
   rank: number
-  variant: 'active' | 'grace' | 'recycle' | 'queued'
+  variant: 'active' | 'launched' | 'failed'
   daoAddress: `0x${string}`
   abi: typeof LAUNCH_DAO_ABI
+  bondingCurveAddress: `0x${string}`
+  launchThreshold?: bigint
   doWrite: (params: { functionName: string; args: readonly unknown[]; value?: bigint; gas?: bigint }) => Promise<`0x${string}`>
   onError?: (msg: string) => void
   currentAddress?: `0x${string}`
+  isBusy?: boolean
 }) {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
@@ -135,59 +132,67 @@ function CandidateDetailCard({
     query: { enabled: !isZeroAddress(daoAddress), refetchInterval: 30000 },
   })
 
+  // 1-hour subscription window remaining seconds (active candidates)
+  const { data: timeRemainingData } = useReadContract({
+    address: daoAddress,
+    abi,
+    functionName: 'getSubscribeTimeRemaining',
+    args: [BigInt(candidateId)],
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(daoAddress) && variant === 'active', refetchInterval: 10000 },
+  })
+
   const candidate = useMemo<Candidate | null>(() => {
     if (!data) return null
     const d = data as any
-    const proposer = d.proposer ?? d[0] ?? ''
-    const name = d.name ?? d[1] ?? ''
-    const symbol = d.symbol ?? d[2] ?? ''
-    const metadataURI = d.metadataURI ?? d[3] ?? ''
-    const totalWeight = d.totalWeight ?? d[4] ?? 0n
-    const totalSubBnb = d.totalSubBnb ?? d[5] ?? 0n
-    const totalSubDoge = d.totalSubDoge ?? d[6] ?? 0n
-    const totalRightsVotes = d.totalRightsVotes ?? d[7] ?? 0n
-    const submitTime = d.submitTime ?? d[8] ?? 0n
-    const durationTier = d.durationTier ?? d[9] ?? 0
-    const expireTime = d.expireTime ?? d[10] ?? 0n
-    const gracePeriodEnd = d.gracePeriodEnd ?? d[11] ?? 0n
-    const status = d.status ?? d[12] ?? 0
-    const wasLaunched = d.wasLaunched ?? d[13] ?? false
-    const launchedToken = d.launchedToken ?? d[14] ?? ''
-    const launchedTokenSupply = d.launchedTokenSupply ?? d[15] ?? 0n
-    const queueTime = d.queueTime ?? d[16] ?? 0n
     return {
       id: candidateId,
-      name,
-      symbol,
-      proposer,
-      metadataURI,
-      totalWeight,
-      totalSubBnb,
-      totalSubDoge,
-      totalRightsVotes,
-      submitTime,
-      expireTime,
-      gracePeriodEnd,
-      durationTier: Number(durationTier),
-      status: Number(status),
-      wasLaunched,
-      launchedToken,
-      queueTime,
+      proposer: String(d.proposer ?? d[0] ?? ''),
+      name: String(d.name ?? d[1] ?? ''),
+      symbol: String(d.symbol ?? d[2] ?? ''),
+      metadataURI: String(d.metadataURI ?? d[3] ?? ''),
+      totalSubUsdc: BigInt(d.totalSubUsdc ?? d[4] ?? 0n),
+      totalWeight: BigInt(d.totalWeight ?? d[5] ?? 0n),
+      totalRightsVotes: BigInt(d.totalRightsVotes ?? d[6] ?? 0n),
+      submitTime: BigInt(d.submitTime ?? d[7] ?? 0n),
+      expireTime: BigInt(d.expireTime ?? d[8] ?? 0n),
+      status: Number(d.status ?? d[9] ?? 0),
+      launchedToken: String(d.launchedToken ?? d[10] ?? ''),
+      launchedTokenSupply: BigInt(d.launchedTokenSupply ?? d[11] ?? 0n),
+      launchedUsdcUsed: BigInt(d.launchedUsdcUsed ?? d[12] ?? 0n),
+      wantTaxShare: Boolean(d.wantTaxShare ?? d[13] ?? false),
+      wantLpShare: Boolean(d.wantLpShare ?? d[14] ?? false),
+      wantTokenAllocation: Boolean(d.wantTokenAllocation ?? d[15] ?? false),
+      walletCount: BigInt(d.walletCount ?? d[16] ?? 0n),
     }
   }, [data, candidateId])
 
   const meta = useMemo<TokenMeta>(() => parseMetadata(candidate?.metadataURI || ''), [candidate?.metadataURI])
 
-  const formatCountdown = (timestamp: number) => {
-    const diff = timestamp - Date.now() / 1000
-    if (diff <= 0) return t('dao.statusExpired')
-    const d = Math.floor(diff / 86400)
-    const h = Math.floor((diff % 86400) / 3600)
-    const m = Math.floor((diff % 3600) / 60)
-    if (d > 0) return `${d}d ${h}h`
-    if (h > 0) return `${h}h ${m}m`
-    return `${m}m`
-  }
+  // BondingCurve reserve + isListed for launched tokens
+  const tokenAddr = useMemo<`0x${string}` | undefined>(() => {
+    if (!candidate || candidate.status !== STATUS_LAUNCHED) return undefined
+    const addr = candidate.launchedToken as `0x${string}`
+    return !isZeroAddress(addr) ? addr : undefined
+  }, [candidate])
+
+  const { data: reserveData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'getReserve',
+    args: tokenAddr ? [tokenAddr] : undefined,
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !!tokenAddr, refetchInterval: 30000 },
+  })
+
+  const { data: isListedData } = useReadContract({
+    address: bondingCurveAddress,
+    abi: BONDING_CURVE_ABI,
+    functionName: 'isListed',
+    args: tokenAddr ? [tokenAddr] : undefined,
+    chainId: targetChainId,
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !!tokenAddr },
+  })
 
   if (isLoading) {
     return (
@@ -199,35 +204,75 @@ function CandidateDetailCard({
 
   if (!candidate) return null
 
-  const tier = DURATION_TIERS[candidate.durationTier] || DURATION_TIERS[0]
+  const subscribeRemaining = timeRemainingData != null ? Number(timeRemainingData) : null
+  const nowSec = Math.floor(Date.now() / 1000)
+  const expiredByClock = candidate.expireTime > 0n && Number(candidate.expireTime) <= nowSec
+  const isExpired = variant === 'active' && candidate.status === STATUS_ACTIVE && (subscribeRemaining === 0 || expiredByClock)
+
+  const reserve = reserveData != null ? BigInt(reserveData as any) : null
+  const isOnDex = isListedData === true
+  const canGraduate = variant === 'launched' && !isOnDex && reserve != null && launchThreshold != null && reserve >= launchThreshold
+
+  const formatRemaining = (secs: number) => {
+    if (secs <= 0) return t('dao.statusExpired')
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    const s = Math.floor(secs % 60)
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  const formatCountdown = (timestamp: number) => {
+    const diff = timestamp - Date.now() / 1000
+    if (diff <= 0) return t('dao.statusExpired')
+    const h = Math.floor(diff / 3600)
+    const m = Math.floor((diff % 3600) / 60)
+    const s = Math.floor(diff % 60)
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  const handleAction = async (fnName: string) => {
+    try {
+      await doWrite({ functionName: fnName, args: [BigInt(candidateId)] })
+    } catch (err: any) {
+      const msg = String(err?.shortMessage || err?.message || '')
+      if (msg === 'RPC_LIMITED') {
+        onError?.('RPC_LIMITED')
+      } else if (!msg.includes('User rejected') && !msg.includes('denied')) {
+        onError?.(msg.slice(0, 150))
+      }
+    }
+  }
 
   const borderColor = variant === 'active'
     ? isSelected ? 'border-doge-gold/50 bg-doge-gold/5' : 'border-dark-500/30 bg-dark-700 hover:border-dark-500/60'
-    : variant === 'queued'
-    ? isSelected ? 'border-doge-cyan/50 bg-doge-cyan/10' : 'border-doge-cyan/30 bg-doge-cyan/5 hover:border-doge-cyan/50'
-    : variant === 'grace'
-    ? 'border-neon-yellow/30 bg-neon-yellow/5'
-    : 'border-neon-red/30 bg-neon-red/5'
+    : variant === 'launched'
+    ? isSelected ? 'border-neon-green/50 bg-neon-green/5' : 'border-neon-green/20 bg-dark-700 hover:border-neon-green/40'
+    : isSelected ? 'border-neon-red/50 bg-neon-red/5' : 'border-neon-red/20 bg-dark-700 hover:border-neon-red/40'
 
-  const accentColor = variant === 'active' ? 'text-doge-gold' : variant === 'queued' ? 'text-doge-cyan' : variant === 'grace' ? 'text-neon-yellow' : 'text-neon-red'
+  const accentColor = variant === 'active' ? 'text-doge-gold' : variant === 'launched' ? 'text-neon-green' : 'text-neon-red'
 
   return (
     <div
-      className={cn(
-        'relative rounded-xl border p-4 transition-all duration-200',
-        (variant === 'active' || variant === 'queued') ? 'cursor-pointer' : '',
-        borderColor
-      )}
-      onClick={(variant === 'active' || variant === 'queued') ? onSelect : undefined}
+      className={cn('relative rounded-xl border p-4 transition-all duration-200 cursor-pointer', borderColor)}
+      onClick={onSelect}
     >
       {rank === 0 && variant === 'active' && (
         <div className="absolute top-2 right-2">
           <span className="badge-gold text-[10px]">{t('dao.leading')}</span>
         </div>
       )}
-      {variant === 'queued' && (
+      {variant === 'launched' && isOnDex && (
         <div className="absolute top-2 right-2">
-          <span className="px-2 py-0.5 text-[10px] font-medium bg-doge-cyan/10 text-doge-cyan border border-doge-cyan/30 rounded-full">{t('dao.queuedBadge')}</span>
+          <span className="px-2 py-0.5 text-[10px] font-medium bg-neon-green/10 text-neon-green border border-neon-green/30 rounded-full">{t('dao.graduated')}</span>
+        </div>
+      )}
+      {variant === 'failed' && (
+        <div className="absolute top-2 right-2">
+          <span className="px-2 py-0.5 text-[10px] font-medium bg-neon-red/10 text-neon-red border border-neon-red/30 rounded-full">{t('dao.failedBadge')}</span>
         </div>
       )}
 
@@ -252,7 +297,7 @@ function CandidateDetailCard({
             {candidate.symbol && (
               <span className="text-xs text-gray-400 bg-dark-600 px-1.5 py-0.5 rounded">{candidate.symbol}</span>
             )}
-            {candidate.proposer && typeof candidate.proposer === 'string' && (
+            {candidate.proposer && typeof candidate.proposer === 'string' && !isZeroAddress(candidate.proposer as `0x${string}`) && (
               <span className="text-xs text-gray-500">
                 by {String(candidate.proposer).slice(0, 6)}...{String(candidate.proposer).slice(-4)}
               </span>
@@ -263,35 +308,27 @@ function CandidateDetailCard({
             <p className="text-xs text-gray-400 mt-1 line-clamp-1">{meta.description}</p>
           )}
 
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div>
               <div className={cn('font-display font-bold text-sm', accentColor)}>
-                {formatUsdc(Number(formatEther(candidate.totalSubBnb)))} {nativeSymbol}
+                {formatUsdc(Number(formatEther(candidate.totalSubUsdc)))} {nativeSymbol}
               </div>
               <div className="text-xs text-gray-500">{t('dao.subscribed')}</div>
             </div>
-            {candidate.totalSubDoge > 0n && (
-              <div>
-                <div className="font-display font-bold text-sm text-doge-cyan">
-                  {formatUsdc(Number(formatEther(candidate.totalSubDoge)))} DOGE
-                </div>
-                <div className="text-xs text-gray-500">{t('dao.dogeSub')}</div>
-              </div>
-            )}
+            <div>
+              <div className="font-display font-bold text-sm">{Number(candidate.walletCount).toLocaleString()}</div>
+              <div className="text-xs text-gray-500">{t('dao.wallets')}</div>
+            </div>
             <div>
               <div className="font-display font-bold text-sm">{Number(candidate.totalWeight).toLocaleString()} {t('dao.pointsUnit')}</div>
               <div className="text-xs text-gray-500">{t('dao.weight')}</div>
             </div>
-            {variant === 'active' && candidate.expireTime > 0n && (
+            {variant === 'active' && candidate.expireTime > 0n && !isExpired && (
               <div>
-                <div className="text-xs text-gray-300">{formatCountdown(Number(candidate.expireTime))}</div>
-                <div className="text-xs text-gray-500">{t('dao.expires')}</div>
-              </div>
-            )}
-            {variant === 'grace' && candidate.gracePeriodEnd > 0n && (
-              <div>
-                <div className="text-xs font-bold text-neon-yellow">{formatCountdown(Number(candidate.gracePeriodEnd))}</div>
-                <div className="text-xs text-gray-500">{t('dao.graceEnds')}</div>
+                <div className="text-xs font-bold text-doge-gold">
+                  {subscribeRemaining != null ? formatRemaining(subscribeRemaining) : formatCountdown(Number(candidate.expireTime))}
+                </div>
+                <div className="text-xs text-gray-500">{t('dao.subscribeWindow')}</div>
               </div>
             )}
           </div>
@@ -321,118 +358,82 @@ function CandidateDetailCard({
             </div>
           )}
 
-          {candidate.wasLaunched && !isZeroAddress(candidate.launchedToken as `0x${string}`) && (
+          {variant === 'launched' && tokenAddr && (
             <div className="mt-2" onClick={(e) => e.stopPropagation()}>
               <p className="text-[10px] text-gray-500 mb-0.5">{t('dao.tokenContract')}</p>
-              <CopyableAddress address={candidate.launchedToken} chainId={targetChainId} type="token" />
+              <CopyableAddress address={tokenAddr} chainId={targetChainId} type="token" />
             </div>
           )}
 
-          {!candidate.wasLaunched && candidate.proposer && !isZeroAddress(candidate.proposer as `0x${string}`) && (
+          {variant !== 'launched' && candidate.proposer && typeof candidate.proposer === 'string' && !isZeroAddress(candidate.proposer as `0x${string}`) && (
             <div className="mt-2" onClick={(e) => e.stopPropagation()}>
               <p className="text-[10px] text-gray-500 mb-0.5">{t('dao.proposer')}</p>
               <CopyableAddress address={candidate.proposer} chainId={targetChainId} type="address" />
             </div>
           )}
+
+          {variant === 'launched' && !isOnDex && reserve != null && (
+            <div className="mt-2 text-xs text-gray-400" onClick={(e) => e.stopPropagation()}>
+              {t('dao.reserve')}: {formatUsdc(Number(formatEther(reserve)))} {nativeSymbol}
+              {launchThreshold != null && <> / {t('dao.launchThreshold')}: {formatUsdc(Number(formatEther(launchThreshold)))}</>}
+            </div>
+          )}
         </div>
       </div>
 
-      {variant === 'grace' && (
-        <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
-          <p className="text-xs text-neon-yellow mb-2">{t('dao.graceOnlyCreator')}</p>
-          <div className="flex gap-2">
-            {DURATION_TIERS.map((tier) => (
-              <button
-                key={tier.value}
-                className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-yellow hover:bg-dark-500 transition-colors border border-dark-500"
-                onClick={async (e) => {
-                  e.stopPropagation()
-                  try {
-                    await doWrite({
-                      functionName: 'renewCandidate',
-                      args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
-                      value: parseEther(tier.feeBnb.toFixed(2)),
-                    })
-                  } catch (err: any) {
-                    const msg = err?.shortMessage || err?.message || ''
-                    if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
-                      onError?.(msg.slice(0, 150))
-                    } else if (msg === 'RPC_LIMITED') {
-                      onError?.('RPC_LIMITED')
-                    }
-                  }
-                }}
-              >
-                {t(tier.labelKey)} · {tier.fee} {nativeSymbol}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {variant === 'recycle' && (
-        <div className="bg-dark-700/50 rounded-lg p-3 mt-3">
-          <p className="text-xs text-neon-red mb-2">{t('revival.anyoneClaim')}</p>
-          <div className="flex gap-2">
-            {DURATION_TIERS.map((tier) => (
-              <button
-                key={tier.value}
-                className="flex-1 py-1.5 text-xs rounded bg-dark-600 text-gray-300 hover:text-neon-red hover:bg-dark-500 transition-colors border border-dark-500"
-                onClick={async (e) => {
-                  e.stopPropagation()
-                  try {
-                    await doWrite({
-                      functionName: 'claimRecycled',
-                      args: [BigInt(candidateId), BigInt(tier.value), true, true, true],
-                      value: parseEther(tier.feeBnb.toFixed(2)),
-                    })
-                  } catch (err: any) {
-                    const msg = err?.shortMessage || err?.message || ''
-                    if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
-                      onError?.(msg.slice(0, 150))
-                    } else if (msg === 'RPC_LIMITED') {
-                      onError?.('RPC_LIMITED')
-                    }
-                  }
-                }}
-              >
-                {t(tier.labelKey)} · {tier.fee} {nativeSymbol}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {variant === 'active' && candidate && currentAddress &&
-        candidate.proposer.toLowerCase() === currentAddress.toLowerCase() &&
-        candidate.status === 0 &&
-        Number(formatEther(candidate.totalSubBnb)) >= 20 && (
+      {/* Finalize action — active candidate whose 1-hour window expired */}
+      {variant === 'active' && isExpired && (
         <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3 mt-3" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-2 mb-2">
-            <Rocket className="w-4 h-4 text-doge-gold" />
-            <p className="text-xs text-doge-gold font-bold">{t('dao.earlyQueueTitle')}</p>
+            <Zap className="w-4 h-4 text-doge-gold" />
+            <p className="text-xs text-doge-gold font-bold">{t('dao.finalize')}</p>
           </div>
-          <p className="text-xs text-gray-400 mb-2">{t('dao.earlyQueueDesc')}</p>
+          <p className="text-xs text-gray-400 mb-2">{t('dao.finalizeDesc')}</p>
           <button
-            className="w-full py-2 text-xs rounded-lg bg-doge-gold/10 text-doge-gold border border-doge-gold/30 hover:bg-doge-gold/20 transition-colors font-bold flex items-center justify-center gap-1.5"
-            onClick={async () => {
-              try {
-                await doWrite({
-                  functionName: 'earlyQueue',
-                  args: [BigInt(candidateId)],
-                })
-              } catch (err: any) {
-                const msg = err?.shortMessage || err?.message || ''
-                if (msg !== 'RPC_LIMITED' && !msg.includes('User rejected') && !msg.includes('denied')) {
-                  onError?.(msg.slice(0, 150))
-                } else if (msg === 'RPC_LIMITED') {
-                  onError?.('RPC_LIMITED')
-                }
-              }
-            }}
+            className="w-full py-2 text-xs rounded-lg bg-doge-gold/10 text-doge-gold border border-doge-gold/30 hover:bg-doge-gold/20 transition-colors font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={isBusy}
+            onClick={() => handleAction('finalizeSubscription')}
           >
-            <Rocket className="w-3.5 h-3.5" />
-            {t('dao.earlyQueueBtn')}
+            {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            {t('dao.finalize')}
+          </button>
+        </div>
+      )}
+
+      {/* Graduate to DEX — launched token whose reserve reached launchThreshold */}
+      {variant === 'launched' && canGraduate && (
+        <div className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3 mt-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-2">
+            <GraduationCap className="w-4 h-4 text-neon-green" />
+            <p className="text-xs text-neon-green font-bold">{t('dao.graduateToDex')}</p>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">{t('dao.graduateDesc')}</p>
+          <button
+            className="w-full py-2 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={isBusy}
+            onClick={() => handleAction('graduateToken')}
+          >
+            {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GraduationCap className="w-3.5 h-3.5" />}
+            {t('dao.graduateToDex')}
+          </button>
+        </div>
+      )}
+
+      {/* Refund — failed candidate */}
+      {variant === 'failed' && (
+        <div className="bg-neon-red/5 border border-neon-red/20 rounded-lg p-3 mt-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-2">
+            <Undo2 className="w-4 h-4 text-neon-red" />
+            <p className="text-xs text-neon-red font-bold">{t('dao.refund')}</p>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">{t('dao.refundDesc')}</p>
+          <button
+            className="w-full py-2 text-xs rounded-lg bg-neon-red/10 text-neon-red border border-neon-red/30 hover:bg-neon-red/20 transition-colors font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={isBusy}
+            onClick={() => handleAction('refundSubscription')}
+          >
+            {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+            {t('dao.refund')}
           </button>
         </div>
       )}
@@ -446,6 +447,7 @@ export default function DaoVote() {
   const targetChainId = useTargetChainId()
   const nativeSymbol = getNativeSymbol(targetChainId)
   const daoAddress = getContractAddress(targetChainId, 'launchDAO')
+  const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
   const contractReady = !isZeroAddress(daoAddress)
 
   const { writeContractAsync: _writeAsync, data: txHash, isPending: isWriting } = useWriteContract()
@@ -454,37 +456,17 @@ export default function DaoVote() {
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState<'voting' | 'queue' | 'grace' | 'recycle'>('voting')
+  const [activeTab, setActiveTab] = useState<'active' | 'launched' | 'failed'>('active')
   const [stakeTokenTab, setStakeTokenTab] = useState<'bnb' | 'doge'>('bnb')
   const [stakeDuration, setStakeDuration] = useState<number>(0)
   const [stakeAmount, setStakeAmount] = useState('')
   const [showUnstakePanel, setShowUnstakePanel] = useState(false)
   const [txError, setTxError] = useState('')
   const [isApproving, setIsApproving] = useState(false)
-  const [lastAction, setLastAction] = useState<'settle' | null>(null)
-
-  const getUtcDay = () => new Date().toISOString().slice(0, 10)
-
-  const isSettledToday = (() => {
-    try { return localStorage.getItem('dogepad-settle-day') === getUtcDay() } catch { return false }
-  })()
-
-  const [settleDone, setSettleDone] = useState(isSettledToday)
-
-  useEffect(() => {
-    if (isConfirmed && lastAction) {
-      const day = getUtcDay()
-      if (lastAction === 'settle') {
-        localStorage.setItem('dogepad-settle-day', day)
-        setSettleDone(true)
-      }
-      setLastAction(null)
-    }
-  }, [isConfirmed, lastAction])
-
-  const [subBnbAmount, setSubBnbAmount] = useState('')
+  const [subUsdcAmount, setSubUsdcAmount] = useState('')
   const [voteRightsAmount, setVoteRightsAmount] = useState('')
 
+  // === Candidate list reads ===
   const { data: activeData, isLoading: loadingActive, error: errorActive, refetch: refetchActive } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -493,91 +475,59 @@ export default function DaoVote() {
     query: { enabled: contractReady, refetchInterval: 15000 },
   })
 
-  const { data: queuedData, isLoading: loadingQueued, refetch: refetchQueued } = useReadContract({
+  const { data: launchedData, isLoading: loadingLaunched, refetch: refetchLaunched } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'getQueuedCandidates',
+    functionName: 'getLaunchedCandidates',
     chainId: targetChainId,
-    query: { enabled: contractReady, refetchInterval: 15000 },
+    query: { enabled: contractReady, refetchInterval: 20000 },
   })
 
-  const { data: graceData, isLoading: loadingGrace, refetch: refetchGrace } = useReadContract({
+  const { data: failedData, isLoading: loadingFailed, refetch: refetchFailed } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'getGracePeriodCandidates',
+    functionName: 'getFailedCandidates',
     chainId: targetChainId,
-    query: { enabled: contractReady, refetchInterval: 15000 },
+    query: { enabled: contractReady, refetchInterval: 20000 },
   })
 
-  const { data: recycleData, isLoading: loadingRecycle, refetch: refetchRecycle } = useReadContract({
+  // === Config views ===
+  const { data: launchThresholdData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'getRecyclableCandidates',
-    chainId: targetChainId,
-    query: { enabled: contractReady, refetchInterval: 15000 },
-  })
-
-  const { data: epochRemaining } = useReadContract({
-    address: daoAddress,
-    abi: LAUNCH_DAO_ABI,
-    functionName: 'getEpochTimeRemaining',
-    chainId: targetChainId,
-    query: { enabled: contractReady, refetchInterval: 10000 },
-  })
-
-  const { data: launchHourData } = useReadContract({
-    address: daoAddress,
-    abi: LAUNCH_DAO_ABI,
-    functionName: 'launchHour',
+    functionName: 'launchThreshold',
     chainId: targetChainId,
     query: { enabled: contractReady },
   })
 
-  const { data: maxLaunchsPerDayData } = useReadContract({
+  const { data: minSubThresholdData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'maxLaunchsPerDay',
+    functionName: 'minSubThreshold',
     chainId: targetChainId,
     query: { enabled: contractReady },
   })
 
-  const todayDay = Math.floor(Date.now() / 86400000)
-  const { data: todayLaunchCountData } = useReadContract({
+  const { data: minWalletsData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'dayLaunchCount',
-    args: [BigInt(todayDay)],
+    functionName: 'minWallets',
     chainId: targetChainId,
-    query: { enabled: contractReady, refetchInterval: 15000 },
+    query: { enabled: contractReady },
   })
 
-  const launchHour = Number(launchHourData ?? 4)
-  const maxLaunchsPerDay = Number(maxLaunchsPerDayData ?? 1)
-  const todayLaunchCount = Number(todayLaunchCountData ?? 0)
-  const canLaunchToday = todayLaunchCount < maxLaunchsPerDay
-
-  const isLaunchWindowOpen = (() => {
-    const utcHour = new Date().getUTCHours()
-    return utcHour >= launchHour
-  })()
-  const nextLaunchWindowTime = (() => {
-    const now = new Date()
-    const utcHour = now.getUTCHours()
-    if (utcHour < launchHour) {
-      const next = new Date(now)
-      next.setUTCHours(launchHour, 0, 0, 0)
-      return next
-    }
-    const next = new Date(now)
-    next.setUTCDate(next.getUTCDate() + 1)
-    next.setUTCHours(launchHour, 0, 0, 0)
-    return next
-  })()
-
-  const { data: totalStakedBnbData } = useReadContract({
+  const { data: minSubscribeUsdcData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'totalStakedBnb',
+    functionName: 'minSubscribeUsdc',
+    chainId: targetChainId,
+    query: { enabled: contractReady },
+  })
+
+  const { data: totalStakedUsdcData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'totalStakedUsdc',
     chainId: targetChainId,
     query: { enabled: contractReady },
   })
@@ -590,14 +540,7 @@ export default function DaoVote() {
     query: { enabled: contractReady },
   })
 
-  const { data: totalStakedUsdtData } = useReadContract({
-    address: daoAddress,
-    abi: LAUNCH_DAO_ABI,
-    functionName: 'totalStakedUsdt',
-    chainId: targetChainId,
-    query: { enabled: contractReady },
-  })
-
+  // === Rights views ===
   const { data: pendingRightsData, refetch: refetchRights } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -634,6 +577,7 @@ export default function DaoVote() {
     query: { enabled: contractReady && !!address },
   })
 
+  // === Platform token (DOGE) ===
   const { data: dogeTokenData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -642,15 +586,6 @@ export default function DaoVote() {
     query: { enabled: contractReady },
   })
 
-  const { data: queueLengthData } = useReadContract({
-    address: daoAddress,
-    abi: LAUNCH_DAO_ABI,
-    functionName: 'getQueueLength',
-    chainId: targetChainId,
-    query: { enabled: contractReady },
-  })
-
-  const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
   const { data: bondingCurveLaunchDaoData } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
@@ -662,6 +597,7 @@ export default function DaoVote() {
     bondingCurveLaunchDaoData != null &&
     String(bondingCurveLaunchDaoData).toLowerCase() !== daoAddress.toLowerCase()
 
+  // === Stake positions ===
   const { data: stakePositionsData, refetch: refetchPositions } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
@@ -700,36 +636,53 @@ export default function DaoVote() {
     query: { enabled: dogeTokenReady && !!address },
   })
 
-  const { data: selectedCandidateData } = useReadContract({
+  // === Selected candidate detail ===
+  const { data: selectedCandidateData, refetch: refetchSelected } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
     functionName: 'candidates',
     args: selectedCandidate !== null ? [BigInt(selectedCandidate)] : undefined,
     chainId: targetChainId,
-    query: { enabled: contractReady && selectedCandidate !== null },
+    query: { enabled: contractReady && selectedCandidate !== null, refetchInterval: 15000 },
   })
 
   const selectedCandidateInfo = useMemo(() => {
     if (!selectedCandidateData) return null
     const d = selectedCandidateData as any
     return {
-      expireTime: Number(d.expireTime ?? d[10] ?? 0n),
-      status: Number(d.status ?? d[12] ?? 0),
-      totalSubBnb: BigInt(d.totalSubBnb ?? d[5] ?? 0n),
+      expireTime: Number(d.expireTime ?? d[8] ?? 0n),
+      status: Number(d.status ?? d[9] ?? 0),
+      totalSubUsdc: BigInt(d.totalSubUsdc ?? d[4] ?? 0n),
       proposer: String(d.proposer ?? d[0] ?? ''),
-      launchedToken: String(d.launchedToken ?? d[14] ?? ''),
+      launchedToken: String(d.launchedToken ?? d[10] ?? ''),
+      walletCount: Number(d.walletCount ?? d[16] ?? 0),
     }
   }, [selectedCandidateData])
 
-  const selectedTokenIsListed = useReadContract({
+  const selMeta = useMemo<TokenMeta>(() => parseMetadata(String((selectedCandidateData as any)?.metadataURI ?? (selectedCandidateData as any)?.[3] ?? '')), [selectedCandidateData])
+
+  const selectedTokenAddr = useMemo<`0x${string}` | undefined>(() => {
+    const addr = selectedCandidateInfo?.launchedToken as `0x${string}` | undefined
+    return addr && !isZeroAddress(addr) ? addr : undefined
+  }, [selectedCandidateInfo])
+
+  const { data: selectedTokenIsListedData, refetch: refetchSelListed } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
     functionName: 'isListed',
-    args: selectedCandidateInfo?.launchedToken && !isZeroAddress(selectedCandidateInfo.launchedToken as `0x${string}`)
-      ? [selectedCandidateInfo.launchedToken as `0x${string}`]
-      : undefined,
+    args: selectedTokenAddr ? [selectedTokenAddr] : undefined,
     chainId: targetChainId,
-    query: { enabled: !!selectedCandidateInfo?.launchedToken && !isZeroAddress(selectedCandidateInfo.launchedToken as `0x${string}`) },
+    query: { enabled: !isZeroAddress(bondingCurveAddress) && !!selectedTokenAddr },
+  })
+
+  // === Current user's subscription for the selected candidate ===
+  const { data: userSubData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'getSubscription',
+    args: address && selectedCandidate !== null ? [address, BigInt(selectedCandidate)] : undefined,
+    chainId: targetChainId,
+    query: { enabled: contractReady && !!address && selectedCandidate !== null },
   })
 
   const parseIds = (data: unknown): number[] => {
@@ -741,15 +694,15 @@ export default function DaoVote() {
   }
 
   const activeIds = parseIds(activeData)
-  const queuedIds = parseIds(queuedData)
-  const graceIds = parseIds(graceData)
-  const recycleIds = parseIds(recycleData)
+  const launchedIds = parseIds(launchedData)
+  const failedIds = parseIds(failedData)
 
-  const epochTimeRemaining = Number(epochRemaining ?? 0)
-  const totalStakedBnb = totalStakedBnbData ? Number(formatEther(totalStakedBnbData as bigint)) : 0
+  const launchThreshold = launchThresholdData != null ? BigInt(launchThresholdData as any) : undefined
+  const minSubThreshold = minSubThresholdData != null ? Number(formatEther(minSubThresholdData as bigint)) : 0
+  const minWallets = minWalletsData != null ? Number(minWalletsData as bigint) : 0
+  const minSubscribeUsdc = minSubscribeUsdcData != null ? Number(formatEther(minSubscribeUsdcData as bigint)) : 1
+  const totalStakedUsdc = totalStakedUsdcData ? Number(formatEther(totalStakedUsdcData as bigint)) : 0
   const totalStakedDoge = totalStakedDogeData ? Number(formatEther(totalStakedDogeData as bigint)) : 0
-  const totalStakedUsdt = totalStakedUsdtData ? Number(formatEther(totalStakedUsdtData as bigint)) : 0
-  const queueLength = Number(queueLengthData ?? 0)
 
   const dogeTokenName = (dogeTokenNameData as string) || 'DOGE'
 
@@ -759,6 +712,18 @@ export default function DaoVote() {
   const rawRights = userRawRightsData ? Number(userRawRightsData as bigint) : 0
   const userDogeBalance = dogeBalanceData ? Number(formatEther(dogeBalanceData as bigint)) : 0
   const userDogeAllowance = dogeAllowanceData ? Number(formatEther(dogeAllowanceData as bigint)) : 0
+
+  const userSubscription = useMemo(() => {
+    if (!userSubData) return null
+    const d = userSubData as any
+    return {
+      usdcAmount: BigInt(d.usdcAmount ?? d[0] ?? 0n),
+      subscribeTime: BigInt(d.subscribeTime ?? d[1] ?? 0n),
+      isActive: Boolean(d.isActive ?? d[2] ?? false),
+      hasClaimed: Boolean(d.hasClaimed ?? d[3] ?? false),
+      hasRefunded: Boolean(d.hasRefunded ?? d[4] ?? false),
+    }
+  }, [userSubData])
 
   const stakePositions = useMemo<StakePosition[]>(() => {
     if (!stakePositionsData) return []
@@ -811,21 +776,15 @@ export default function DaoVote() {
     return 'locked'
   }
 
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600)
-    const m = Math.floor((seconds % 3600) / 60)
-    return `${h}h ${m}m`
-  }
-
   const formatCountdown = (timestamp: number) => {
     const diff = timestamp - Date.now() / 1000
     if (diff <= 0) return t('dao.statusExpired')
-    const d = Math.floor(diff / 86400)
-    const h = Math.floor((diff % 86400) / 3600)
+    const h = Math.floor(diff / 3600)
     const m = Math.floor((diff % 3600) / 60)
-    if (d > 0) return `${d}d ${h}h`
+    const s = Math.floor(diff % 60)
     if (h > 0) return `${h}h ${m}m`
-    return `${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
   }
 
   const formatDate = (timestamp: number) => {
@@ -836,13 +795,30 @@ export default function DaoVote() {
 
   const handleRefresh = () => {
     refetchActive()
-    refetchQueued()
-    refetchGrace()
-    refetchRecycle()
+    refetchLaunched()
+    refetchFailed()
     refetchRights()
     refetchPositions()
     refetchEffectiveRights()
+    refetchSelected()
+    refetchSelListed()
   }
+
+  // Refetch everything whenever a transaction confirms (covers subscribe / finalize / graduate / refund / stake / vote)
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchActive()
+      refetchLaunched()
+      refetchFailed()
+      refetchRights()
+      refetchPositions()
+      refetchEffectiveRights()
+      refetchSelected()
+      refetchSelListed()
+      refetchDogeAllowance()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed])
 
   const BSC_GAS_CAP = 5_000_000n
 
@@ -870,10 +846,10 @@ export default function DaoVote() {
     }
   }
 
-  const handleSubscribeBnb = async () => {
+  const handleSubscribe = async () => {
     if (selectedCandidate === null) return
     setTxError('')
-    if (!subBnbAmount || parseFloat(subBnbAmount) < 1) {
+    if (!subUsdcAmount || parseFloat(subUsdcAmount) < minSubscribeUsdc) {
       setTxError(t('dao.subscribeMinAmount', { symbol: nativeSymbol }))
       return
     }
@@ -881,13 +857,34 @@ export default function DaoVote() {
       await doWrite({
         functionName: 'subscribeUsdc',
         args: [BigInt(selectedCandidate)],
-        value: parseEther(subBnbAmount),
+        value: parseEther(subUsdcAmount),
       })
-      setSubBnbAmount('')
-      setTimeout(() => handleRefresh(), 2000)
+      setSubUsdcAmount('')
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
+    }
+  }
+
+  const handleFinalize = async () => {
+    if (selectedCandidate === null) return
+    setTxError('')
+    try {
+      await doWrite({ functionName: 'finalizeSubscription', args: [BigInt(selectedCandidate)] })
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
+    }
+  }
+
+  const handleRefund = async () => {
+    if (selectedCandidate === null) return
+    setTxError('')
+    try {
+      await doWrite({ functionName: 'refundSubscription', args: [BigInt(selectedCandidate)] })
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
+      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
     }
   }
 
@@ -924,10 +921,6 @@ export default function DaoVote() {
         })
       }
       setStakeAmount('')
-      setTimeout(() => {
-        refetchPositions()
-        refetchDogeAllowance()
-      }, 2000)
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
@@ -941,11 +934,6 @@ export default function DaoVote() {
         functionName: 'unstakePosition',
         args: [BigInt(positionId)],
       })
-      setTimeout(() => {
-        refetchPositions()
-        refetchRights()
-        refetchEffectiveRights()
-      }, 2000)
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
@@ -956,11 +944,6 @@ export default function DaoVote() {
     setTxError('')
     try {
       await doWrite({ functionName: 'claimRights', args: [] })
-      setTimeout(() => {
-        refetchRights()
-        refetchPositions()
-        refetchEffectiveRights()
-      }, 2000)
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
@@ -980,50 +963,11 @@ export default function DaoVote() {
         args: [BigInt(selectedCandidate), BigInt(Math.round(parseFloat(voteRightsAmount)))],
       })
       setVoteRightsAmount('')
-      setTimeout(() => handleRefresh(), 2000)
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 150))
     }
   }
-
-  const handleSettleEpoch = async () => {
-    setTxError('')
-    setLastAction('settle')
-    try {
-      await doWrite({ functionName: 'settleEpoch', args: [] })
-      setTimeout(() => handleRefresh(), 2000)
-    } catch (err: any) {
-      setLastAction(null)
-      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
-      if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
-    }
-  }
-
-  const handleProcessQueue = async () => {
-    setTxError('')
-    try {
-      await doWrite({ functionName: 'processQueue', args: [] })
-      setTimeout(() => handleRefresh(), 2000)
-    } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
-      if (!msg.includes('User rejected') && !msg.includes('denied') && !msg.includes('launch window') && !msg.includes('daily launch limit') && !msg.includes('queue empty')) {
-        setTxError(msg.slice(0, 200))
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (!contractReady || !canLaunchToday || queueLength === 0) return
-    const checkAndProcess = () => {
-      const utcHour = new Date().getUTCHours()
-      if (utcHour >= launchHour) {
-        handleProcessQueue()
-      }
-    }
-    const interval = setInterval(checkAndProcess, 60000)
-    return () => clearInterval(interval)
-  }, [contractReady, canLaunchToday, queueLength, launchHour])
 
   const handleApproveDoge = async () => {
     if (!dogeTokenAddr || !address) return
@@ -1038,7 +982,6 @@ export default function DaoVote() {
         args: [daoAddress, maxUint256],
         gas: BSC_GAS_CAP,
       })
-      setTimeout(() => refetchDogeAllowance(), 2000)
     } catch (err: any) {
       const msg = err?.shortMessage || err?.message || t('common.transactionFailed')
       if (!msg.includes('User rejected') && !msg.includes('denied')) setTxError(msg.slice(0, 200))
@@ -1093,7 +1036,7 @@ export default function DaoVote() {
   }
 
   const currentTokenLabel = stakeTokenTab === 'bnb' ? nativeSymbol : dogeTokenName
-  const currentTotalStaked = stakeTokenTab === 'bnb' ? totalStakedBnb : totalStakedDoge
+  const currentTotalStaked = stakeTokenTab === 'bnb' ? totalStakedUsdc : totalStakedDoge
   const currentBalance = stakeTokenTab === 'bnb' ? 0 : userDogeBalance
   const currentAllowance = stakeTokenTab === 'doge' ? userDogeAllowance : Infinity
   const needsApprove = stakeTokenTab === 'doge' && currentAllowance < (parseFloat(stakeAmount) || 0)
@@ -1119,13 +1062,9 @@ export default function DaoVote() {
           <p className="text-sm text-gray-400 mt-1">{t('dao.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="badge-cyan">
-            <Clock className="w-3 h-3 mr-1" />
-            {formatTime(epochTimeRemaining)}
-          </span>
           <span className="badge-gold">
-            <Flame className="w-3 h-3 mr-1" />
-            {t('dao.queueTab')}: {queueLength} ({t('dao.top3PerDay')})
+            <Coins className="w-3 h-3 mr-1" />
+            {formatUsdc(totalStakedUsdc)} {nativeSymbol}
           </span>
           <button onClick={handleRefresh} className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors">
             <RefreshCw className="w-4 h-4 text-gray-400" />
@@ -1144,42 +1083,33 @@ export default function DaoVote() {
               <button
                 className={cn(
                   'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
-                  activeTab === 'voting' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
+                  activeTab === 'active' ? 'bg-neon-green text-dark-900' : 'text-gray-400 hover:text-white'
                 )}
-                onClick={() => setActiveTab('voting')}
+                onClick={() => setActiveTab('active')}
               >
                 <Vote className="w-4 h-4" /> {t('dao.activeTab')} ({activeIds.length})
               </button>
               <button
                 className={cn(
                   'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
-                  activeTab === 'queue' ? 'bg-doge-cyan text-dark-900' : 'text-gray-400 hover:text-white'
+                  activeTab === 'launched' ? 'bg-doge-gold text-dark-900' : 'text-gray-400 hover:text-white'
                 )}
-                onClick={() => setActiveTab('queue')}
+                onClick={() => setActiveTab('launched')}
               >
-                <Rocket className="w-4 h-4" /> {t('dao.queueTab')} ({queuedIds.length})
+                <Rocket className="w-4 h-4" /> {t('dao.launchedTab')} ({launchedIds.length})
               </button>
               <button
                 className={cn(
                   'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
-                  activeTab === 'grace' ? 'bg-neon-yellow text-dark-900' : 'text-gray-400 hover:text-white'
+                  activeTab === 'failed' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
                 )}
-                onClick={() => setActiveTab('grace')}
+                onClick={() => setActiveTab('failed')}
               >
-                <ShieldAlert className="w-4 h-4" /> {t('dao.graceTab')} ({graceIds.length})
-              </button>
-              <button
-                className={cn(
-                  'flex-1 py-2 rounded-md text-sm font-display font-semibold transition-all flex items-center justify-center gap-1.5',
-                  activeTab === 'recycle' ? 'bg-neon-red text-white' : 'text-gray-400 hover:text-white'
-                )}
-                onClick={() => setActiveTab('recycle')}
-              >
-                <Recycle className="w-4 h-4" /> {t('dao.recycleTab')} ({recycleIds.length})
+                <AlertCircle className="w-4 h-4" /> {t('dao.failedTab')} ({failedIds.length})
               </button>
             </div>
 
-            {activeTab === 'voting' && (
+            {activeTab === 'active' && (
               loadingActive ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-8 h-8 text-doge-gold animate-spin" />
@@ -1204,9 +1134,12 @@ export default function DaoVote() {
                       variant="active"
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
+                      bondingCurveAddress={bondingCurveAddress}
+                      launchThreshold={launchThreshold}
                       doWrite={doWrite}
                       onError={(msg) => setTxError(msg)}
                       currentAddress={address}
+                      isBusy={isWriting || isConfirming}
                     />
                   ))}
                 </div>
@@ -1221,26 +1154,29 @@ export default function DaoVote() {
               )
             )}
 
-            {activeTab === 'queue' && (
-              loadingQueued ? (
+            {activeTab === 'launched' && (
+              loadingLaunched ? (
                 <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-8 h-8 text-doge-cyan animate-spin" />
+                  <Loader2 className="w-8 h-8 text-doge-gold animate-spin" />
                 </div>
-              ) : queuedIds.length > 0 ? (
+              ) : launchedIds.length > 0 ? (
                 <div className="space-y-3">
-                  {queuedIds.map((id) => (
+                  {launchedIds.map((id) => (
                     <CandidateDetailCard
                       key={id}
                       candidateId={id}
                       isSelected={selectedCandidate === id}
                       onSelect={() => setSelectedCandidate(id)}
                       rank={0}
-                      variant="queued"
+                      variant="launched"
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
+                      bondingCurveAddress={bondingCurveAddress}
+                      launchThreshold={launchThreshold}
                       doWrite={doWrite}
                       onError={(msg) => setTxError(msg)}
                       currentAddress={address}
+                      isBusy={isWriting || isConfirming}
                     />
                   ))}
                 </div>
@@ -1249,105 +1185,73 @@ export default function DaoVote() {
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
                     <Rocket className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">{t('dao.queueEmpty')}</p>
-                  <p className="text-xs text-gray-500">{t('dao.queueEmptyDesc')}</p>
+                  <p className="text-gray-400 mb-2">{t('dao.noLaunchedCandidates')}</p>
                 </div>
               )
             )}
 
-            {activeTab === 'grace' && (
-              loadingGrace ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-8 h-8 text-neon-yellow animate-spin" />
-                </div>
-              ) : graceIds.length > 0 ? (
-                <div className="space-y-3">
-                  {graceIds.map((id) => (
-                    <CandidateDetailCard
-                      key={id}
-                      candidateId={id}
-                      isSelected={false}
-                      onSelect={() => {}}
-                      rank={0}
-                      variant="grace"
-                      daoAddress={daoAddress}
-                      abi={LAUNCH_DAO_ABI}
-                      doWrite={doWrite}
-                      onError={(msg) => setTxError(msg)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
-                    <ShieldAlert className="w-8 h-8 text-gray-500" />
-                  </div>
-                  <p className="text-gray-400 mb-2">{t('dao.noGraceCandidates')}</p>
-                </div>
-              )
-            )}
-
-            {activeTab === 'recycle' && (
-              loadingRecycle ? (
+            {activeTab === 'failed' && (
+              loadingFailed ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-8 h-8 text-neon-red animate-spin" />
                 </div>
-              ) : recycleIds.length > 0 ? (
+              ) : failedIds.length > 0 ? (
                 <div className="space-y-3">
-                  {recycleIds.map((id) => (
+                  {failedIds.map((id) => (
                     <CandidateDetailCard
                       key={id}
                       candidateId={id}
-                      isSelected={false}
-                      onSelect={() => {}}
+                      isSelected={selectedCandidate === id}
+                      onSelect={() => setSelectedCandidate(id)}
                       rank={0}
-                      variant="recycle"
+                      variant="failed"
                       daoAddress={daoAddress}
                       abi={LAUNCH_DAO_ABI}
+                      bondingCurveAddress={bondingCurveAddress}
+                      launchThreshold={launchThreshold}
                       doWrite={doWrite}
                       onError={(msg) => setTxError(msg)}
+                      currentAddress={address}
+                      isBusy={isWriting || isConfirming}
                     />
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
-                    <Recycle className="w-8 h-8 text-gray-500" />
+                    <AlertCircle className="w-8 h-8 text-gray-500" />
                   </div>
-                  <p className="text-gray-400 mb-2">{t('dao.noRecyclableCandidates')}</p>
+                  <p className="text-gray-400 mb-2">{t('dao.noFailedCandidates')}</p>
                 </div>
               )
             )}
           </div>
 
+          {/* Timeline / Steps */}
           <div className="card-dark">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-display font-bold text-lg">{t('dao.epochTimeline')}</h3>
-              <span className="badge-cyan">
-                <Clock className="w-3 h-3 mr-1" />
-                {formatTime(epochTimeRemaining)}
-              </span>
+              <h3 className="font-display font-bold text-lg">{t('dao.timeline')}</h3>
             </div>
 
             {selectedCandidate !== null && selectedCandidateInfo ? (() => {
               const isExpired = selectedCandidateInfo.expireTime > 0 && (selectedCandidateInfo.expireTime * 1000) <= Date.now()
-              const canSettle = selectedCandidateInfo.status === 0 && isExpired && epochTimeRemaining === 0 && !settleDone
-              const settleComplete = selectedCandidateInfo.status === 0 && settleDone
-              const isQueued = selectedCandidateInfo.status === 1
-              const isLaunched = selectedCandidateInfo.status === 5
-              const isOnDex = isLaunched && selectedTokenIsListed.data === true
+              const isActive = selectedCandidateInfo.status === STATUS_ACTIVE
+              const isLaunched = selectedCandidateInfo.status === STATUS_LAUNCHED
+              const isFailed = selectedCandidateInfo.status === STATUS_FAILED
+              const isOnDex = isLaunched && selectedTokenIsListedData === true
               const isOnBonding = isLaunched && !isOnDex
-              const isVoting = selectedCandidateInfo.status === 0 && !isExpired
+              const isVoting = isActive && !isExpired
+              const canFinalize = isActive && isExpired
 
               let activeStep = -1
-              if (isVoting || canSettle || settleComplete) activeStep = 0
-              else if (isQueued) activeStep = 1
+              if (isVoting) activeStep = 0
+              else if (canFinalize) activeStep = 1
               else if (isOnBonding) activeStep = 2
               else if (isOnDex) activeStep = 3
 
               const steps = [
                 { label: t('dao.step.subscribe'), icon: Vote },
-                { label: t('dao.step.queue'), icon: Rocket },
+                { label: t('dao.step.finalize'), icon: Zap },
                 { label: t('dao.step.internal'), icon: TrendingUp },
                 { label: t('dao.step.external'), icon: Sparkles },
               ]
@@ -1357,13 +1261,13 @@ export default function DaoVote() {
                   <div className="flex items-center mb-1.5">
                     {steps.map((step, i) => {
                       const Icon = step.icon
-                      const isActive = i === activeStep
+                      const isActiveStep = i === activeStep
                       const isCompleted = i < activeStep
                       return (
                         <div key={i} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : 'none' }}>
                           <div className={cn(
                             'w-8 h-8 rounded-full flex items-center justify-center border-2 shrink-0 transition-all duration-300',
-                            isActive ? 'border-doge-gold bg-doge-gold/15 text-doge-gold' :
+                            isActiveStep ? 'border-doge-gold bg-doge-gold/15 text-doge-gold' :
                             isCompleted ? 'border-emerald-500/70 bg-emerald-500/10 text-emerald-400' :
                             'border-dark-500/50 bg-dark-700 text-gray-600'
                           )}>
@@ -1381,13 +1285,13 @@ export default function DaoVote() {
                   </div>
                   <div className="flex mb-5">
                     {steps.map((step, i) => {
-                      const isActive = i === activeStep
+                      const isActiveStep = i === activeStep
                       const isCompleted = i < activeStep
                       return (
                         <div key={i} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : 'none' }}>
                           <span className={cn(
                             'text-[11px] whitespace-nowrap transition-colors',
-                            isActive ? 'text-doge-gold font-bold' :
+                            isActiveStep ? 'text-doge-gold font-bold' :
                             isCompleted ? 'text-emerald-400/80' :
                             'text-gray-600'
                           )}>
@@ -1399,47 +1303,31 @@ export default function DaoVote() {
                     })}
                   </div>
 
-                  {(isVoting || canSettle || settleComplete) && (
+                  {isVoting && (
                     <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-xl p-5 text-center">
-                      {isVoting ? (
-                        <>
-                          <Timer className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
-                          <div className="text-2xl font-display font-bold text-doge-gold tracking-wide">
-                            {formatCountdown(selectedCandidateInfo.expireTime)}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-1.5">{t('dao.step.subscribeDesc')}</div>
-                        </>
-                      ) : canSettle ? (
-                        <>
-                          <button
-                            className="w-full text-center hover:bg-neon-green/10 transition-all cursor-pointer group"
-                            onClick={handleSettleEpoch}
-                            disabled={isWriting || isConfirming}
-                          >
-                            {isWriting || isConfirming ? (
-                              <Loader2 className="w-7 h-7 mx-auto mb-2 text-neon-green animate-spin" />
-                            ) : (
-                              <TrendingUp className="w-7 h-7 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
-                            )}
-                            <div className="text-lg font-display font-bold text-neon-green">{t('dao.settleEpoch')}</div>
-                            <div className="text-xs text-neon-green/70 mt-1">{t('dao.settleReward')}</div>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-7 h-7 mx-auto mb-2 text-emerald-400" />
-                          <div className="text-lg font-display font-bold text-emerald-400">{t('dao.settleDone')}</div>
-                          <div className="text-xs text-gray-400 mt-1">{t('dao.utcReset')}</div>
-                        </>
-                      )}
+                      <Timer className="w-7 h-7 mx-auto mb-2 text-doge-gold" />
+                      <div className="text-2xl font-display font-bold text-doge-gold tracking-wide">
+                        {formatCountdown(selectedCandidateInfo.expireTime)}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1.5">{t('dao.step.subscribeDesc')}</div>
                     </div>
                   )}
 
-                  {isQueued && (
-                    <div className="bg-doge-cyan/5 border border-doge-cyan/20 rounded-xl p-5 text-center">
-                      <Rocket className="w-7 h-7 mx-auto mb-2 text-doge-cyan" />
-                      <div className="text-lg font-display font-bold text-doge-cyan">{t('dao.queuedBadge')}</div>
-                      <div className="text-xs text-gray-400 mt-1">{t('dao.step.queueDesc')}</div>
+                  {canFinalize && (
+                    <div className="bg-neon-green/5 border border-neon-green/20 rounded-xl p-5 text-center">
+                      <button
+                        className="w-full text-center hover:bg-neon-green/10 transition-all cursor-pointer group disabled:cursor-not-allowed"
+                        onClick={handleFinalize}
+                        disabled={isWriting || isConfirming}
+                      >
+                        {isWriting || isConfirming ? (
+                          <Loader2 className="w-7 h-7 mx-auto mb-2 text-neon-green animate-spin" />
+                        ) : (
+                          <Zap className="w-7 h-7 mx-auto mb-2 text-neon-green group-hover:scale-110 transition-transform" />
+                        )}
+                        <div className="text-lg font-display font-bold text-neon-green">{t('dao.finalize')}</div>
+                        <div className="text-xs text-neon-green/70 mt-1">{t('dao.step.finalizeDesc')}</div>
+                      </button>
                     </div>
                   )}
 
@@ -1459,11 +1347,27 @@ export default function DaoVote() {
                     </div>
                   )}
 
+                  {isFailed && (
+                    <div className="bg-neon-red/5 border border-neon-red/20 rounded-xl p-5 text-center">
+                      <Undo2 className="w-7 h-7 mx-auto mb-2 text-neon-red" />
+                      <div className="text-lg font-display font-bold text-neon-red">{t('dao.failedBadge')}</div>
+                      <div className="text-xs text-gray-400 mt-1 mb-3">{t('dao.refundDesc')}</div>
+                      <button
+                        className="btn-primary w-full"
+                        disabled={isWriting || isConfirming}
+                        onClick={handleRefund}
+                      >
+                        {isWriting || isConfirming ? (
+                          <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t('dao.confirming')}</span>
+                        ) : t('dao.refund')}
+                      </button>
+                    </div>
+                  )}
+
                   {activeStep === -1 && (
                     <div className="bg-dark-700/50 border border-dark-500/30 rounded-xl p-5 text-center">
                       <Vote className="w-7 h-7 mx-auto mb-2 text-gray-500" />
-                      <div className="text-sm font-bold text-gray-400">{formatTime(epochTimeRemaining)}</div>
-                      <div className="text-xs text-gray-500 mt-1">{t('dao.phase.voting')}</div>
+                      <div className="text-sm font-bold text-gray-400">{t('dao.phase.voting')}</div>
                     </div>
                   )}
                 </>
@@ -1475,52 +1379,11 @@ export default function DaoVote() {
                 <div className="text-xs text-gray-500 mt-1">{t('dao.selectCandidateHintDesc')}</div>
               </div>
             )}
-
-            <div className="mt-5 pt-4 border-t border-dark-500/30">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Rocket className="w-4 h-4 text-doge-cyan" />
-                  <span className="text-sm font-display font-bold">{t('dao.autoLaunch')}</span>
-                </div>
-                <span className="text-xs text-gray-500">{todayLaunchCount}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</span>
-              </div>
-              {queueLength > 0 && canLaunchToday && !isLaunchWindowOpen ? (
-                <div className="bg-doge-cyan/5 border border-doge-cyan/20 rounded-lg p-3 text-center">
-                  <Clock className="w-4 h-4 mx-auto mb-1 text-doge-cyan" />
-                  <div className="text-xs text-doge-cyan font-bold">{t('dao.nextLaunchCountdown')}</div>
-                  <div className="text-lg font-display font-bold text-doge-cyan mt-1">
-                    {(() => {
-                      const diff = nextLaunchWindowTime.getTime() - Date.now()
-                      const h = Math.floor(diff / 3600000)
-                      const m = Math.floor((diff % 3600000) / 60000)
-                      return `${h}h ${m}m`
-                    })()}
-                  </div>
-                  <div className="text-[10px] text-gray-500">{t('dao.opensAt')} {String(launchHour).padStart(2, '0')}:00 UTC</div>
-                </div>
-              ) : queueLength > 0 && canLaunchToday && isLaunchWindowOpen ? (
-                <div className="bg-neon-green/5 border border-neon-green/20 rounded-lg p-3 text-center">
-                  <Rocket className="w-4 h-4 mx-auto mb-1 text-neon-green" />
-                  <div className="text-xs text-neon-green font-bold">{t('dao.launchWindowOpen')}</div>
-                  <div className="text-[10px] text-gray-500 mt-1">{t('dao.autoLaunching')}</div>
-                </div>
-              ) : !canLaunchToday && queueLength > 0 ? (
-                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-center">
-                  <Check className="w-4 h-4 mx-auto mb-1 text-emerald-400" />
-                  <div className="text-xs text-emerald-400">{maxLaunchsPerDay}/{maxLaunchsPerDay} {t('dao.todayLaunched')}</div>
-                  <div className="text-[10px] text-gray-500">{t('dao.utcReset')}</div>
-                </div>
-              ) : (
-                <div className="bg-dark-700 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-400">{queueLength} {t('dao.inQueue')}</div>
-                  <div className="text-[10px] text-gray-500">{t('dao.launchQueue')}</div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
         <div className="space-y-4">
+          {/* Subscribe panel */}
           <div className="card-dark">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold flex items-center gap-2">
@@ -1533,33 +1396,56 @@ export default function DaoVote() {
               <div className="space-y-4">
                 <div className="bg-doge-gold/5 border border-doge-gold/20 rounded-lg p-3">
                   <p className="text-xs text-doge-gold font-medium">{t('dao.selectedCandidate', { id: selectedCandidate + 1 })}</p>
-                  {selectedCandidateInfo && (() => {
-                    const selMeta = parseMetadata(String((selectedCandidateData as any)?.metadataURI ?? (selectedCandidateData as any)?.[3] ?? ''))
-                    return selMeta.description ? (
-                      <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">{selMeta.description}</p>
-                    ) : (
-                      <p className="text-xs text-gray-400 mt-1">{t('dao.subscribeHint')}</p>
-                    )
-                  })()}
+                  {selMeta.description ? (
+                    <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">{selMeta.description}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-1">{t('dao.subscribeHint')}</p>
+                  )}
                 </div>
+
+                {selectedCandidateInfo && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-dark-700 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-gray-500">{t('dao.subscribed')}</p>
+                      <p className="text-xs font-bold text-doge-gold">{formatUsdc(Number(formatEther(selectedCandidateInfo.totalSubUsdc)))}</p>
+                    </div>
+                    <div className="bg-dark-700 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-gray-500">{t('dao.wallets')}</p>
+                      <p className="text-xs font-bold">{selectedCandidateInfo.walletCount}</p>
+                    </div>
+                    <div className="bg-dark-700 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-gray-500">{t('dao.subscribeWindow')}</p>
+                      <p className="text-xs font-bold text-doge-gold">{selectedCandidateInfo.expireTime > 0 ? formatCountdown(selectedCandidateInfo.expireTime) : '-'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {userSubscription && userSubscription.usdcAmount > 0n && (
+                  <div className="bg-doge-cyan/5 border border-doge-cyan/20 rounded-lg p-2">
+                    <p className="text-xs text-doge-cyan">
+                      {t('dao.subscribed')}: {formatUsdc(Number(formatEther(userSubscription.usdcAmount)))} {nativeSymbol}
+                      {userSubscription.hasRefunded ? ` · ${t('dao.refund')}` : ''}
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">{t('dao.subscribeBnbLabel', { symbol: nativeSymbol })}</label>
                   <div className="relative">
                     <input
                       type="number"
-                      value={subBnbAmount}
-                      onChange={(e) => setSubBnbAmount(e.target.value)}
-                      placeholder="1 - 20"
+                      value={subUsdcAmount}
+                      onChange={(e) => setSubUsdcAmount(e.target.value)}
+                      placeholder={`${minSubscribeUsdc} - 20`}
                       className="input-dark w-full pr-14"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">{nativeSymbol}</span>
                   </div>
                   <div className="flex gap-2 mt-2">
-                    {[1, 10, 100, 1000, 5000].map(v => (
+                    {[1, 3, 5, 10, 20].map(v => (
                       <button
                         key={v}
-                        onClick={() => setSubBnbAmount(String(v))}
+                        onClick={() => setSubUsdcAmount(String(v))}
                         className="flex-1 text-xs py-1 rounded bg-dark-600 text-gray-300 hover:text-doge-gold hover:bg-dark-500 transition-colors"
                       >
                         {v}
@@ -1568,8 +1454,8 @@ export default function DaoVote() {
                   </div>
                   <button
                     className="btn-primary w-full mt-2"
-                    disabled={!subBnbAmount || parseFloat(subBnbAmount) < 1 || isWriting || isConfirming}
-                    onClick={handleSubscribeBnb}
+                    disabled={!subUsdcAmount || parseFloat(subUsdcAmount) < minSubscribeUsdc || isWriting || isConfirming}
+                    onClick={handleSubscribe}
                   >
                     {isWriting || isConfirming ? (
                       <span className="flex items-center justify-center gap-2">
@@ -1581,10 +1467,12 @@ export default function DaoVote() {
                 </div>
 
                 <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                  <p>�?{t('dao.subscribeTriggerHint', { symbol: nativeSymbol })}</p>
-                  <p>�?{t('dao.subscribeNoLimitHint')}</p>
-                  <p>�?{t('dao.expiredRefundHint')}</p>
-                  <p>�?{t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
+                  <p>· {t('dao.minSubscribeHint', { amount: minSubscribeUsdc, symbol: nativeSymbol })}</p>
+                  <p>· {t('dao.subscribeWindowHint')}</p>
+                  <p>· {t('dao.subscribeWeightHint', { symbol: nativeSymbol })}</p>
+                  {minSubThreshold > 0 && minWallets > 0 && (
+                    <p>· {t('dao.launchThreshold')}: {formatUsdc(minSubThreshold)} {nativeSymbol} / {minWallets} {t('dao.wallets')}</p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1596,6 +1484,7 @@ export default function DaoVote() {
             )}
           </div>
 
+          {/* Staking panel */}
           <div className="card-dark">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold flex items-center gap-2">
@@ -1830,6 +1719,7 @@ export default function DaoVote() {
             </div>
           </div>
 
+          {/* Rights panel */}
           <div className="card-dark">
             <h3 className="font-display font-bold mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-doge-gold" />
@@ -1894,10 +1784,10 @@ export default function DaoVote() {
               )}
 
               <div className="bg-dark-700 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                <p>�?{t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
-                <p>�?{t('dao.durationMultiplierHint')}</p>
-                <p>�?{t('dao.rightsCapHint')}</p>
-                <p>�?{t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
+                <p>· {t('dao.rightsCalcHint', { symbol: nativeSymbol })}</p>
+                <p>· {t('dao.durationMultiplierHint')}</p>
+                <p>· {t('dao.rightsCapHint')}</p>
+                <p>· {t('dao.subscribeWeightRefundHint', { symbol: nativeSymbol })}</p>
               </div>
             </div>
           </div>

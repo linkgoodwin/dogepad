@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Wallet, ArrowRight, Landmark, Coins, Sparkles, Loader2, HandCoins, RotateCcw, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
+import { Wallet, ArrowRight, Landmark, Coins, Sparkles, Loader2, HandCoins, RotateCcw, Clock, AlertTriangle } from 'lucide-react'
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther } from 'viem'
 import { LAUNCH_DAO_ABI, FEE_DISTRIBUTOR_ABI, getContractAddress, isZeroAddress, getNativeSymbol } from '@/config/contracts'
@@ -11,11 +11,8 @@ import CopyableAddress from '@/components/CopyableAddress'
 
 const STATUS_MAP: Record<number, { labelKey: string; color: string }> = {
   0: { labelKey: 'dao.activeTab', color: 'text-neon-green' },
-  1: { labelKey: 'dao.queuedBadge', color: 'text-doge-cyan' },
-  2: { labelKey: 'dao.statusExpired', color: 'text-gray-400' },
-  3: { labelKey: 'dao.graceTab', color: 'text-neon-yellow' },
-  4: { labelKey: 'dao.statusRecyclable', color: 'text-neon-red' },
-  5: { labelKey: 'dao.launched', color: 'text-doge-gold' },
+  1: { labelKey: 'dao.launched', color: 'text-doge-gold' },
+  2: { labelKey: 'dao.failedTab', color: 'text-neon-red' },
 }
 
 export default function Portfolio() {
@@ -120,19 +117,16 @@ export default function Portfolio() {
         name: String(raw.name ?? raw[1] ?? ''),
         symbol: String(raw.symbol ?? raw[2] ?? ''),
         metadataURI: String(raw.metadataURI ?? raw[3] ?? ''),
-        totalWeight: BigInt(raw.totalWeight ?? raw[4] ?? 0n),
-        totalSubBnb: BigInt(raw.totalSubBnb ?? raw[5] ?? 0n),
-        totalSubDoge: BigInt(raw.totalSubDoge ?? raw[6] ?? 0n),
-        totalRightsVotes: BigInt(raw.totalRightsVotes ?? raw[7] ?? 0n),
-        submitTime: Number(raw.submitTime ?? raw[8] ?? 0),
-        durationTier: Number(raw.durationTier ?? raw[9] ?? 0),
-        expireTime: Number(raw.expireTime ?? raw[10] ?? 0),
-        gracePeriodEnd: Number(raw.gracePeriodEnd ?? raw[11] ?? 0),
-        status: Number(raw.status ?? raw[12] ?? 0),
-        wasLaunched: Boolean(raw.wasLaunched ?? raw[13] ?? false),
-        launchedToken: String(raw.launchedToken ?? raw[14] ?? ''),
-        launchedTokenSupply: BigInt(raw.launchedTokenSupply ?? raw[15] ?? 0n),
-        queueTime: Number(raw.queueTime ?? raw[16] ?? 0),
+        totalSubUsdc: BigInt(raw.totalSubUsdc ?? raw[4] ?? 0n),
+        totalWeight: BigInt(raw.totalWeight ?? raw[5] ?? 0n),
+        totalRightsVotes: BigInt(raw.totalRightsVotes ?? raw[6] ?? 0n),
+        submitTime: Number(raw.submitTime ?? raw[7] ?? 0),
+        expireTime: Number(raw.expireTime ?? raw[8] ?? 0),
+        status: Number(raw.status ?? raw[9] ?? 0),
+        launchedToken: String(raw.launchedToken ?? raw[10] ?? ''),
+        launchedTokenSupply: BigInt(raw.launchedTokenSupply ?? raw[11] ?? 0n),
+        launchedUsdcUsed: BigInt(raw.launchedUsdcUsed ?? raw[12] ?? 0n),
+        walletCount: Number(raw.walletCount ?? raw[16] ?? 0),
       }
     }).filter((x): x is NonNullable<typeof x> => x !== null)
   }, [candidatesData])
@@ -149,10 +143,8 @@ export default function Portfolio() {
       candidateName: string
       candidateSymbol: string
       candidateStatus: number
-      wasLaunched: boolean
       launchedToken: string
-      bnbAmount: number
-      dogeAmount: number
+      usdcAmount: number
       subscribeTime: number
       isActive: boolean
       hasClaimed: boolean
@@ -162,9 +154,8 @@ export default function Portfolio() {
     subscriptionsData.forEach((result, i) => {
       if (result.status !== 'success' || !result.result) return
       const raw = result.result as any
-      const bnbAmount = Number(formatEther(BigInt(raw.bnbAmount ?? raw[0] ?? 0n)))
-      const dogeAmount = Number(formatEther(BigInt(raw.dogeAmount ?? raw[1] ?? 0n)))
-      if (bnbAmount === 0 && dogeAmount === 0) return
+      const usdcAmount = Number(formatEther(BigInt(raw.usdcAmount ?? raw[0] ?? 0n)))
+      if (usdcAmount === 0) return
 
       const candidate = parsedCandidates.find(c => c.id === i)
       if (!candidate) return
@@ -174,14 +165,12 @@ export default function Portfolio() {
         candidateName: candidate.name,
         candidateSymbol: candidate.symbol,
         candidateStatus: candidate.status,
-        wasLaunched: candidate.wasLaunched,
         launchedToken: candidate.launchedToken,
-        bnbAmount,
-        dogeAmount,
-        subscribeTime: Number(raw.subscribeTime ?? raw[2] ?? 0),
-        isActive: Boolean(raw.isActive ?? raw[3] ?? false),
-        hasClaimed: Boolean(raw.hasClaimed ?? raw[4] ?? false),
-        hasRefunded: Boolean(raw.hasRefunded ?? raw[5] ?? false),
+        usdcAmount,
+        subscribeTime: Number(raw.subscribeTime ?? raw[1] ?? 0),
+        isActive: Boolean(raw.isActive ?? raw[2] ?? false),
+        hasClaimed: Boolean(raw.hasClaimed ?? raw[3] ?? false),
+        hasRefunded: Boolean(raw.hasRefunded ?? raw[4] ?? false),
       })
     })
 
@@ -269,27 +258,10 @@ export default function Portfolio() {
   const feeStakedDoge = feeStakedDogeData ? Number(formatEther(feeStakedDogeData as bigint)) : 0
   const feePendingDividend = feePendingDivData ? Number(formatEther(feePendingDivData as bigint)) : 0
 
-  const totalStakingBnb = parsedStakePositions.filter(p => p.tokenSymbol === nativeSymbol && !p.isWithdrawn).reduce((sum, p) => sum + p.amount, 0)
-  const totalSubBnbValue = mySubscriptions.reduce((sum, s) => sum + s.bnbAmount, 0)
-  const totalValue = totalStakingBnb + totalSubBnbValue
+  const totalStakingUsdc = parsedStakePositions.filter(p => p.tokenSymbol === nativeSymbol && !p.isWithdrawn).reduce((sum, p) => sum + p.amount, 0)
+  const totalSubUsdcValue = mySubscriptions.reduce((sum, s) => sum + s.usdcAmount, 0)
+  const totalValue = totalStakingUsdc + totalSubUsdcValue
   const hasPositions = totalValue > 0 || parsedStakePositions.length > 0 || myCandidates.length > 0 || mySubscriptions.length > 0
-
-  const handleClaimSubscription = (candidateId: number) => {
-    setTxError('')
-    writeContractAsync({
-      address: daoAddress,
-      abi: LAUNCH_DAO_ABI,
-      functionName: 'claimSubscription',
-      args: [BigInt(candidateId)],
-      chainId,
-      gas: 5_000_000n,
-    } as any).catch((err: any) => {
-      const msg = err?.shortMessage || err?.message || ''
-      if (!msg.includes('User rejected') && !msg.includes('denied')) {
-        setTxError(msg.length > 150 ? msg.slice(0, 150) + '...' : msg)
-      }
-    })
-  }
 
   const handleRefundSubscription = (candidateId: number) => {
     setTxError('')
@@ -391,8 +363,7 @@ export default function Portfolio() {
           <div className="space-y-3">
             {mySubscriptions.map(s => {
               const statusInfo = STATUS_MAP[s.candidateStatus] || { labelKey: 'portfolio.unknown', color: 'text-gray-400' }
-              const canClaim = s.wasLaunched && s.isActive && !s.hasClaimed && !s.hasRefunded
-              const canRefund = !s.wasLaunched && s.isActive && !s.hasClaimed && !s.hasRefunded && (s.candidateStatus === 2 || s.candidateStatus === 3 || s.candidateStatus === 4)
+              const canRefund = s.candidateStatus === 2 && s.isActive && !s.hasClaimed && !s.hasRefunded
               return (
                 <div key={s.candidateId} className="bg-dark-700 rounded-lg p-4">
                   <div className="flex items-center justify-between">
@@ -406,44 +377,28 @@ export default function Portfolio() {
                         </p>
                         <div className="flex items-center gap-2 text-xs">
                           <span className={cn('font-medium', statusInfo.color)}>{t(statusInfo.labelKey)}</span>
-                          {s.hasClaimed && s.wasLaunched && <span className="text-neon-green">{t('portfolio.autoDistributed')}</span>}
-                          {s.hasClaimed && !s.wasLaunched && <span className="text-neon-green">{t('portfolio.claimed')}</span>}
+                          {s.hasClaimed && s.candidateStatus === 1 && <span className="text-neon-green">{t('portfolio.autoDistributed')}</span>}
                           {s.hasRefunded && <span className="text-neon-yellow">{t('portfolio.refunded')}</span>}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-display font-bold">{formatUsdc(s.bnbAmount)} {nativeSymbol}</p>
-                      {s.dogeAmount > 0 && (
-                        <p className="text-xs text-doge-cyan">{s.dogeAmount.toFixed(2)} DOGE</p>
-                      )}
+                      <p className="text-sm font-display font-bold">{formatUsdc(s.usdcAmount)} {nativeSymbol}</p>
                     </div>
                   </div>
-                  {(canClaim || canRefund) && (
+                  {canRefund && (
                     <div className="mt-3 pt-3 border-t border-dark-500/30 flex gap-2">
-                      {canClaim && (
-                        <button
-                          className="flex-1 py-2 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-colors font-bold flex items-center justify-center gap-1"
-                          onClick={() => handleClaimSubscription(s.candidateId)}
-                          disabled={isWritePending || isConfirming}
-                        >
-                          {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                          {t('portfolio.claimToken')}
-                        </button>
-                      )}
-                      {canRefund && (
-                        <button
-                          className="flex-1 py-2 text-xs rounded-lg bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/30 hover:bg-neon-yellow/20 transition-colors font-bold flex items-center justify-center gap-1"
-                          onClick={() => handleRefundSubscription(s.candidateId)}
-                          disabled={isWritePending || isConfirming}
-                        >
-                          {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                          {t('portfolio.refundSubscription')}
-                        </button>
-                      )}
+                      <button
+                        className="flex-1 py-2 text-xs rounded-lg bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/30 hover:bg-neon-yellow/20 transition-colors font-bold flex items-center justify-center gap-1"
+                        onClick={() => handleRefundSubscription(s.candidateId)}
+                        disabled={isWritePending || isConfirming}
+                      >
+                        {isWritePending || isConfirming ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                        {t('portfolio.refundSubscription')}
+                      </button>
                     </div>
                   )}
-                  {s.wasLaunched && !isZeroAddress(s.launchedToken as `0x${string}`) && (
+                  {s.candidateStatus === 1 && !isZeroAddress(s.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
                       <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
                       <CopyableAddress address={s.launchedToken} chainId={chainId} type="token" />
@@ -500,11 +455,11 @@ export default function Portfolio() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-display font-bold">{formatUsdc(Number(formatEther(c.totalSubBnb)))} {nativeSymbol}</p>
+                      <p className="text-sm font-display font-bold">{formatUsdc(Number(formatEther(c.totalSubUsdc)))} {nativeSymbol}</p>
                       <p className="text-xs text-gray-400">{t('dao.subscribe')}</p>
                     </div>
                   </div>
-                  {c.wasLaunched && !isZeroAddress(c.launchedToken as `0x${string}`) && (
+                  {c.status === 1 && !isZeroAddress(c.launchedToken as `0x${string}`) && (
                     <div className="mt-2 pt-2 border-t border-dark-500/30">
                       <p className="text-[10px] text-gray-500 mb-1">{t('dao.tokenContract')}</p>
                       <CopyableAddress address={c.launchedToken} chainId={chainId} type="token" />
@@ -651,7 +606,7 @@ export default function Portfolio() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-dark-700 rounded-lg p-4">
             <p className="text-xs text-gray-400 mb-1">{t('portfolio.stakingPositions')}</p>
-            <p className="text-xl font-display font-bold text-neon-green">{formatUsdc(totalStakingBnb)} {nativeSymbol}</p>
+            <p className="text-xl font-display font-bold text-neon-green">{formatUsdc(totalStakingUsdc)} {nativeSymbol}</p>
             {parsedStakePositions.filter(p => p.tokenSymbol !== nativeSymbol && !p.isWithdrawn).length > 0 && (
               <div className="mt-1 space-y-0.5">
                 {parsedStakePositions.filter(p => p.tokenSymbol !== nativeSymbol && !p.isWithdrawn).map(p => (
@@ -666,7 +621,7 @@ export default function Portfolio() {
           </div>
           <div className="bg-dark-700 rounded-lg p-4">
             <p className="text-xs text-gray-400 mb-1">{t('portfolio.subscriptionsLabel')}</p>
-            <p className="text-xl font-display font-bold text-doge-gold">{formatUsdc(totalSubBnbValue)} {nativeSymbol}</p>
+            <p className="text-xl font-display font-bold text-doge-gold">{formatUsdc(totalSubUsdcValue)} {nativeSymbol}</p>
             <p className="text-xs text-gray-400 mt-1">{mySubscriptions.filter(s => s.isActive).length} {t('portfolio.activeCount')}</p>
           </div>
         </div>

@@ -322,7 +322,7 @@ export default function Home() {
   const { data: totalStakedData } = useReadContract({
     address: daoAddress,
     abi: LAUNCH_DAO_ABI,
-    functionName: 'totalStakedBnb',
+    functionName: 'totalStakedUsdc',
     chainId: targetChainId,
     query: { enabled: contractReady },
   })

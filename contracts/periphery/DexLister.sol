@@ -246,6 +246,9 @@ contract DexLister is Ownable {
 
         BondingCurveToken(p.token).setSkipHoldingLimit(false);
 
+        // Renounce ownership for full decentralization (pump.fun style)
+        BondingCurveToken(p.token).renounceByLister();
+
         emit DexListed(p.token, lpUsdc, p.lpTokens);
     }
 
@@ -352,6 +355,10 @@ contract DexLister is Ownable {
         }
 
         BondingCurveToken(token).setSkipHoldingLimit(false);
+
+        // Renounce ownership for full decentralization (pump.fun style)
+        // Tax and LP dividend logic are internal and continue to work
+        BondingCurveToken(token).renounceByLister();
 
         emit DexListed(token, lpUsdc, tokenBalance);
     }
