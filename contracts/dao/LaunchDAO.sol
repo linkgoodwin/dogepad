@@ -268,13 +268,12 @@ contract LaunchDAO is ReentrancyGuard, Ownable {
         // 7. Re-enable holding limit
         IBondingCurveTokenExclude(token).setSkipHoldingLimit(false);
 
-        // 6. Set dogeToken if not set (for staking)
-        if (dogeToken == address(0)) dogeToken = token;
+        // Note: dogeToken must be set manually via setDogeToken() after the platform token is launched
 
         emit TokenLaunched(candidateId, token, totalUsdc, tokensReceived);
         emit SubscriptionFinalized(candidateId, true, totalUsdc, c.walletCount);
 
-        // 7. Auto-graduate if reserve already meets threshold
+        // 8. Auto-graduate if reserve already meets threshold
         uint256 reserve = IBondingCurveLaunch(bondingCurve).getReserve(token);
         if (reserve >= launchThreshold) {
             IBondingCurveLaunch(bondingCurve).triggerGraduation(token);

@@ -151,10 +151,10 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   const bondingCurveAddress = getContractAddress(targetChainId, 'bondingCurve')
   const isEnabled = !isZeroAddress(bondingCurveAddress) && !isZeroAddress(tokenAddress as `0x${string}`)
 
-  const { data, isLoading } = useReadContract({
+  const { data: reserveData, isLoading } = useReadContract({
     address: bondingCurveAddress as `0x${string}`,
     abi: BONDING_CURVE_ABI,
-    functionName: 'getTokenInfo',
+    functionName: 'getReserve',
     args: [tokenAddress as `0x${string}`],
     chainId: targetChainId,
     query: { enabled: isEnabled, refetchInterval: 30000 },
@@ -186,20 +186,16 @@ function LaunchedTokenCard({ tokenAddress }: { tokenAddress: string }) {
   })
 
   const tokenInfo = useMemo(() => {
-    if (!data) return null
-    const d = data as any
-    const tokenAddr = d.tokenAddress ?? d[0]
-    if (!tokenAddr || isZeroAddress(tokenAddr as `0x${string}`)) return null
+    if (reserveData === undefined) return null
     return {
-      reserveUsdc: BigInt(d.reserveUsdc ?? d[3] ?? 0n),
-      isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
+      reserveUsdc: BigInt(reserveData),
     }
-  }, [data])
+  }, [reserveData])
 
   const name = String(erc20Name ?? '')
   const symbol = String(erc20Symbol ?? '')
   const reserve = tokenInfo ? Number(formatEther(tokenInfo.reserveUsdc)) : 0
-  const isListed = listedData ? Boolean(listedData) : tokenInfo?.isListedOnDex ?? false
+  const isListed = listedData ? Boolean(listedData) : false
 
   if (isLoading || !tokenInfo) {
     return (

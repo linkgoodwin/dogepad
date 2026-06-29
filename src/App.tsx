@@ -5,7 +5,7 @@ import LandingLayout from "@/components/LandingLayout"
 import ErrorBoundary from './components/ErrorBoundary'
 import { useI18n } from "@/stores/i18nStore"
 import { t as translate, type TranslationKey } from "@/i18n/translations"
-import { useAccount, useWriteContract } from "wagmi"
+import { useAccount, useWriteContract, useReadContract } from "wagmi"
 import { Loader2 } from "lucide-react"
 import { DAILY_CHECKIN_ABI, getContractAddress, isZeroAddress } from "@/config/contracts"
 import { useTargetChainId } from "@/hooks/useNetwork"
@@ -46,8 +46,33 @@ function ReferralBinder() {
   const { writeContractAsync } = useWriteContract()
   const [binding, setBinding] = useState(false)
 
+  const checkinAddress = getContractAddress(chainId, 'dailyCheckin')
+
+  // Check if user already has a referrer bound on-chain
+  const { data: userInfo } = useReadContract({
+    address: checkinAddress as `0x${string}`,
+    abi: DAILY_CHECKIN_ABI,
+    functionName: 'getUserInfo',
+    args: address ? [address] : undefined,
+    chainId,
+    query: { enabled: isConnected && !!address && !isZeroAddress(checkinAddress) },
+  })
+
+  // getUserInfo returns: (lastCheckinDay, streak, totalClaimed, referrer, refEarnings, refCount, canCheckinToday, todayReward)
+  const onChainReferrer = userInfo ? String((userInfo as any)[3] ?? (userInfo as any).referrer ?? '') : ''
+  const hasReferrerOnChain = !isZeroAddress(onChainReferrer as `0x${string}`)
+
   useEffect(() => {
     if (!isConnected || !address) return
+
+    const bindKey = `dogepad_ref_bound_${address.toLowerCase()}`
+
+    // If already bound on-chain, mark in localStorage and exit
+    if (hasReferrerOnChain) {
+      localStorage.setItem(bindKey, '1')
+      localStorage.removeItem('dogepad_ref')
+      return
+    }
 
     // Get ref from URL or localStorage
     const params = new URLSearchParams(window.location.search)
@@ -63,16 +88,21 @@ function ReferralBinder() {
     if (!ref.startsWith('0x') || ref.length !== 42) return
     if (ref.toLowerCase() === address.toLowerCase()) return
 
-    // Only attempt binding once per wallet address
-    const bindKey = `dogepad_ref_bound_${address.toLowerCase()}`
-    if (localStorage.getItem(bindKey)) return
+    // Already bound successfully
+    if (localStorage.getItem(bindKey) === '1') return
 
-    const checkinAddress = getContractAddress(chainId, 'dailyCheckin')
+    // Rate limit: retry at most once per 5 minutes (prevents infinite retry on failure)
+    const lastAttempt = localStorage.getItem(bindKey)
+    if (lastAttempt && lastAttempt.startsWith('ts:')) {
+      const ts = parseInt(lastAttempt.slice(3))
+      if (Date.now() - ts < 5 * 60 * 1000) return
+    }
+
     if (isZeroAddress(checkinAddress)) return
 
     const refAddress = ref as `0x${string}`
     setBinding(true)
-    localStorage.setItem(bindKey, 'pending')
+    localStorage.setItem(bindKey, `ts:${Date.now()}`)
 
     writeContractAsync({
       address: checkinAddress,
@@ -88,9 +118,9 @@ function ReferralBinder() {
       })
       .catch(() => {
         setBinding(false)
-        localStorage.removeItem(bindKey)
+        // Keep the timestamp for rate limiting; will retry after 5 min
       })
-  }, [isConnected, address, chainId, writeContractAsync])
+  }, [isConnected, address, chainId, writeContractAsync, hasReferrerOnChain, checkinAddress])
 
   if (!binding) return null
 

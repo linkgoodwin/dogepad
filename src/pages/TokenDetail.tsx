@@ -52,10 +52,18 @@ export default function TokenDetail() {
   const { data: tokenInfo, isLoading: isTokenInfoLoading, refetch: refetchTokenInfo } = useReadContract({
     address: bondingCurveAddress,
     abi: BONDING_CURVE_ABI,
-    functionName: 'getTokenInfo',
+    functionName: 'ti',
     args: [tokenAddress],
     chainId,
     query: { enabled: contractReady },
+  })
+
+  const { data: launchThresholdData } = useReadContract({
+    address: daoAddress,
+    abi: LAUNCH_DAO_ABI,
+    functionName: 'launchThreshold',
+    chainId,
+    query: { enabled: !isZeroAddress(daoAddress) },
   })
 
   const { data: candidateCountData } = useReadContract({
@@ -87,19 +95,19 @@ export default function TokenDetail() {
   const tokenData = useMemo(() => {
     if (!tokenInfo) return null
     const d = tokenInfo as any
-    const tokenAddress_ = d.tokenAddress ?? d[0] ?? zeroAddress
-    if (isZeroAddress(tokenAddress_ as `0x${string}`)) return null
+    const tokenAddr = d.token ?? d[0] ?? zeroAddress
+    if (isZeroAddress(tokenAddr as `0x${string}`)) return null
     return {
-      tokenAddress: tokenAddress_ as `0x${string}`,
+      tokenAddress: tokenAddr as `0x${string}`,
       creator: (d.creator ?? d[1] ?? '') as string,
       totalSupply: BigInt(d.totalSupply ?? d[2] ?? 0n),
-      reserveUsdc: BigInt(d.reserveUsdc ?? d[3] ?? 0n),
+      reserveUsdc: BigInt(d.rUsdc ?? d[3] ?? 0n),
       tokensSold: BigInt(d.tokensSold ?? d[4] ?? 0n),
-      isListedOnDex: Boolean(d.isListedOnDex ?? d[5] ?? false),
-      dexListingThreshold: BigInt(d.dexListingThreshold ?? d[6] ?? 0n),
-      metadataURI: String(d.metadataURI ?? d[7] ?? ''),
+      isListedOnDex: Boolean(d.listed ?? d[9] ?? false),
+      dexListingThreshold: BigInt(launchThresholdData ?? 0n),
+      metadataURI: String(d.metadataURI ?? d[5] ?? ''),
     }
-  }, [tokenInfo])
+  }, [tokenInfo, launchThresholdData])
 
   const { data: erc20Name } = useReadContract({
     address: tokenAddress,

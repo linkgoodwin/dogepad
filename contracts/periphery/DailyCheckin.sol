@@ -182,13 +182,15 @@ contract DailyCheckin is Ownable, ReentrancyGuard {
 
     /// @notice 获取推荐链接
     function getReferralLink(address user) external pure returns (string memory) {
-        // 将地址转为 hex 字符串（不带 0x 前缀）
-        bytes memory hexStr = new bytes(40);
+        // 将地址转为 hex 字符串（带 0x 前缀，共 42 字符）
+        bytes memory hexStr = new bytes(42);
+        hexStr[0] = "0";
+        hexStr[1] = "x";
         bytes20 addr = bytes20(user);
         bytes16 chars = "0123456789abcdef";
         for (uint256 i = 0; i < 20; i++) {
-            hexStr[i * 2] = chars[uint8(addr[i] >> 4)];
-            hexStr[i * 2 + 1] = chars[uint8(addr[i] & 0x0f)];
+            hexStr[i * 2 + 2] = chars[uint8(addr[i] >> 4)];
+            hexStr[i * 2 + 3] = chars[uint8(addr[i] & 0x0f)];
         }
         return string(abi.encodePacked("https://dogepad.pro/?ref=", hexStr));
     }

@@ -510,19 +510,22 @@ export const BONDING_CURVE_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
-  // --- Token Info (v1) ---
+  // --- Token Info (via public ti mapping) ---
   {
-    inputs: [{ internalType: 'address', name: 'token', type: 'address' }],
-    name: 'getTokenInfo',
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'ti',
     outputs: [
-      { internalType: 'address', name: 'tokenAddress', type: 'address' },
+      { internalType: 'address', name: 'token', type: 'address' },
       { internalType: 'address', name: 'creator', type: 'address' },
       { internalType: 'uint256', name: 'totalSupply', type: 'uint256' },
-      { internalType: 'uint256', name: 'reserveUsdc', type: 'uint256' },
+      { internalType: 'uint256', name: 'rUsdc', type: 'uint256' },
       { internalType: 'uint256', name: 'tokensSold', type: 'uint256' },
-      { internalType: 'bool', name: 'isListedOnDex', type: 'bool' },
-      { internalType: 'uint256', name: 'dexListingThreshold', type: 'uint256' },
       { internalType: 'string', name: 'metadataURI', type: 'string' },
+      { internalType: 'bool', name: 'cTS', type: 'bool' },
+      { internalType: 'bool', name: 'cLS', type: 'bool' },
+      { internalType: 'bool', name: 'cTA', type: 'bool' },
+      { internalType: 'bool', name: 'listed', type: 'bool' },
+      { internalType: 'bool', name: 'graduating', type: 'bool' },
     ],
     stateMutability: 'view',
     type: 'function',
@@ -1374,8 +1377,8 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_MONAD_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS'),
   },
   [ARC_TESTNET]: {
-    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xB7E0660390f407b7e2f1182Fe3F206bf53cA631f'),
-    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x26Fb6023502F882E4531f10460492F563e73d918'),
+    launchDAO: resolveAddr('VITE_ARC_TESTNET_LAUNCH_DAO_ADDRESS', 'VITE_LAUNCH_DAO_ADDRESS', '0xd5c63045E3eF01D25F59153c22d583468670aBd7'),
+    bondingCurve: resolveAddr('VITE_ARC_TESTNET_BONDING_CURVE_ADDRESS', 'VITE_BONDING_CURVE_ADDRESS', '0x6d1c287c87B1cbFbE50FC948255FF9C65b2a1093'),
     dexLister: resolveAddr('VITE_ARC_TESTNET_DEX_LISTER_ADDRESS', 'VITE_DEX_LISTER_ADDRESS', '0x500D1773506284D2a951B2B218151b32D118dFC8'),
     perpetualPool: resolveAddr('VITE_ARC_TESTNET_PERPETUAL_POOL_ADDRESS', 'VITE_PERPETUAL_POOL_ADDRESS', '0xBD3155CBb17DbE6358D31d93cd2D5F6e2E3bb499'),
     sharedLiquidityPool: resolveAddr('VITE_ARC_TESTNET_SHARED_LIQUIDITY_POOL_ADDRESS', 'VITE_SHARED_LIQUIDITY_POOL_ADDRESS', '0x962351e0e920AdE762EFB978EA3FAD138478a173'),
@@ -1388,7 +1391,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x307E97e90025e5924FD00CD5Af005AC18333a669'),
     wusdc: resolveAddr('VITE_ARC_TESTNET_WUSDC_ADDRESS', 'VITE_WUSDC_ADDRESS', '0x911b4000D3422F482F4062a913885f7b035382Df'),
     baseAsset: resolveAddr('VITE_ARC_TESTNET_BASE_ASSET_ADDRESS', 'VITE_BASE_ASSET_ADDRESS', '0x911b4000D3422F482F4062a913885f7b035382Df'),
-    dailyCheckin: resolveAddr('VITE_ARC_TESTNET_DAILY_CHECKIN_ADDRESS', 'VITE_DAILY_CHECKIN_ADDRESS', '0xDefba228e66bc2905A56Ca412e70896D75bd4bdb'),
+    dailyCheckin: resolveAddr('VITE_ARC_TESTNET_DAILY_CHECKIN_ADDRESS', 'VITE_DAILY_CHECKIN_ADDRESS', '0x60D321e8eDd3960F8fD88C2eF60b5FE35D34e105'),
   },
 }
 

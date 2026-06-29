@@ -164,7 +164,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
 
         if (tokens == 0) revert ZT();
         if (tokens < minOut) revert ST();
-        if (BondingCurveToken(t).balanceOf(address(this)) < tokens) revert ICT();
+        if (BondingCurveToken(t).balanceOf(address(t)) < tokens) revert ICT();
 
         i.rUsdc += net;
         i.tokensSold += tokens;
@@ -175,7 +175,7 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         if (referrer != address(0) && referrer != msg.sender && referrer != address(this)) {
             refReward = (net * BPS5) / 10000;
             uint256 refTokens = BondingCurveMath.calcBuyAmount(refReward, i.tokensSold, 100 gwei, 10000);
-            if (refTokens > 0 && BondingCurveToken(t).balanceOf(address(this)) >= refTokens) {
+            if (refTokens > 0 && BondingCurveToken(t).balanceOf(address(t)) >= refTokens) {
                 BondingCurveToken(t).buyFromCurve(referrer, refTokens);
                 i.tokensSold += refTokens;  // Fix: track referral tokens
                 refR[referrer] += refTokens;
