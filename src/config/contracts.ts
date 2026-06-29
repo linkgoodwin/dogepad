@@ -1156,6 +1156,30 @@ export const PERPETUAL_POOL_ABI = [
   },
 ] as const
 
+export const DAILY_CHECKIN_ABI = [
+  { inputs: [], name: 'checkin', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { inputs: [{ internalType: 'address', name: '_referrer', type: 'address' }], name: 'bindReferrer', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { inputs: [{ internalType: 'address', name: 'user', type: 'address' }], name: 'getUserInfo', outputs: [{ internalType: 'uint256', name: 'lastCheckinDay', type: 'uint256' }, { internalType: 'uint256', name: 'streak', type: 'uint256' }, { internalType: 'uint256', name: 'totalClaimed', type: 'uint256' }, { internalType: 'address', name: 'referrer', type: 'address' }, { internalType: 'uint256', name: 'refEarnings', type: 'uint256' }, { internalType: 'uint256', name: 'refCount', type: 'uint256' }, { internalType: 'bool', name: 'canCheckinToday', type: 'bool' }, { internalType: 'uint256', name: 'todayReward', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [{ internalType: 'address', name: 'user', type: 'address' }], name: 'getReferralLink', outputs: [{ internalType: 'string', name: '', type: 'string' }], stateMutability: 'pure', type: 'function' },
+  { inputs: [], name: 'contractBalance', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'rewardToken', outputs: [{ internalType: 'address', name: '', type: 'address' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'baseReward', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'dailyIncrement', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'maxStreak', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'referrerRate', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'paused', outputs: [{ internalType: 'bool', name: '', type: 'bool' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'totalDeposited', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'totalClaimedAll', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [], name: 'totalCheckins', outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+  { inputs: [{ internalType: 'address', name: '_token', type: 'address' }], name: 'setRewardToken', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { inputs: [{ internalType: 'uint256', name: 'amount', type: 'uint256' }], name: 'depositTokens', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { inputs: [{ internalType: 'uint256', name: '_baseReward', type: 'uint256' }, { internalType: 'uint256', name: '_dailyIncrement', type: 'uint256' }, { internalType: 'uint256', name: '_maxStreak', type: 'uint256' }, { internalType: 'uint256', name: '_referrerRate', type: 'uint256' }], name: 'setParameters', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { inputs: [{ internalType: 'bool', name: '_paused', type: 'bool' }], name: 'setPaused', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+  { anonymous: false, inputs: [{ indexed: true, internalType: 'address', name: 'user', type: 'address' }, { indexed: false, internalType: 'uint256', name: 'day', type: 'uint256' }, { indexed: false, internalType: 'uint256', name: 'streak', type: 'uint256' }, { indexed: false, internalType: 'uint256', name: 'reward', type: 'uint256' }, { indexed: false, internalType: 'uint256', name: 'refReward', type: 'uint256' }], name: 'CheckedIn', type: 'event' },
+  { anonymous: false, inputs: [{ indexed: true, internalType: 'address', name: 'user', type: 'address' }, { indexed: true, internalType: 'address', name: 'referrer', type: 'address' }], name: 'ReferrerBound', type: 'event' },
+  { anonymous: false, inputs: [{ indexed: true, internalType: 'address', name: 'token', type: 'address' }], name: 'RewardTokenSet', type: 'event' },
+] as const
+
 export const FEE_DISTRIBUTOR_ABI = [
   {
     inputs: [
@@ -1306,6 +1330,7 @@ export interface ContractAddresses {
   // Token addresses
   wusdc?: `0x${string}`
   baseAsset?: `0x${string}`
+  dailyCheckin?: `0x${string}`
 }
 
 export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
@@ -1363,6 +1388,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     simpleRouter: resolveAddr('VITE_ARC_TESTNET_SIMPLE_ROUTER_ADDRESS', 'VITE_SIMPLE_ROUTER_ADDRESS', '0x307E97e90025e5924FD00CD5Af005AC18333a669'),
     wusdc: resolveAddr('VITE_ARC_TESTNET_WUSDC_ADDRESS', 'VITE_WUSDC_ADDRESS', '0x911b4000D3422F482F4062a913885f7b035382Df'),
     baseAsset: resolveAddr('VITE_ARC_TESTNET_BASE_ASSET_ADDRESS', 'VITE_BASE_ASSET_ADDRESS', '0x911b4000D3422F482F4062a913885f7b035382Df'),
+    dailyCheckin: resolveAddr('VITE_ARC_TESTNET_DAILY_CHECKIN_ADDRESS', 'VITE_DAILY_CHECKIN_ADDRESS', '0xDefba228e66bc2905A56Ca412e70896D75bd4bdb'),
   },
 }
 

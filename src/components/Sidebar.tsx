@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Flame, Rocket, PlusCircle, Vote, Landmark, Wallet, BookOpen, X } from 'lucide-react'
+import { Flame, Rocket, PlusCircle, Vote, Landmark, Wallet, CalendarCheck, BookOpen, X } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n/useT'
 import { useI18n } from '@/stores/i18nStore'
@@ -17,6 +17,7 @@ export default function Sidebar() {
     { label: t('nav.subscribeStake'), icon: Vote, path: '/dao' },
     { label: t('nav.perpetual'), icon: Landmark, path: '/perpetual' },
     { label: t('nav.portfolio'), icon: Wallet, path: '/portfolio' },
+    { label: t('nav.checkin'), icon: CalendarCheck, path: '/checkin' },
     { label: t('nav.howToPlay'), icon: BookOpen, path: '/guide' },
   ]
 

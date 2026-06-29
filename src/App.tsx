@@ -1,10 +1,15 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
-import { useEffect, lazy, Suspense } from "react"
+import { useEffect, lazy, Suspense, useState } from "react"
 import Layout from "@/components/Layout"
 import LandingLayout from "@/components/LandingLayout"
 import ErrorBoundary from './components/ErrorBoundary'
 import { useI18n } from "@/stores/i18nStore"
 import { t as translate, type TranslationKey } from "@/i18n/translations"
+import { useAccount, useWriteContract } from "wagmi"
+import { Loader2 } from "lucide-react"
+import { DAILY_CHECKIN_ABI, getContractAddress, isZeroAddress } from "@/config/contracts"
+import { useTargetChainId } from "@/hooks/useNetwork"
+import { useT } from "@/i18n/useT"
 
 const Home = lazy(() => import("@/pages/Home"))
 const Dashboard = lazy(() => import("@/pages/Dashboard"))
@@ -14,6 +19,7 @@ const TokenDetail = lazy(() => import("@/pages/TokenDetail"))
 const PerpetualPage = lazy(() => import("@/pages/PerpetualPage"))
 const Portfolio = lazy(() => import("@/pages/Portfolio"))
 const HowToPlay = lazy(() => import("@/pages/HowToPlay"))
+const CheckIn = lazy(() => import("@/pages/CheckIn"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
 
 function DocumentTitle() {
@@ -33,10 +39,74 @@ function PageLoader() {
   )
 }
 
+function ReferralBinder() {
+  const t = useT()
+  const { address, isConnected } = useAccount()
+  const chainId = useTargetChainId()
+  const { writeContractAsync } = useWriteContract()
+  const [binding, setBinding] = useState(false)
+
+  useEffect(() => {
+    if (!isConnected || !address) return
+
+    // Get ref from URL or localStorage
+    const params = new URLSearchParams(window.location.search)
+    let ref = params.get('ref')
+    if (ref) {
+      ref = ref.trim()
+      localStorage.setItem('dogepad_ref', ref)
+    } else {
+      ref = localStorage.getItem('dogepad_ref')
+    }
+
+    if (!ref) return
+    if (!ref.startsWith('0x') || ref.length !== 42) return
+    if (ref.toLowerCase() === address.toLowerCase()) return
+
+    // Only attempt binding once per wallet address
+    const bindKey = `dogepad_ref_bound_${address.toLowerCase()}`
+    if (localStorage.getItem(bindKey)) return
+
+    const checkinAddress = getContractAddress(chainId, 'dailyCheckin')
+    if (isZeroAddress(checkinAddress)) return
+
+    const refAddress = ref as `0x${string}`
+    setBinding(true)
+    localStorage.setItem(bindKey, 'pending')
+
+    writeContractAsync({
+      address: checkinAddress,
+      abi: DAILY_CHECKIN_ABI,
+      functionName: 'bindReferrer',
+      args: [refAddress],
+      chainId,
+    } as any)
+      .then(() => {
+        setBinding(false)
+        localStorage.setItem(bindKey, '1')
+        localStorage.removeItem('dogepad_ref')
+      })
+      .catch(() => {
+        setBinding(false)
+        localStorage.removeItem(bindKey)
+      })
+  }, [isConnected, address, chainId, writeContractAsync])
+
+  if (!binding) return null
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 bg-dark-900 border border-doge-gold/30 rounded-lg px-4 py-3 flex items-center gap-2 shadow-lg">
+      <Loader2 className="w-4 h-4 text-doge-gold animate-spin" />
+      <span className="text-xs text-gray-300">{t('checkin.bindingRef')}</span>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <Router basename="/">
       <DocumentTitle />
+      <ReferralBinder />
       <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
       <Routes>
@@ -51,6 +121,7 @@ export default function App() {
           <Route path="/token/:address" element={<TokenDetail />} />
           <Route path="/perpetual" element={<PerpetualPage />} />
           <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/checkin" element={<CheckIn />} />
           <Route path="/guide" element={<HowToPlay />} />
         </Route>
         <Route path="*" element={<NotFound />} />
